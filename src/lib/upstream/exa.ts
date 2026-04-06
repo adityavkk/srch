@@ -2,6 +2,7 @@ import { activityMonitor } from "../core/activity.js";
 import { loadConfig } from "../core/config.js";
 import { errorMessage, withTimeout } from "../core/http.js";
 import type { ExtractedContent, SearchOptions, SearchResponse } from "../core/types.js";
+import { callExaMcpRaw, exaMcpText } from "./exa-mcp.js";
 
 const EXA_ANSWER_URL = "https://api.exa.ai/answer";
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
@@ -20,46 +21,8 @@ export function isExaAvailable(): boolean {
 }
 
 export async function callExaMcp(toolName: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
-  const response = await fetch(EXA_MCP_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream"
-    },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
-      params: { name: toolName, arguments: args }
-    }),
-    signal: withTimeout(signal, 60_000)
-  });
-
-  if (!response.ok) {
-    throw new Error(`Exa MCP error ${response.status}: ${(await response.text()).slice(0, 300)}`);
-  }
-
-  const body = await response.text();
-  const dataLines = body.split("\n").filter((line) => line.startsWith("data:"));
-  for (const line of dataLines) {
-    const payload = line.slice(5).trim();
-    if (!payload) continue;
-    try {
-      const parsed = JSON.parse(payload) as { result?: { content?: Array<{ type?: string; text?: string }> } };
-      const text = parsed.result?.content?.find((item) => item.type === "text" && item.text)?.text;
-      if (text) return text;
-    } catch {
-    }
-  }
-
-  try {
-    const parsed = JSON.parse(body) as { result?: { content?: Array<{ type?: string; text?: string }> } };
-    const text = parsed.result?.content?.find((item) => item.type === "text" && item.text)?.text;
-    if (text) return text;
-  } catch {
-  }
-
-  throw new Error("Exa MCP returned empty content");
+  const response = await callExaMcpRaw(toolName, args, signal);
+  return exaMcpText(response);
 }
 
 function parseMcpResults(text: string): Array<{ title: string; url: string; content: string }> {

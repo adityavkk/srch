@@ -21,11 +21,25 @@ export function getDocsDbPath(): string {
 
 export async function docsSearch(query: string, limit = 8) {
   return withStore(async (store) => {
-    return store.search({
+    const raw = await store.search({
       queries: [{ type: "lex", query }],
       rerank: false,
       limit
     });
+    return {
+      query,
+      limit,
+      backend: "qmd-sdk" as const,
+      mode: "lex" as const,
+      raw,
+      results: raw.map((item) => ({
+        title: item.title,
+        file: item.file,
+        score: item.score,
+        docid: item.docid,
+        bestChunk: item.bestChunk
+      }))
+    };
   });
 }
 
@@ -55,6 +69,6 @@ export async function docsStatus() {
       store.getIndexHealth(),
       store.listCollections()
     ]);
-    return { status, health, collections, dbPath: DB_PATH };
+    return { status, health, collections, dbPath: DB_PATH, backend: "qmd-sdk" as const };
   });
 }

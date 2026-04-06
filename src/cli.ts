@@ -103,10 +103,9 @@ async function main(): Promise<void> {
     const query = requireQuery(rest, CODE_HELP, ["code"], asJson);
     const maxTokens = Number(flags.get("max-tokens") ?? 5000);
     const result = await codeSearch(query, maxTokens);
-    const data = { query, maxTokens, text: result };
-    addHistory({ kind: "code", input: { query, maxTokens }, output: data });
-    if (asJson) return printJson(["code"], data);
-    printText(result);
+    addHistory({ kind: "code", input: { query, maxTokens }, output: result });
+    if (asJson) return printJson(["code"], result);
+    printText(result.text);
     return;
   }
 
@@ -160,15 +159,16 @@ async function main(): Promise<void> {
 
     const query = requireQuery(rest, DOCS_HELP, ["docs"], asJson);
     const result = await docsSearch(query);
-    const rows = result.map((item) => ({
+    const rows = result.results.map((item) => ({
       title: item.title,
       file: item.file,
       score: item.score,
       docid: item.docid,
       snippet: summarizeBestChunk(item.bestChunk)
     }));
-    addHistory({ kind: "docs", input: { query }, output: { count: rows.length, results: rows } });
-    if (asJson) return printJson(["docs"], { query, count: rows.length, results: rows });
+    const data = { ...result, count: rows.length, results: rows };
+    addHistory({ kind: "docs", input: { query }, output: data });
+    if (asJson) return printJson(["docs"], data);
     if (rows.length === 0) {
       printText("No results.");
       return;
