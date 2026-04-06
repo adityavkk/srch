@@ -1,18 +1,17 @@
 # search
 
-Local-first research CLI for agents and humans. Use for web research, code context, local docs, readable URL fetch, and lightweight diagnostics.
+Local-first research CLI for agents and humans. Use it to gather grounded information with low-token defaults and stable machine-readable output.
 
 ## When to use
 
-Use `search` when you need:
-- web search with citations
-- code/docs context from Exa MCP
-- optional DeepWiki context for public repos
-- local markdown/doc search via QMD
-- readable page extraction from a URL
-- machine-readable JSON for downstream agent steps
+Use `search` when you need to:
+- answer an internet research question with cited sources
+- understand a library, framework, API, or public repo faster than raw grep/web browsing
+- search your own local markdown/docs corpus
+- turn a URL into readable extracted content
+- inspect prior runs or diagnose search/config state
 
-Prefer `--json` for agent flows. Add `--verbose` for trace logs on stderr.
+Prefer `--json` for agent flows. Add `--verbose` only when you need routing/timing traces.
 
 ## Quick start
 
@@ -24,107 +23,91 @@ search fetch-content https://clig.dev
 search inspect tools --json
 ```
 
-## Capabilities
+## Capability map
 
-| Command | What it does | Notes |
-|---------|--------------|-------|
-| `search web` | Web research with citations | Explicit providers: exa, brave, perplexity, gemini. Fallbacks: Exa -> Brave -> Perplexity -> Gemini |
-| `search code` | Code/docs context | Primary: Exa MCP. Secondary: DeepWiki when meaningful |
-| `search docs` | Local docs search | Uses QMD SDK; index your own collections |
-| `search fetch-content` | Readable URL extraction | Good for docs/articles/pages |
-| `search history` | Prior runs | Useful for reuse / inspection |
-| `search inspect tools` | Diagnostics | Shows backends + redacted secret source |
-| `search config` | Safe config | Set provider, secret refs, inspect config |
+| Problem | Command | Example |
+|---------|---------|---------|
+| Need web answers with citations | `search web` | `search web react compiler --json` |
+| Need code context for a library/API/repo | `search code` | `search code "facebook/react hooks" --json` |
+| Need to search local docs/notes | `search docs` | `search docs auth flow --json` |
+| Need readable content from a known URL | `search fetch-content` | `search fetch-content https://clig.dev --json` |
+| Need repo-aware content from GitHub URL | `search fetch-content` | `search fetch-content https://github.com/tobi/qmd --json` |
+| Need diagnostics / secret resolution status | `search inspect tools` | `search inspect tools --json` |
+| Need prior results | `search history` | `search history docs --json` |
 
 ## Common patterns
 
-### Web research
+### Internet research
 
 ```bash
-search web react compiler
+search web next.js caching
 search web privacy search api --provider brave
 search web sqlite wasm --provider gemini --json
-search web ai evals --json
-search web next.js caching --verbose
 ```
 
-### Code context
+### Library / repo understanding
 
 ```bash
-search code "sqlite wal checkpoint"
-search code "facebook/react hooks" --json
+search code "react suspense cache"
+search code "vercel/next.js app router internals" --json
 ```
 
-### Local docs
+### Local knowledge base
 
 ```bash
 search docs index add ./docs --name project-docs
 search docs index update
-search docs auth flow --json
+search docs deployment checklist --json
 ```
 
-### Read a page
+### Read and extract a page
 
 ```bash
 search fetch-content https://clig.dev --json
+search fetch-content https://github.com/tobi/qmd --json
 ```
 
 ## Output modes
 
-- `--json` -- stable JSON envelope: `{ ok, command, data|error }`
-- `--verbose` -- concise trace view on stderr; stdout remains clean
-
-JSON preserves native backend payloads where useful:
-- web: native Exa / Brave / Perplexity payloads
-- code: native Exa MCP payloads + optional DeepWiki payloads
-- docs: native QMD SDK results
-
-## Secrets
-
-Prefer runtime secret refs, not plaintext values.
-
-Examples:
-
-```bash
-search config set-secret-ref exaApiKey op 'op://agent-dev/exa/API Key'
-search config set-secret-ref braveApiKey op 'op://agent-dev/Brave Search/api key'
-search config set-secret-ref exaApiKey fnox EXA_API_KEY
-```
-
-Inspect redacted resolution:
-
-```bash
-search inspect tools --json
-```
+- `--json` -- stable envelope: `{ ok, command, data|error }`
+- `--verbose` -- concise stderr trace; stdout stays clean
 
 ## Agent guidelines
 
-### Use JSON for automation
+### Pick the narrowest command
 
-Prefer `--json` whenever output will be parsed, transformed, or passed to another step.
+- `web` for open-web questions
+- `code` for API/library/repo understanding
+- `docs` for local indexed docs
+- `fetch-content` when you already have the URL
 
 ### Fetch first, summarize second
 
-Do not invent sources. Run `search` first, then summarize only returned data.
+Do not invent sources. Run `search`, then summarize only returned content.
 
-### Pick the narrowest command
+### Prefer JSON for multi-step flows
 
-- use `web` for internet research
-- use `code` for API/library/codebase questions
-- use `docs` for local indexed markdown/docs
-- use `fetch-content` when you already have a URL
+Use `--json` whenever another step will parse, rank, filter, or merge the result.
 
 ### Progressive disclosure
 
-Start broad, then drill in:
+Start broad, then drill down:
 
 ```bash
 search --help
 search web --help
+search code --help
 search docs --help
 search config --help
 ```
 
-### Trace only when needed
+### Secrets
 
-Use `--verbose` for debugging routing, timing, or backend selection. Avoid it for routine low-token runs.
+Use runtime secret refs, not plaintext values.
+
+```bash
+search config set-secret-ref exaApiKey op 'op://agent-dev/exa/API Key'
+search config set-secret-ref braveApiKey op 'op://agent-dev/Brave Search/api key'
+search config set-secret-ref geminiApiKey op 'op://agent-dev/Gemini API Key/password'
+search inspect tools --json
+```
