@@ -1,0 +1,3 @@
+[submodule "pi-web-access"]
+	path = vendor/pi-web-access
+	url = https://github.com/nicobailon/pi-web-access
