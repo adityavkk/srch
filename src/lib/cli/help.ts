@@ -12,6 +12,8 @@ Commands:
   docs           search local docs via qmd
   fetch          fetch readable URL content
   fetch-content  canonical fetch command
+  twitter        search/read X (Twitter) via bird
+  x.com          alias for twitter
   history        inspect prior runs
   inspect        inspect backends/config
   config         safe config management
@@ -22,6 +24,7 @@ Examples:
   search code "react suspense cache"
   search docs auth flow
   search fetch https://clig.dev
+  search twitter "bun runtime"
   search inspect tools --json
 
 Output:
@@ -32,6 +35,7 @@ Next help:
   search web --help
   search code --help
   search docs --help
+  search twitter --help
   search config --help
 `;
 

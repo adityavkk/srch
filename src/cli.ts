@@ -4,6 +4,7 @@ import { getConfigPath } from "./lib/core/config.js";
 import { inspectTools } from "./lib/cli/tools.js";
 import { CONFIG_HELP } from "./lib/cli/config-help.js";
 import { CODE_HELP, DOCS_HELP, FETCH_HELP, HISTORY_HELP, INSPECT_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
+import { TWITTER_HELP } from "./lib/cli/twitter-help.js";
 import { fail, ok } from "./lib/cli/output.js";
 import type { SearchProvider } from "./lib/core/types.js";
 import { summarizeBestChunk } from "./lib/docs/format.js";
@@ -12,6 +13,7 @@ import { fetchContent } from "./lib/fetch/content.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
 import { codeSearch } from "./lib/search/code.js";
 import { webSearch } from "./lib/search/web.js";
+import { twitterSearch, twitterRead, twitterThread } from "./lib/upstream/bird.js";
 import { createTraceSink } from "./lib/trace.js";
 
 function parseFlags(args: string[]): { flags: Map<string, string | boolean>; rest: string[] } {
@@ -223,6 +225,43 @@ async function main(): Promise<void> {
         console.log(`   ${item.file}`);
         console.log(`   score=${item.score.toFixed(3)}`);
         if (item.snippet) console.log(`   ${item.snippet}`);
+      }
+      return;
+    }
+
+    if (command === "twitter" || command === "x.com") {
+      if (flags.has("help")) return void console.log(TWITTER_HELP);
+      const invokedAs = command;
+      if (rest[0] === "read" && rest[1]) {
+        const id = rest[1];
+        trace.step("twitter.read", "dispatch", { id, alias: invokedAs });
+        const result = await trace.span("twitter.read", id, async () => twitterRead(id));
+        if (asJson) return printJson([invokedAs, "read"], { ...result, trace: trace.snapshot() });
+        printText(typeof result.tweet === "string" ? result.tweet : JSON.stringify(result.tweet, null, 2));
+        return;
+      }
+      if (rest[0] === "thread" && rest[1]) {
+        const id = rest[1];
+        trace.step("twitter.thread", "dispatch", { id, alias: invokedAs });
+        const result = await trace.span("twitter.thread", id, async () => twitterThread(id));
+        if (asJson) return printJson([invokedAs, "thread"], { ...result, trace: trace.snapshot() });
+        for (const tweet of result.tweets) printText(typeof tweet === "string" ? tweet : JSON.stringify(tweet, null, 2));
+        return;
+      }
+      const query = requireQuery(rest, TWITTER_HELP, [invokedAs], asJson);
+      const count = Number(flags.get("count") ?? 10);
+      trace.step("twitter.search", "dispatch", { query, count, alias: invokedAs });
+      const result = await trace.span("twitter.search", "bird", async () => twitterSearch(query, count));
+      addHistory({ kind: "web", input: { query, source: "twitter", alias: invokedAs }, output: result });
+      if (asJson) return printJson([invokedAs], { ...result, trace: trace.snapshot() });
+      if (result.tweets.length === 0) {
+        printText("No tweets found.");
+        return;
+      }
+      for (const [index, tweet] of result.tweets.entries()) {
+        console.log(`${index + 1}. @${tweet.author}${tweet.createdAt ? " " + tweet.createdAt : ""}`);
+        console.log(`   ${tweet.text.split("\n")[0]}`);
+        console.log(`   https://x.com/i/status/${tweet.id}`);
       }
       return;
     }
