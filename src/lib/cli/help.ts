@@ -67,24 +67,29 @@ JSON:
 export const CODE_HELP = `search code — code context search
 
 What it does:
-  gets code context from Exa Context API
-  attaches Context7 library docs when available (free)
-  attaches DeepWiki repo context for public repos when available
+  remote: gets code context from Exa Context API + Context7 + DeepWiki
+  repo:   clones a repo (or uses local dir) and searches with ripgrep
 
 Usage:
   search code <query...> [--max-tokens N] [--json] [--verbose]
+  search code repo <owner/repo|path> <query> [--json] [--verbose]
 
 Examples:
   search code "react suspense cache"
   search code "facebook/react hooks" --json
-  search code "sqlite wal checkpoint" --max-tokens 8000
+  search code repo facebook/react "useEffect cleanup"
+  search code repo . "auth middleware" --json
+  search code repo ~/dev/myproject "database connection"
 
-JSON:
-  - query
-  - maxTokens
+JSON (remote):
   - text (merged primary + secondary)
   - native (exa-context-api or exa-mcp)
-  - secondary[] (context7 and/or deepwiki when meaningful)
+  - secondary[] (context7 and/or deepwiki)
+
+JSON (repo):
+  - target, query, localPath
+  - matches[] (file, line, text)
+  - truncated
 `;
 
 export const DOCS_HELP = `search docs — local docs search

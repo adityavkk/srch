@@ -12,6 +12,7 @@ import { docsAddCollection, docsEmbed, docsListCollections, docsSearch, docsStat
 import { fetchContent } from "./lib/fetch/content.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
 import { codeSearch } from "./lib/search/code.js";
+import { repoSearch } from "./lib/search/repo.js";
 import { webSearch } from "./lib/search/web.js";
 import { twitterSearch, twitterRead, twitterThread } from "./lib/upstream/bird.js";
 import { createTraceSink } from "./lib/trace.js";
@@ -142,6 +143,34 @@ async function main(): Promise<void> {
 
     if (command === "code") {
       if (flags.has("help")) return void console.log(CODE_HELP);
+
+      if (rest[0] === "repo") {
+        const target = rest[1];
+        const repoQuery = rest.slice(2).join(" ").trim();
+        if (!target || !repoQuery) {
+          if (asJson) exitJsonError(["code", "repo"], "Usage: search code repo <target> <query>");
+          console.error(CODE_HELP);
+          process.exit(1);
+        }
+        trace.step("code.repo", "resolve target", { target, queryChars: repoQuery.length });
+        const result = await trace.span("code.repo.clone", target, async () => {
+          const r = await repoSearch(target, repoQuery);
+          trace.step("code.repo.search", "ripgrep complete", { matchCount: r.matchCount, truncated: r.truncated, cached: r.cached, cloned: r.cloned });
+          return r;
+        });
+        addHistory({ kind: "code", input: { target, query: repoQuery, mode: "repo" }, output: result });
+        if (asJson) return printJson(["code", "repo"], { ...result, trace: trace.snapshot() });
+        if (result.matches.length === 0) {
+          printText(`No matches in ${result.localPath}`);
+          return;
+        }
+        printText(`${result.matchCount} matches in ${result.localPath}${result.cached ? " (cached)" : ""}${result.truncated ? " (truncated)" : ""}`);
+        for (const m of result.matches) {
+          console.log(`  ${m.file}:${m.line}  ${m.text}`);
+        }
+        return;
+      }
+
       const query = requireQuery(rest, CODE_HELP, ["code"], asJson);
       const maxTokens = Number(flags.get("max-tokens") ?? 5000);
       trace.step("code", "dispatch", { maxTokens, queryChars: query.length });

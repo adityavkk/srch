@@ -57,6 +57,14 @@ search code "facebook/react hooks" --json
 search code "sqlite wal checkpoint" --max-tokens 8000
 ```
 
+Repo search: clone (or reuse cached clone) and ripgrep locally.
+
+```bash
+search code repo facebook/react "useEffect cleanup"
+search code repo . "auth middleware" --json
+search code repo ~/dev/myproject "database connection"
+```
+
 ## Local docs
 
 Backed by QMD SDK. Index your own collections.

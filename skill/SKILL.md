@@ -37,6 +37,8 @@ search inspect tools --json
 | Need web answers with citations | `search web` | `search web react compiler --json` |
 | Need code context for a library/API/repo | `search code` | `search code "facebook/react hooks" --json` |
 | Need up-to-date library docs | `search code` | `search code "next.js middleware" --json` |
+| Need to grep inside a repo | `search code repo` | `search code repo facebook/react "useEffect" --json` |
+| Need to grep inside a local codebase | `search code repo` | `search code repo . "auth middleware" --json` |
 | Need to search local docs/notes | `search docs` | `search docs auth flow --json` |
 | Need readable content from a known URL | `search fetch` | `search fetch https://clig.dev --json` |
 | Need repo-aware content from GitHub URL | `search fetch` | `search fetch https://github.com/tobi/qmd --json` |
@@ -60,6 +62,8 @@ search web sqlite wasm --provider gemini --json
 ```bash
 search code "react suspense cache"
 search code "vercel/next.js app router internals" --json
+search code repo facebook/react "useEffect cleanup"
+search code repo . "auth middleware"
 ```
 
 ### Local knowledge base
