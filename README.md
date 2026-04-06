@@ -175,6 +175,48 @@ search docs index status --json
 search docs index add ./docs --name docs
 ```
 
+## Safe config
+
+Inspect config safely:
+
+```bash
+search config
+search config --json
+search config --help
+```
+
+Set provider:
+
+```bash
+search config set provider exa
+```
+
+Set secrets safely without echoing values:
+
+```bash
+search config set-secret exaApiKey --from-env EXA_API_KEY
+search config set-secret perplexityApiKey --from-file /secure/path/key.txt
+op read op://vault/item/field | search config set-secret geminiApiKey --stdin
+```
+
+Recommended with your secret flow:
+
+```bash
+fnox exec -- search config set-secret exaApiKey --from-env EXA_API_KEY
+```
+
+Unset fields:
+
+```bash
+search config unset exaApiKey
+search config unset provider
+```
+
+Notes:
+- never prints secret values
+- JSON redacts secrets as `[set]`
+- prefer env/fnox over plaintext files
+
 ## Notes
 
 - web JSON preserves native Exa / Perplexity payloads

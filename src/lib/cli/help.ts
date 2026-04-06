@@ -13,7 +13,7 @@ Commands:
   fetch-content  fetch readable URL content
   history        inspect prior runs
   inspect        inspect backends/config
-  config         show config path
+  config         safe config management
   help           show help
 
 Examples:
@@ -31,6 +31,7 @@ Next help:
   search web --help
   search code --help
   search docs --help
+  search config --help
 `;
 
 export const WEB_HELP = `search web — web research

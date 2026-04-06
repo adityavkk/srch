@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-import { loadConfig, getConfigPath } from "./lib/core/config.js";
+import { getConfigSafe, setProvider, setSecret, unsetField } from "./lib/config/commands.js";
+import { getConfigPath } from "./lib/core/config.js";
 import { inspectTools } from "./lib/cli/tools.js";
+import { CONFIG_HELP } from "./lib/cli/config-help.js";
 import { CODE_HELP, DOCS_HELP, FETCH_HELP, HISTORY_HELP, INSPECT_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
 import { fail, ok } from "./lib/cli/output.js";
 import type { SearchProvider } from "./lib/core/types.js";
@@ -70,10 +72,40 @@ async function main(): Promise<void> {
 
   try {
     if (command === "config") {
-      const data = await trace.span("config", "load config", async () => ({ path: getConfigPath(), config: loadConfig() }));
-      if (asJson) return printJson(["config"], { ...data, trace: trace.snapshot() });
-      printText(getConfigPath());
-      return;
+      if (flags.has("help")) {
+        console.log(CONFIG_HELP);
+        return;
+      }
+      const sub = rest[0];
+      if (!sub) {
+        const data = await trace.span("config", "inspect config", async () => ({ path: getConfigPath(), config: getConfigSafe() }));
+        if (asJson) return printJson(["config"], { ...data, trace: trace.snapshot() });
+        printText(getConfigPath());
+        return;
+      }
+      if (sub === "set" && rest[1] === "provider" && rest[2]) {
+        const config = await trace.span("config.set", "set provider", async () => setProvider(rest[2]!));
+        if (asJson) return printJson(["config", "set", "provider"], { path: getConfigPath(), config, trace: trace.snapshot() });
+        printText(`provider=${config.provider ?? "auto"}`);
+        return;
+      }
+      if (sub === "set-secret" && rest[1]) {
+        const field = rest[1];
+        const config = await trace.span("config.set-secret", field, async () => setSecret(field, flags));
+        if (asJson) return printJson(["config", "set-secret", field], { path: getConfigPath(), config, trace: trace.snapshot() });
+        printText(`${field}=[set]`);
+        return;
+      }
+      if (sub === "unset" && rest[1]) {
+        const field = rest[1];
+        const config = await trace.span("config.unset", field, async () => unsetField(field));
+        if (asJson) return printJson(["config", "unset", field], { path: getConfigPath(), config, trace: trace.snapshot() });
+        printText(`${field}=unset`);
+        return;
+      }
+      if (asJson) exitJsonError(["config"], "Invalid config command");
+      console.error(CONFIG_HELP);
+      process.exit(1);
     }
 
     if (command === "inspect") {
