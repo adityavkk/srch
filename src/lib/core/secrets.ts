@@ -13,7 +13,7 @@ const FALLBACK_ENV_KEYS: Record<SecretField, string> = {
 
 export interface SecretResolution {
   field: SecretField;
-  source: "env" | "config" | "config:fnox" | "fnox" | "missing";
+  source: "env" | "config" | "config:fnox" | "config:op" | "fnox" | "missing";
   keyName?: string;
   configured: boolean;
 }
@@ -21,6 +21,16 @@ export interface SecretResolution {
 async function readFnox(key: string): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync("fnox", ["get", key], { timeout: 15_000, maxBuffer: 1024 * 64 });
+    const value = stdout.trim();
+    return value || null;
+  } catch {
+    return null;
+  }
+}
+
+async function readOp(path: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync("op", ["read", path], { timeout: 15_000, maxBuffer: 1024 * 64 });
     const value = stdout.trim();
     return value || null;
   } catch {
@@ -51,6 +61,11 @@ export async function resolveSecret(field: SecretField): Promise<string | null> 
     cache.set(field, value);
     return value;
   }
+  if (ref?.source === "op" && ref.key) {
+    const value = await readOp(ref.key);
+    cache.set(field, value);
+    return value;
+  }
 
   const fallbackValue = await readFnox(envKey);
   cache.set(field, fallbackValue);
@@ -75,6 +90,11 @@ export async function inspectSecretSources(config?: SearchConfig): Promise<Recor
     if (ref?.source === "fnox" && ref.key) {
       const value = await readFnox(ref.key);
       out[field] = { field, source: "config:fnox", keyName: ref.key, configured: !!value };
+      continue;
+    }
+    if (ref?.source === "op" && ref.key) {
+      const value = await readOp(ref.key);
+      out[field] = { field, source: "config:op", keyName: ref.key, configured: !!value };
       continue;
     }
     const fallbackValue = await readFnox(envKey);

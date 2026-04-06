@@ -32,15 +32,15 @@ export function setSecretRef(field: string, source: string, key: string): Search
   if (!SECRET_FIELDS.has(field as SecretField)) {
     throw new Error("Invalid secret field. Use exaApiKey|perplexityApiKey|geminiApiKey");
   }
-  if (source !== "fnox") {
-    throw new Error("Invalid secret source. Use fnox");
+  if (source !== "fnox" && source !== "op") {
+    throw new Error("Invalid secret source. Use fnox|op");
   }
   if (!key.trim()) {
     throw new Error("Missing secret key name");
   }
   const config = loadConfig();
   config.secrets ??= {};
-  config.secrets[field as SecretField] = { source: "fnox", key: key.trim() };
+  config.secrets[field as SecretField] = { source: source as "fnox" | "op", key: key.trim() };
   delete config[field as SecretField];
   saveConfig(config);
   return redactConfig(config);

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { SearchProvider } from "./types.js";
 
 export type SecretField = "exaApiKey" | "perplexityApiKey" | "geminiApiKey";
-export type SecretSource = "fnox";
+export type SecretSource = "fnox" | "op";
 
 export interface SecretRef {
   source: SecretSource;
