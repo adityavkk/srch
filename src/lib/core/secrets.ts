@@ -8,7 +8,8 @@ const cache = new Map<SecretField, string | null>();
 const FALLBACK_ENV_KEYS: Record<SecretField, string> = {
   exaApiKey: "EXA_API_KEY",
   perplexityApiKey: "PERPLEXITY_API_KEY",
-  geminiApiKey: "GEMINI_API_KEY"
+  geminiApiKey: "GEMINI_API_KEY",
+  braveApiKey: "BRAVE_API_KEY"
 };
 
 export interface SecretResolution {

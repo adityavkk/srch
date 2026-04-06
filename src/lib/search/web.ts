@@ -1,6 +1,7 @@
 import type { SearchOptions, SearchProvider, SearchResponse } from "../core/types.js";
 import { isGeminiApiAvailable } from "../upstream/gemini-api.js";
 import { hasExaApiKey, isExaAvailable, searchWithExa } from "../upstream/exa.js";
+import { isBraveAvailable, searchWithBrave } from "../upstream/brave.js";
 import { isPerplexityAvailable, searchWithPerplexity } from "../upstream/perplexity.js";
 
 export interface WebSearchResult extends SearchResponse {
@@ -28,6 +29,14 @@ export async function webSearch(query: string, provider: SearchProvider = "auto"
     } catch (error) {
       errors.push(`Exa: ${error instanceof Error ? error.message : String(error)}`);
       if (await hasExaApiKey()) throw error;
+    }
+  }
+
+  if (await isBraveAvailable()) {
+    try {
+      return { ...(await searchWithBrave(query, options)), provider: "exa" };
+    } catch (error) {
+      errors.push(`Brave: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
