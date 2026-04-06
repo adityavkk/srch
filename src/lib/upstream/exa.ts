@@ -78,26 +78,32 @@ function mapMcpResponse(query: string, options: SearchOptions, response: ExaMcpR
 }
 
 export async function searchWithExa(query: string, options: SearchOptions = {}): Promise<ExaSearchResult> {
-  const apiKey = await getApiKey();
   const activityId = activityMonitor.logStart({ type: "api", query });
 
+  // Always try free MCP tier first
   try {
-    if (!apiKey) {
-      const request = {
-        toolName: "web_search_exa",
-        arguments: {
-          query,
-          numResults: options.numResults ?? 5,
-          livecrawl: "fallback",
-          type: "auto",
-          contextMaxCharacters: options.includeContent ? 50_000 : 3_000
-        }
-      };
-      const response = await callExaMcpRaw(request.toolName, request.arguments, options.signal);
-      activityMonitor.logComplete(activityId, 200);
-      return mapMcpResponse(query, options, response);
-    }
+    const request = {
+      toolName: "web_search_exa",
+      arguments: {
+        query,
+        numResults: options.numResults ?? 5,
+        livecrawl: "fallback",
+        type: "auto",
+        contextMaxCharacters: options.includeContent ? 50_000 : 3_000
+      }
+    };
+    const response = await callExaMcpRaw(request.toolName, request.arguments, options.signal);
+    activityMonitor.logComplete(activityId, 200);
+    return mapMcpResponse(query, options, response);
+  } catch (mcpError) {
+    // MCP failed; fall through to paid API if key available
+  }
 
+  // Paid API fallback
+  const apiKey = await getApiKey();
+  if (!apiKey) throw new Error("Exa search failed: free MCP unavailable and no API key configured");
+
+  try {
     const useSearch = !!(options.includeContent || options.recencyFilter || options.domainFilter?.length || options.numResults);
     const endpoint = useSearch ? EXA_SEARCH_URL : EXA_ANSWER_URL;
     const request = useSearch
