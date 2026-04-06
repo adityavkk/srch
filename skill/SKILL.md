@@ -1,3 +1,8 @@
+---
+name: search
+description: "Local-first research CLI for agents and humans. Gather grounded information with low-token defaults and stable machine-readable output."
+---
+
 # search
 
 Local-first research CLI for agents and humans. Use it to gather grounded information with low-token defaults and stable machine-readable output.
