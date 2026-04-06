@@ -39,6 +39,9 @@ export const WEB_HELP = `search web — web research
 What it does:
   searches web backends, returns answer + sources
 
+Fallbacks:
+  exa -> brave -> perplexity -> gemini
+
 Usage:
   search web <query...> [--provider auto|exa|perplexity|gemini] [--json] [--verbose]
 

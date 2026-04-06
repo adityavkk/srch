@@ -7,13 +7,20 @@ Designed for humans and LLM agents:
 - stable `--json`
 - progressive `--help`
 - optional `--verbose` trace on stderr
+- runtime secret resolution from 1Password / fnox refs
 
 ## Install
 
 ```bash
 npm install
 npm run build
+```
+
+Local install:
+
+```bash
 npm link
+# or if npm link is restricted, symlink dist/cli.js into a PATH dir
 ```
 
 Then:
@@ -28,6 +35,12 @@ search --help
 
 Search the web with normalized output plus native backend payloads.
 
+Fallback chain:
+- Exa
+- Brave Search
+- Perplexity
+- Gemini
+
 ```bash
 search web bun sqlite wasm
 search web bun sqlite wasm --json
@@ -39,6 +52,7 @@ Good for:
 - fast research
 - cited sources
 - agent-friendly JSON
+- backend-native payload preservation
 
 ### 2. Code search
 
@@ -166,6 +180,7 @@ search web --help
 search code --help
 search docs --help
 search inspect --help
+search config --help
 ```
 
 Subcommand level:
@@ -191,35 +206,44 @@ Set provider:
 search config set provider exa
 ```
 
-Set secrets safely without echoing values:
+Preferred: runtime secret refs, not plaintext values.
+
+1Password refs:
 
 ```bash
-search config set-secret exaApiKey --from-env EXA_API_KEY
-search config set-secret perplexityApiKey --from-file /secure/path/key.txt
-op read op://vault/item/field | search config set-secret geminiApiKey --stdin
+search config set-secret-ref exaApiKey op 'op://agent-dev/exa/API Key'
+search config set-secret-ref braveApiKey op 'op://agent-dev/Brave Search/api key'
 ```
 
-Recommended with your secret flow:
+fnox refs:
 
 ```bash
-fnox exec -- search config set-secret exaApiKey --from-env EXA_API_KEY
+search config set-secret-ref exaApiKey fnox EXA_API_KEY
+search config set-secret-ref perplexityApiKey fnox PERPLEXITY_API_KEY
 ```
 
 Unset fields:
 
 ```bash
 search config unset exaApiKey
+search config unset braveApiKey
 search config unset provider
 ```
 
+Resolution order:
+- env vars
+- plaintext config values if present
+- config secret refs
+- implicit fnox fallback by conventional env key name
+
 Notes:
 - never prints secret values
-- JSON redacts secrets as `[set]`
-- prefer env/fnox over plaintext files
+- inspect shows redacted source only
+- prefer `op` / `fnox` refs over plaintext config
 
 ## Notes
 
-- web JSON preserves native Exa / Perplexity payloads
+- web JSON preserves native Exa / Brave / Perplexity payloads
 - code JSON preserves native Exa MCP payloads and optional DeepWiki payloads
 - docs JSON preserves native QMD SDK results
 - `--verbose` writes trace output to stderr; stdout remains stable
