@@ -1,3 +1,6 @@
+import { existsSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { TwitterClient, resolveCredentials } from "@steipete/bird";
 import { activityMonitor } from "../core/activity.js";
 import { errorMessage } from "../core/http.js";
@@ -29,32 +32,52 @@ export interface TwitterThreadResult {
 }
 
 function normalizeTweet(raw: Record<string, unknown>): Tweet {
+  const author = raw.author as Record<string, unknown> | undefined;
   return {
     id: String(raw.id ?? ""),
     text: String(raw.text ?? raw.full_text ?? ""),
-    author: String(raw.username ?? raw.screen_name ?? raw.author ?? ""),
-    createdAt: raw.created_at ? String(raw.created_at) : undefined
+    author: String(author?.username ?? author?.name ?? raw.username ?? raw.screen_name ?? ""),
+    createdAt: raw.createdAt ? String(raw.createdAt) : raw.created_at ? String(raw.created_at) : undefined
   };
 }
 
 let cachedClient: TwitterClient | null = null;
 
+function chromeProfileCandidates(): string[] {
+  const baseDir = join(homedir(), "Library/Application Support/Google/Chrome");
+  if (!existsSync(baseDir)) return ["Default"];
+  try {
+    return readdirSync(baseDir)
+      .filter((name) => (name === "Default" || name.startsWith("Profile ")) && existsSync(join(baseDir, name, "Cookies")))
+      .sort();
+  } catch {
+    return ["Default"];
+  }
+}
+
 async function getClient(): Promise<TwitterClient> {
   if (cachedClient) return cachedClient;
-  const creds = await resolveCredentials({});
-  if (!creds.cookies.authToken || !creds.cookies.ct0) {
-    throw new Error("Twitter auth not available. Log into x.com in Safari/Chrome or set AUTH_TOKEN + CT0 env vars.");
+  for (const profile of chromeProfileCandidates()) {
+    const creds = await resolveCredentials({ chromeProfile: profile });
+    if (creds.cookies.authToken && creds.cookies.ct0) {
+      cachedClient = new TwitterClient({ cookies: creds.cookies });
+      return cachedClient;
+    }
   }
-  cachedClient = new TwitterClient({ cookies: creds.cookies });
-  return cachedClient;
+  const fallback = await resolveCredentials({});
+  if (fallback.cookies.authToken && fallback.cookies.ct0) {
+    cachedClient = new TwitterClient({ cookies: fallback.cookies });
+    return cachedClient;
+  }
+  throw new Error("Twitter auth not available. Log into x.com in Safari/Chrome or set AUTH_TOKEN + CT0 env vars.");
 }
 
 export async function twitterSearch(query: string, count = 10): Promise<TwitterSearchResult> {
   const activityId = activityMonitor.logStart({ type: "api", query: `twitter: ${query}` });
   try {
     const client = await getClient();
-    const raw = await client.search(query, count);
-    const tweets = Array.isArray(raw) ? raw.map((item: Record<string, unknown>) => normalizeTweet(item)) : [];
+    const raw = await client.search(query, count) as { success?: boolean; tweets?: Record<string, unknown>[] };
+    const tweets = Array.isArray(raw?.tweets) ? raw.tweets.map((item) => normalizeTweet(item)) : [];
     activityMonitor.logComplete(activityId, 200);
     return { query, count: tweets.length, tweets, native: raw };
   } catch (error) {
