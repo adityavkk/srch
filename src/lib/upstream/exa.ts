@@ -1,6 +1,6 @@
 import { activityMonitor } from "../core/activity.js";
-import { loadConfig } from "../core/config.js";
 import { errorMessage, withTimeout } from "../core/http.js";
+import { resolveSecret } from "../core/secrets.js";
 import type { ExtractedContent, SearchOptions, SearchResponse } from "../core/types.js";
 import { callExaMcpRaw, exaMcpText, type ExaMcpResponse } from "./exa-mcp.js";
 
@@ -16,12 +16,12 @@ export interface ExaSearchResult extends SearchResponse {
   };
 }
 
-function getApiKey(): string | null {
-  return process.env.EXA_API_KEY ?? loadConfig().exaApiKey ?? null;
+async function getApiKey(): Promise<string | null> {
+  return resolveSecret("exaApiKey");
 }
 
-export function hasExaApiKey(): boolean {
-  return getApiKey() !== null;
+export async function hasExaApiKey(): Promise<boolean> {
+  return (await getApiKey()) !== null;
 }
 
 export function isExaAvailable(): boolean {
@@ -78,7 +78,7 @@ function mapMcpResponse(query: string, options: SearchOptions, response: ExaMcpR
 }
 
 export async function searchWithExa(query: string, options: SearchOptions = {}): Promise<ExaSearchResult> {
-  const apiKey = getApiKey();
+  const apiKey = await getApiKey();
   const activityId = activityMonitor.logStart({ type: "api", query });
 
   try {

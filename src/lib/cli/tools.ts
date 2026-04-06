@@ -2,12 +2,13 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { getConfigPath, loadConfig } from "../core/config.js";
+import { inspectSecretSources } from "../core/secrets.js";
 import { isGeminiApiAvailable } from "../upstream/gemini-api.js";
 import { isExaAvailable } from "../upstream/exa.js";
 import { isPerplexityAvailable } from "../upstream/perplexity.js";
 import { getDocsDbPath } from "../docs/qmd.js";
 
-export function inspectTools() {
+export async function inspectTools() {
   const qmdDbPath = getDocsDbPath();
   const colgrepConfig = join(homedir(), ".config", "colgrep", "config.json");
   const config = (() => {
@@ -18,10 +19,11 @@ export function inspectTools() {
     configPath: getConfigPath(),
     searchConfigPresent: existsSync(getConfigPath()),
     configuredProvider: config?.provider ?? null,
+    secretResolution: config ? await inspectSecretSources(config) : null,
     providers: {
       exa: isExaAvailable(),
-      perplexity: isPerplexityAvailable(),
-      geminiApi: isGeminiApiAvailable()
+      perplexity: await isPerplexityAvailable(),
+      geminiApi: await isGeminiApiAvailable()
     },
     docs: {
       backend: "qmd-sdk",

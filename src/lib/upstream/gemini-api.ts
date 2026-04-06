@@ -1,12 +1,12 @@
-import { loadConfig } from "../core/config.js";
+import { resolveSecret } from "../core/secrets.js";
 
 export const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 export const DEFAULT_MODEL = "gemini-2.5-flash";
 
-export function getApiKey(): string | null {
-  return process.env.GEMINI_API_KEY ?? loadConfig().geminiApiKey ?? null;
+export async function getApiKey(): Promise<string | null> {
+  return resolveSecret("geminiApiKey");
 }
 
-export function isGeminiApiAvailable(): boolean {
-  return getApiKey() !== null;
+export async function isGeminiApiAvailable(): Promise<boolean> {
+  return (await getApiKey()) !== null;
 }

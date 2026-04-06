@@ -1,6 +1,6 @@
 import { activityMonitor } from "../core/activity.js";
-import { loadConfig } from "../core/config.js";
 import { errorMessage } from "../core/http.js";
+import { resolveSecret } from "../core/secrets.js";
 import type { SearchOptions, SearchResponse } from "../core/types.js";
 
 const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions";
@@ -15,8 +15,8 @@ export interface PerplexitySearchResult extends SearchResponse {
   };
 }
 
-function getApiKey(): string {
-  const key = process.env.PERPLEXITY_API_KEY ?? loadConfig().perplexityApiKey;
+async function getApiKey(): Promise<string> {
+  const key = await resolveSecret("perplexityApiKey");
   if (!key) throw new Error("Missing Perplexity API key");
   return key;
 }
@@ -33,8 +33,8 @@ function checkRateLimit(): void {
   requestTimestamps.push(now);
 }
 
-export function isPerplexityAvailable(): boolean {
-  return !!(process.env.PERPLEXITY_API_KEY ?? loadConfig().perplexityApiKey);
+export async function isPerplexityAvailable(): Promise<boolean> {
+  return !!(await resolveSecret("perplexityApiKey"));
 }
 
 export async function searchWithPerplexity(query: string, options: SearchOptions = {}): Promise<PerplexitySearchResult> {
@@ -54,7 +54,7 @@ export async function searchWithPerplexity(query: string, options: SearchOptions
     const response = await fetch(PERPLEXITY_API_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${getApiKey()}`,
+        Authorization: `Bearer ${await getApiKey()}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify(request),

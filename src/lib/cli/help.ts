@@ -147,6 +147,7 @@ Examples:
 
 JSON:
   - providers
+  - secretResolution (redacted source only)
   - docs backend/db
   - code backend
   - runtime

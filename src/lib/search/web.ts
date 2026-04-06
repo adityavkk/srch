@@ -27,11 +27,11 @@ export async function webSearch(query: string, provider: SearchProvider = "auto"
       return { ...(await searchWithExa(query, options)), provider: "exa" };
     } catch (error) {
       errors.push(`Exa: ${error instanceof Error ? error.message : String(error)}`);
-      if (hasExaApiKey()) throw error;
+      if (await hasExaApiKey()) throw error;
     }
   }
 
-  if (isPerplexityAvailable()) {
+  if (await isPerplexityAvailable()) {
     try {
       return { ...(await searchWithPerplexity(query, options)), provider: "perplexity" };
     } catch (error) {
@@ -39,7 +39,7 @@ export async function webSearch(query: string, provider: SearchProvider = "auto"
     }
   }
 
-  if (isGeminiApiAvailable()) {
+  if (await isGeminiApiAvailable()) {
     try {
       return { ...(await searchWithGemini(query, options)), provider: "gemini" };
     } catch (error) {

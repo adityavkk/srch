@@ -3,11 +3,20 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SearchProvider } from "./types.js";
 
+export type SecretField = "exaApiKey" | "perplexityApiKey" | "geminiApiKey";
+export type SecretSource = "fnox";
+
+export interface SecretRef {
+  source: SecretSource;
+  key: string;
+}
+
 export interface SearchConfig {
   provider?: SearchProvider;
   exaApiKey?: string;
   perplexityApiKey?: string;
   geminiApiKey?: string;
+  secrets?: Partial<Record<SecretField, SecretRef>>;
 }
 
 const CONFIG_DIR = join(homedir(), ".search");

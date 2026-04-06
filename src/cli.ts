@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { getConfigSafe, setProvider, setSecret, unsetField } from "./lib/config/commands.js";
+import { getConfigSafe, setProvider, setSecretRef, unsetField } from "./lib/config/commands.js";
 import { getConfigPath } from "./lib/core/config.js";
 import { inspectTools } from "./lib/cli/tools.js";
 import { CONFIG_HELP } from "./lib/cli/config-help.js";
@@ -89,11 +89,13 @@ async function main(): Promise<void> {
         printText(`provider=${config.provider ?? "auto"}`);
         return;
       }
-      if (sub === "set-secret" && rest[1]) {
+      if (sub === "set-secret-ref" && rest[1] && rest[2] && rest[3]) {
         const field = rest[1];
-        const config = await trace.span("config.set-secret", field, async () => setSecret(field, flags));
-        if (asJson) return printJson(["config", "set-secret", field], { path: getConfigPath(), config, trace: trace.snapshot() });
-        printText(`${field}=[set]`);
+        const source = rest[2];
+        const key = rest[3];
+        const config = await trace.span("config.set-secret-ref", field, async () => setSecretRef(field, source, key));
+        if (asJson) return printJson(["config", "set-secret-ref", field], { path: getConfigPath(), config, trace: trace.snapshot() });
+        printText(`${field}=ref:${source}:${key}`);
         return;
       }
       if (sub === "unset" && rest[1]) {
