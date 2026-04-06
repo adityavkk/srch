@@ -7,6 +7,7 @@ import type { ExtractedContent } from "../core/types.js";
 import { extractWithUrlContext } from "./gemini-url-context.js";
 import { extractGitHub } from "./github.js";
 import { extractWithJinaReader } from "./jina.js";
+import { isPdf, extractPdfToMarkdown } from "./pdf.js";
 import { extractRscContent } from "./rsc.js";
 
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
@@ -43,6 +44,18 @@ async function extractViaHttp(url: string, signal?: AbortSignal): Promise<Extrac
     }
 
     const contentType = response.headers.get("content-type") || "";
+    if (isPdf(url, contentType)) {
+      const buffer = await response.arrayBuffer();
+      const result = await extractPdfToMarkdown(buffer, url);
+      activityMonitor.logComplete(activityId, response.status);
+      return {
+        url,
+        title: result.title,
+        content: `PDF extracted and saved to: ${result.outputPath}\n\nPages: ${result.pages}\nCharacters: ${result.chars}`,
+        error: null
+      };
+    }
+
     if (!contentType.includes("html") && !contentType.includes("text") && !contentType.includes("json") && !contentType.includes("xml")) {
       activityMonitor.logComplete(activityId, response.status);
       return { url, title: "", content: "", error: `Unsupported content type: ${contentType.split(";")[0]}` };
