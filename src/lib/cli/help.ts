@@ -75,7 +75,7 @@ export const CODE_HELP = `search code — code context search
 
 What it does:
   remote: gets code context from Exa Context API + Context7 + DeepWiki
-  repo:   clones a repo (or uses local dir) and searches with ripgrep
+  repo:   deep search inside a repo or local directory
 
 Usage:
   search code <query...> [--max-tokens N] [--json] [--verbose]
@@ -93,7 +93,7 @@ JSON (remote):
   - native (exa-context-api or exa-mcp)
   - secondary[] (context7 and/or deepwiki)
 
-JSON (repo):
+JSON (deep search):
   - target, query, localPath
   - matches[] (file, line, text)
   - truncated

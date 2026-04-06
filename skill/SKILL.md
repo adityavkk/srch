@@ -11,7 +11,7 @@ Local-first research CLI for agents and humans. Use it to gather grounded inform
 
 Use `search` when you need to:
 - answer an internet research question with cited sources
-- understand a library, framework, API, or public repo faster than raw grep/web browsing
+- understand a library, framework, API, or public repo faster than browsing
 - search your own local markdown/docs corpus
 - turn a URL into readable extracted content
 - search or read tweets/threads on X (Twitter)
@@ -38,8 +38,8 @@ search inspect tools --json
 | Need higher quality web answers | `search web --hq` | `search web react compiler --hq --json` |
 | Need code context for a library/API/repo | `search code` | `search code "facebook/react hooks" --json` |
 | Need up-to-date library docs | `search code` | `search code "next.js middleware" --json` |
-| Need to grep inside a repo | `search code repo` | `search code repo facebook/react "useEffect" --json` |
-| Need to grep inside a local codebase | `search code repo` | `search code repo . "auth middleware" --json` |
+| Need to deep search inside a repo | `search code repo` | `search code repo facebook/react "useEffect" --json` |
+| Need to deep search a local codebase | `search code repo` | `search code repo . "auth middleware" --json` |
 | Need to search local docs/notes | `search docs` | `search docs auth flow --json` |
 | Need readable content from a known URL | `search fetch` | `search fetch https://clig.dev --json` |
 | Need repo-aware content from GitHub URL | `search fetch` | `search fetch https://github.com/tobi/qmd --json` |

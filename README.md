@@ -64,7 +64,7 @@ search code "facebook/react hooks" --json
 search code "sqlite wal checkpoint" --max-tokens 8000
 ```
 
-Repo search: clone (or reuse cached clone) and ripgrep locally.
+Deep search: clone (or reuse cached clone) and search locally.
 
 ```bash
 search code repo facebook/react "useEffect cleanup"
