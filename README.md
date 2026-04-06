@@ -36,13 +36,20 @@ search config                safe config management
 
 ## Web search
 
-Fallback chain: Exa -> Brave -> Perplexity -> Gemini
+Fallback chain (free-first):
+1. Exa free MCP (no key needed)
+2. Brave (free tier credits)
+3. Gemini browser cookies (free)
+4. Gemini API (uses key credits)
+5. Perplexity (uses key credits)
+
+Use `--hq` for Exa paid API (answer synthesis, highlights, uses credits).
 
 ```bash
 search web bun sqlite wasm
+search web react compiler --hq --json
 search web react compiler --provider brave --json
-search web ai evals --provider gemini --json
-search web next.js caching --verbose
+search web sqlite wasm --provider gemini --json
 ```
 
 ## Code search

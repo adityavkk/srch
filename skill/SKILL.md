@@ -35,6 +35,7 @@ search inspect tools --json
 | Problem | Command | Example |
 |---------|---------|---------|
 | Need web answers with citations | `search web` | `search web react compiler --json` |
+| Need higher quality web answers | `search web --hq` | `search web react compiler --hq --json` |
 | Need code context for a library/API/repo | `search code` | `search code "facebook/react hooks" --json` |
 | Need up-to-date library docs | `search code` | `search code "next.js middleware" --json` |
 | Need to grep inside a repo | `search code repo` | `search code repo facebook/react "useEffect" --json` |
@@ -54,6 +55,7 @@ search inspect tools --json
 ```bash
 search web next.js caching
 search web privacy search api --provider brave
+search web react compiler --hq --json
 search web sqlite wasm --provider gemini --json
 ```
 

@@ -77,31 +77,30 @@ function mapMcpResponse(query: string, options: SearchOptions, response: ExaMcpR
   };
 }
 
+// Free MCP tier only. No API key consumed.
 export async function searchWithExa(query: string, options: SearchOptions = {}): Promise<ExaSearchResult> {
   const activityId = activityMonitor.logStart({ type: "api", query });
-
-  // Always try free MCP tier first
   try {
-    const request = {
-      toolName: "web_search_exa",
-      arguments: {
-        query,
-        numResults: options.numResults ?? 5,
-        livecrawl: "fallback",
-        type: "auto",
-        contextMaxCharacters: options.includeContent ? 50_000 : 3_000
-      }
-    };
-    const response = await callExaMcpRaw(request.toolName, request.arguments, options.signal);
+    const response = await callExaMcpRaw("web_search_exa", {
+      query,
+      numResults: options.numResults ?? 5,
+      livecrawl: "fallback",
+      type: "auto",
+      contextMaxCharacters: options.includeContent ? 50_000 : 3_000
+    }, options.signal);
     activityMonitor.logComplete(activityId, 200);
     return mapMcpResponse(query, options, response);
-  } catch (mcpError) {
-    // MCP failed; fall through to paid API if key available
+  } catch (error) {
+    activityMonitor.logError(activityId, errorMessage(error));
+    throw error;
   }
+}
 
-  // Paid API fallback
+// Paid API. Requires API key. Better quality (answer synthesis, highlights).
+export async function searchWithExaPaid(query: string, options: SearchOptions = {}): Promise<ExaSearchResult> {
   const apiKey = await getApiKey();
-  if (!apiKey) throw new Error("Exa search failed: free MCP unavailable and no API key configured");
+  if (!apiKey) throw new Error("Exa paid API requires an API key. Configure via: search config set-secret-ref exaApiKey op ...");
+  const activityId = activityMonitor.logStart({ type: "api", query: `exa-paid: ${query}` });
 
   try {
     const useSearch = !!(options.includeContent || options.recencyFilter || options.domainFilter?.length || options.numResults);
@@ -118,10 +117,7 @@ export async function searchWithExa(query: string, options: SearchOptions = {}):
 
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "Content-Type": "application/json"
-      },
+      headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
       body: JSON.stringify(request),
       signal: withTimeout(options.signal, 60_000)
     });
@@ -142,13 +138,8 @@ export async function searchWithExa(query: string, options: SearchOptions = {}):
     if (!useSearch) {
       return {
         answer: data.answer ?? "",
-        results: (data.citations ?? []).flatMap((item, index) => item.url ? [{ title: item.title || `Source ${index + 1}`, url: item.url, snippet: "" }] : []) ,
-        native: {
-          provider: "exa-api",
-          mode: "answer",
-          request,
-          response: data
-        }
+        results: (data.citations ?? []).flatMap((item, index) => item.url ? [{ title: item.title || `Source ${index + 1}`, url: item.url, snippet: "" }] : []),
+        native: { provider: "exa-api", mode: "answer", request, response: data }
       };
     }
 
@@ -158,12 +149,7 @@ export async function searchWithExa(query: string, options: SearchOptions = {}):
       inlineContent: options.includeContent
         ? (data.results ?? []).flatMap((item) => item.url && item.text ? [{ url: item.url, title: item.title || "", content: item.text, error: null }] : [])
         : undefined,
-      native: {
-        provider: "exa-api",
-        mode: "search",
-        request,
-        response: data
-      }
+      native: { provider: "exa-api", mode: "search", request, response: data }
     };
   } catch (error) {
     activityMonitor.logError(activityId, errorMessage(error));

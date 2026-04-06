@@ -128,9 +128,10 @@ async function main(): Promise<void> {
       if (flags.has("help")) return void console.log(WEB_HELP);
       const query = requireQuery(rest, WEB_HELP, ["web"], asJson);
       const provider = (flags.get("provider") as SearchProvider | undefined) ?? "auto";
-      trace.step("web", "dispatch", { provider, queryChars: query.length });
-      const result = await trace.span("web.search", provider, async () => webSearch(query, provider));
-      trace.step("web.result", "provider selected", { requestedProvider: provider, provider: result.provider, nativeProvider: typeof result.native === "object" && result.native && "provider" in result.native ? String((result.native as { provider?: unknown }).provider) : undefined, resultCount: result.results.length });
+      const hq = flags.has("hq");
+      trace.step("web", "dispatch", { provider, hq, queryChars: query.length });
+      const result = await trace.span("web.search", hq ? "exa-paid" : provider, async () => webSearch(query, provider, { hq }));
+      trace.step("web.result", "provider selected", { requestedProvider: provider, hq, provider: result.provider, nativeProvider: typeof result.native === "object" && result.native && "provider" in result.native ? String((result.native as { provider?: unknown }).provider) : undefined, resultCount: result.results.length });
       addHistory({ kind: "web", input: { query, provider }, output: result });
       if (asJson) return printJson(["web"], { query, requestedProvider: provider, ...result, trace: trace.snapshot() });
       console.log(result.answer || "No summary.");

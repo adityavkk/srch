@@ -44,16 +44,23 @@ export const WEB_HELP = `search web — web research
 What it does:
   searches web backends, returns answer + sources
 
-Fallbacks:
-  exa -> brave -> perplexity -> gemini
+Fallbacks (auto, free-first):
+  1. Exa free MCP (no key needed)
+  2. Brave (free tier credits)
+  3. Gemini browser cookies (free)
+  4. Gemini API (uses key credits)
+  5. Perplexity (uses key credits)
 
 Usage:
-  search web <query...> [--provider auto|exa|brave|perplexity|gemini] [--json] [--verbose]
+  search web <query...> [--provider auto|exa|brave|perplexity|gemini] [--hq] [--json] [--verbose]
+
+Flags:
+  --hq    use Exa paid API for higher quality (answer synthesis, highlights)
 
 Examples:
   search web bun sqlite wasm
-  search web ai evals --provider perplexity
-  search web privacy search api --provider brave
+  search web ai evals --provider brave
+  search web react compiler --hq --json
   search web sqlite wasm --provider gemini --json
 
 JSON:
