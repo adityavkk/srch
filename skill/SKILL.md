@@ -14,6 +14,7 @@ Use `search` when you need to:
 - understand a library, framework, API, or public repo faster than raw grep/web browsing
 - search your own local markdown/docs corpus
 - turn a URL into readable extracted content
+- search or read tweets/threads on X (Twitter)
 - inspect prior runs or diagnose search/config state
 
 Prefer `--json` for agent flows. Add `--verbose` only when you need routing/timing traces.
@@ -25,6 +26,7 @@ search web bun sqlite wasm
 search code "react suspense cache"
 search docs auth flow
 search fetch https://clig.dev
+search twitter "bun runtime"
 search inspect tools --json
 ```
 
@@ -37,6 +39,8 @@ search inspect tools --json
 | Need to search local docs/notes | `search docs` | `search docs auth flow --json` |
 | Need readable content from a known URL | `search fetch` | `search fetch https://clig.dev --json` |
 | Need repo-aware content from GitHub URL | `search fetch` | `search fetch https://github.com/tobi/qmd --json` |
+| Need to search tweets on X | `search twitter` | `search twitter "bun runtime" --json` |
+| Need to read a specific tweet or thread | `search twitter` | `search twitter read https://x.com/i/status/123 --json` |
 | Need diagnostics / secret resolution status | `search inspect tools` | `search inspect tools --json` |
 | Need prior results | `search history` | `search history docs --json` |
 
@@ -65,6 +69,16 @@ search docs index update
 search docs deployment checklist --json
 ```
 
+### Twitter / X
+
+```bash
+search twitter "bun runtime"
+search twitter "from:toaborevol" --count 20 --json
+search twitter read https://x.com/toaborevol/status/123456
+search twitter thread https://x.com/toaborevol/status/123456 --json
+search x.com "react compiler"
+```
+
 ### Read and extract a page
 
 ```bash
@@ -88,7 +102,8 @@ Canonical note for skills/docs references:
 - `web` for open-web questions
 - `code` for API/library/repo understanding
 - `docs` for local indexed docs
-- `fetch-content` when you already have the URL
+- `twitter` / `x.com` for tweet search/read/threads
+- `fetch` when you already have the URL
 
 ### Fetch first, summarize second
 
@@ -107,6 +122,7 @@ search --help
 search web --help
 search code --help
 search docs --help
+search twitter --help
 search config --help
 ```
 

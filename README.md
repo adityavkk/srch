@@ -131,7 +131,21 @@ PDFs are handled specially too:
 search fetch https://arxiv.org/pdf/1706.03762.pdf --json
 ```
 
-### 5. Inspect / debug
+### 5. Twitter / X
+
+Search tweets, read individual tweets, or fetch full threads.
+
+Requires being logged into x.com in Safari/Chrome, or `AUTH_TOKEN` + `CT0` env vars.
+
+```bash
+search twitter "bun runtime"
+search twitter "from:toaborevol" --count 20 --json
+search twitter read https://x.com/toaborevol/status/123456
+search twitter thread https://x.com/toaborevol/status/123456 --json
+search x.com "react compiler"
+```
+
+### 6. Inspect / debug
 
 Read-only diagnostics.
 
@@ -142,7 +156,7 @@ search inspect tools --verbose
 # includes redacted secret sources + Gemini browser profile diagnostics + GitHub CLI availability
 ```
 
-### 6. History
+### 7. History
 
 Review prior runs.
 
@@ -203,6 +217,7 @@ Command level:
 search web --help
 search code --help
 search docs --help
+search twitter --help
 search inspect --help
 search config --help
 ```
@@ -268,6 +283,8 @@ Notes:
 
 ## Notes
 
+- twitter JSON preserves native bird SDK payloads
+- `search twitter` and `search x.com` are aliases
 - web JSON preserves native Exa / Brave / Perplexity / Gemini payloads
 - `search web --provider brave` and `--provider gemini` are supported explicitly
 - code JSON preserves native Exa MCP payloads and optional DeepWiki payloads
