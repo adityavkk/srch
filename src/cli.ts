@@ -10,6 +10,7 @@ import { fetchContent } from "./lib/fetch/content.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
 import { codeSearch } from "./lib/search/code.js";
 import { webSearch } from "./lib/search/web.js";
+import { createTraceSink } from "./lib/trace.js";
 
 function parseFlags(args: string[]): { flags: Map<string, string | boolean>; rest: string[] } {
   const flags = new Map<string, string | boolean>();
@@ -64,152 +65,162 @@ async function main(): Promise<void> {
 
   const { flags, rest } = parseFlags(argv);
   const asJson = flags.has("json");
+  const trace = createTraceSink(flags.has("verbose"));
+  trace.step("cli", `${command} start`, { asJson, cwd: process.cwd() });
 
-  if (command === "config") {
-    const data = { path: getConfigPath(), config: loadConfig() };
-    if (asJson) return printJson(["config"], data);
-    printText(getConfigPath());
-    return;
-  }
-
-  if (command === "inspect") {
-    if (flags.has("help") || rest[0] !== "tools") {
-      console.log(INSPECT_HELP);
+  try {
+    if (command === "config") {
+      const data = await trace.span("config", "load config", async () => ({ path: getConfigPath(), config: loadConfig() }));
+      if (asJson) return printJson(["config"], { ...data, trace: trace.snapshot() });
+      printText(getConfigPath());
       return;
     }
-    const result = inspectTools();
-    if (asJson) return printJson(["inspect", "tools"], result);
-    printText(JSON.stringify(result, null, 2));
-    return;
-  }
 
-  if (command === "web") {
-    if (flags.has("help")) return void console.log(WEB_HELP);
-    const query = requireQuery(rest, WEB_HELP, ["web"], asJson);
-    const provider = (flags.get("provider") as SearchProvider | undefined) ?? "auto";
-    const result = await webSearch(query, provider);
-    addHistory({ kind: "web", input: { query, provider }, output: result });
-    if (asJson) return printJson(["web"], { query, requestedProvider: provider, ...result });
-    console.log(result.answer || "No summary.");
-    if (result.results.length > 0) {
-      console.log("\nSources:");
-      for (const [index, item] of result.results.entries()) console.log(`${index + 1}. ${item.title}\n   ${item.url}`);
+    if (command === "inspect") {
+      if (flags.has("help") || rest[0] !== "tools") {
+        console.log(INSPECT_HELP);
+        return;
+      }
+      const result = await trace.span("inspect", "collect tool diagnostics", async () => inspectTools());
+      if (asJson) return printJson(["inspect", "tools"], { ...result, trace: trace.snapshot() });
+      printText(JSON.stringify(result, null, 2));
+      return;
     }
-    return;
-  }
 
-  if (command === "code") {
-    if (flags.has("help")) return void console.log(CODE_HELP);
-    const query = requireQuery(rest, CODE_HELP, ["code"], asJson);
-    const maxTokens = Number(flags.get("max-tokens") ?? 5000);
-    const result = await codeSearch(query, maxTokens);
-    addHistory({ kind: "code", input: { query, maxTokens }, output: result });
-    if (asJson) return printJson(["code"], result);
-    printText(result.text);
-    return;
-  }
+    if (command === "web") {
+      if (flags.has("help")) return void console.log(WEB_HELP);
+      const query = requireQuery(rest, WEB_HELP, ["web"], asJson);
+      const provider = (flags.get("provider") as SearchProvider | undefined) ?? "auto";
+      trace.step("web", "dispatch", { provider, queryChars: query.length });
+      const result = await trace.span("web.search", provider, async () => webSearch(query, provider));
+      addHistory({ kind: "web", input: { query, provider }, output: result });
+      if (asJson) return printJson(["web"], { query, requestedProvider: provider, ...result, trace: trace.snapshot() });
+      console.log(result.answer || "No summary.");
+      if (result.results.length > 0) {
+        console.log("\nSources:");
+        for (const [index, item] of result.results.entries()) console.log(`${index + 1}. ${item.title}\n   ${item.url}`);
+      }
+      return;
+    }
 
-  if (command === "docs") {
-    if (flags.has("help")) return void console.log(DOCS_HELP);
+    if (command === "code") {
+      if (flags.has("help")) return void console.log(CODE_HELP);
+      const query = requireQuery(rest, CODE_HELP, ["code"], asJson);
+      const maxTokens = Number(flags.get("max-tokens") ?? 5000);
+      trace.step("code", "dispatch", { maxTokens, queryChars: query.length });
+      const result = await trace.span("code.search", "exa-mcp", async () => codeSearch(query, maxTokens));
+      addHistory({ kind: "code", input: { query, maxTokens }, output: result });
+      if (asJson) return printJson(["code"], { ...result, trace: trace.snapshot() });
+      printText(result.text);
+      return;
+    }
 
-    if (rest[0] === "index") {
-      const sub = rest[1];
-      if (sub === "add") {
-        const path = rest[2];
-        const name = flags.get("name");
-        const pattern = (flags.get("pattern") as string | undefined) ?? "**/*.md";
-        if (!path || typeof name !== "string") {
-          if (asJson) exitJsonError(["docs", "index", "add"], "Missing path or --name");
-          console.error(DOCS_HELP);
-          process.exit(1);
+    if (command === "docs") {
+      if (flags.has("help")) return void console.log(DOCS_HELP);
+
+      if (rest[0] === "index") {
+        const sub = rest[1];
+        if (sub === "add") {
+          const path = rest[2];
+          const name = flags.get("name");
+          const pattern = (flags.get("pattern") as string | undefined) ?? "**/*.md";
+          if (!path || typeof name !== "string") {
+            if (asJson) exitJsonError(["docs", "index", "add"], "Missing path or --name");
+            console.error(DOCS_HELP);
+            process.exit(1);
+          }
+          const result = await trace.span("docs.index.add", name, async () => docsAddCollection(path, name, pattern), { path, pattern });
+          if (asJson) return printJson(["docs", "index", "add"], { path, name, pattern, collections: result, trace: trace.snapshot() });
+          printText(`${result.length} collections`);
+          return;
         }
-        const result = await docsAddCollection(path, name, pattern);
-        if (asJson) return printJson(["docs", "index", "add"], { path, name, pattern, collections: result });
-        printText(`${result.length} collections`);
-        return;
+        if (sub === "list") {
+          const result = await trace.span("docs.index.list", "qmd collections", async () => docsListCollections());
+          if (asJson) return printJson(["docs", "index", "list"], { collections: result, count: result.length, trace: trace.snapshot() });
+          for (const item of result) console.log(`${item.name}\t${item.pwd}\t${item.doc_count}`);
+          return;
+        }
+        if (sub === "update") {
+          const result = await trace.span("docs.index.update", "qmd update", async () => docsUpdate());
+          if (asJson) return printJson(["docs", "index", "update"], { ...result, trace: trace.snapshot() });
+          printText(`indexed=${result.indexed} updated=${result.updated} unchanged=${result.unchanged} removed=${result.removed}`);
+          return;
+        }
+        if (sub === "embed") {
+          const result = await trace.span("docs.index.embed", "qmd embed", async () => docsEmbed());
+          if (asJson) return printJson(["docs", "index", "embed"], { ...result, trace: trace.snapshot() });
+          printText(`docs=${result.docsProcessed} chunks=${result.chunksEmbedded} errors=${result.errors}`);
+          return;
+        }
+        if (sub === "status") {
+          const result = await trace.span("docs.index.status", "qmd status", async () => docsStatus());
+          if (asJson) return printJson(["docs", "index", "status"], { ...result, trace: trace.snapshot() });
+          printText(`docs=${result.status.totalDocuments} collections=${result.collections.length} needsEmbedding=${result.status.needsEmbedding}`);
+          return;
+        }
+        if (asJson) exitJsonError(["docs", "index"], "Unknown docs index subcommand");
+        console.error(DOCS_HELP);
+        process.exit(1);
       }
-      if (sub === "list") {
-        const result = await docsListCollections();
-        if (asJson) return printJson(["docs", "index", "list"], { collections: result, count: result.length });
-        for (const item of result) console.log(`${item.name}\t${item.pwd}\t${item.doc_count}`);
-        return;
-      }
-      if (sub === "update") {
-        const result = await docsUpdate();
-        if (asJson) return printJson(["docs", "index", "update"], result);
-        printText(`indexed=${result.indexed} updated=${result.updated} unchanged=${result.unchanged} removed=${result.removed}`);
-        return;
-      }
-      if (sub === "embed") {
-        const result = await docsEmbed();
-        if (asJson) return printJson(["docs", "index", "embed"], result);
-        printText(`docs=${result.docsProcessed} chunks=${result.chunksEmbedded} errors=${result.errors}`);
-        return;
-      }
-      if (sub === "status") {
-        const result = await docsStatus();
-        if (asJson) return printJson(["docs", "index", "status"], result);
-        printText(`docs=${result.status.totalDocuments} collections=${result.collections.length} needsEmbedding=${result.status.needsEmbedding}`);
-        return;
-      }
-      if (asJson) exitJsonError(["docs", "index"], "Unknown docs index subcommand");
-      console.error(DOCS_HELP);
-      process.exit(1);
-    }
 
-    const query = requireQuery(rest, DOCS_HELP, ["docs"], asJson);
-    const result = await docsSearch(query);
-    const rows = result.results.map((item) => ({
-      title: item.title,
-      file: item.file,
-      score: item.score,
-      docid: item.docid,
-      snippet: summarizeBestChunk(item.bestChunk)
-    }));
-    const data = { ...result, count: rows.length, results: rows };
-    addHistory({ kind: "docs", input: { query }, output: data });
-    if (asJson) return printJson(["docs"], data);
-    if (rows.length === 0) {
-      printText("No results.");
+      const query = requireQuery(rest, DOCS_HELP, ["docs"], asJson);
+      trace.step("docs", "dispatch", { queryChars: query.length });
+      const result = await trace.span("docs.search", "qmd-sdk", async () => docsSearch(query));
+      const rows = result.results.map((item) => ({
+        title: item.title,
+        file: item.file,
+        score: item.score,
+        docid: item.docid,
+        snippet: summarizeBestChunk(item.bestChunk)
+      }));
+      const data = { ...result, count: rows.length, results: rows };
+      addHistory({ kind: "docs", input: { query }, output: data });
+      if (asJson) return printJson(["docs"], { ...data, trace: trace.snapshot() });
+      if (rows.length === 0) {
+        printText("No results.");
+        return;
+      }
+      for (const [index, item] of rows.entries()) {
+        console.log(`${index + 1}. ${item.title}`);
+        console.log(`   ${item.file}`);
+        console.log(`   score=${item.score.toFixed(3)}`);
+        if (item.snippet) console.log(`   ${item.snippet}`);
+      }
       return;
     }
-    for (const [index, item] of rows.entries()) {
-      console.log(`${index + 1}. ${item.title}`);
-      console.log(`   ${item.file}`);
-      console.log(`   score=${item.score.toFixed(3)}`);
-      if (item.snippet) console.log(`   ${item.snippet}`);
-    }
-    return;
-  }
 
-  if (command === "fetch-content") {
-    if (flags.has("help")) return void console.log(FETCH_HELP);
-    const url = requireQuery(rest, FETCH_HELP, ["fetch-content"], asJson);
-    const result = await fetchContent(url);
-    addHistory({ kind: "fetch", input: { url }, output: result });
-    if (asJson) return printJson(["fetch-content"], result);
-    if (result.error) {
-      console.log(`Error: ${result.error}`);
-      if (result.content) console.log(`\n${result.content}`);
+    if (command === "fetch-content") {
+      if (flags.has("help")) return void console.log(FETCH_HELP);
+      const url = requireQuery(rest, FETCH_HELP, ["fetch-content"], asJson);
+      trace.step("fetch", "dispatch", { url });
+      const result = await trace.span("fetch.content", url, async () => fetchContent(url));
+      addHistory({ kind: "fetch", input: { url }, output: result });
+      if (asJson) return printJson(["fetch-content"], { ...result, trace: trace.snapshot() });
+      if (result.error) {
+        console.log(`Error: ${result.error}`);
+        if (result.content) console.log(`\n${result.content}`);
+        return;
+      }
+      console.log(`# ${result.title}\n`);
+      console.log(result.content);
       return;
     }
-    console.log(`# ${result.title}\n`);
-    console.log(result.content);
-    return;
-  }
 
-  if (command === "history") {
-    if (flags.has("help")) return void console.log(HISTORY_HELP);
-    const kind = rest[0] as "web" | "code" | "fetch" | "docs" | undefined;
-    const entries = listHistory(kind);
-    if (asJson) return printJson(["history"], { kind: kind ?? null, count: entries.length, entries });
-    for (const entry of entries) console.log(`${entry.createdAt}  ${entry.kind}  ${entry.id}`);
-    return;
-  }
+    if (command === "history") {
+      if (flags.has("help")) return void console.log(HISTORY_HELP);
+      const kind = rest[0] as "web" | "code" | "fetch" | "docs" | undefined;
+      const entries = await trace.span("history", kind ?? "all", async () => listHistory(kind));
+      if (asJson) return printJson(["history"], { kind: kind ?? null, count: entries.length, entries, trace: trace.snapshot() });
+      for (const entry of entries) console.log(`${entry.createdAt}  ${entry.kind}  ${entry.id}`);
+      return;
+    }
 
-  if (asJson) exitJsonError([command], "Unknown command");
-  console.error(ROOT_HELP);
-  process.exit(1);
+    if (asJson) exitJsonError([command], "Unknown command");
+    console.error(ROOT_HELP);
+    process.exit(1);
+  } finally {
+    trace.flush();
+  }
 }
 
 main().catch((error) => {

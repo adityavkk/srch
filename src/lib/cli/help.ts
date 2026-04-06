@@ -24,6 +24,7 @@ Tips:
   - add --help anywhere
   - default output: short, agent-friendly
   - --json returns stable envelopes
+  - --verbose shows trace view on stderr
 `;
 
 export const WEB_HELP = `search web — search web
@@ -89,7 +90,7 @@ JSON:
 export const INSPECT_HELP = `search inspect — inspect backends/config
 
 Usage:
-  search inspect tools [--json]
+  search inspect tools [--json] [--verbose]
 
 JSON:
   - providers
