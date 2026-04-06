@@ -3,14 +3,19 @@ import { isGeminiApiAvailable } from "../upstream/gemini-api.js";
 import { hasExaApiKey, isExaAvailable, searchWithExa } from "../upstream/exa.js";
 import { isPerplexityAvailable, searchWithPerplexity } from "../upstream/perplexity.js";
 
-async function searchWithGemini(query: string, _options: SearchOptions = {}): Promise<SearchResponse> {
+export interface WebSearchResult extends SearchResponse {
+  provider: Exclude<SearchProvider, "auto">;
+  native?: unknown;
+}
+
+async function searchWithGemini(query: string, _options: SearchOptions = {}): Promise<WebSearchResult> {
   if (!isGeminiApiAvailable()) {
     throw new Error("Gemini search not wired yet. Set provider to exa or perplexity.");
   }
   throw new Error("Gemini search not wired yet. Use exa or perplexity.");
 }
 
-export async function webSearch(query: string, provider: SearchProvider = "auto", options: SearchOptions = {}): Promise<SearchResponse & { provider: Exclude<SearchProvider, "auto"> }> {
+export async function webSearch(query: string, provider: SearchProvider = "auto", options: SearchOptions = {}): Promise<WebSearchResult> {
   if (provider === "exa") return { ...(await searchWithExa(query, options)), provider: "exa" };
   if (provider === "perplexity") return { ...(await searchWithPerplexity(query, options)), provider: "perplexity" };
   if (provider === "gemini") return { ...(await searchWithGemini(query, options)), provider: "gemini" };

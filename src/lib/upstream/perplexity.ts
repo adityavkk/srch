@@ -7,6 +7,14 @@ const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions";
 const RATE_LIMIT = { maxRequests: 10, windowMs: 60_000 };
 const requestTimestamps: number[] = [];
 
+export interface PerplexitySearchResult extends SearchResponse {
+  native: {
+    provider: "perplexity-api";
+    request: Record<string, unknown>;
+    response: unknown;
+  };
+}
+
 function getApiKey(): string {
   const key = process.env.PERPLEXITY_API_KEY ?? loadConfig().perplexityApiKey;
   if (!key) throw new Error("Missing Perplexity API key");
@@ -29,25 +37,27 @@ export function isPerplexityAvailable(): boolean {
   return !!(process.env.PERPLEXITY_API_KEY ?? loadConfig().perplexityApiKey);
 }
 
-export async function searchWithPerplexity(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
+export async function searchWithPerplexity(query: string, options: SearchOptions = {}): Promise<PerplexitySearchResult> {
   checkRateLimit();
   const activityId = activityMonitor.logStart({ type: "api", query });
 
   try {
+    const request = {
+      model: "sonar",
+      messages: [{ role: "user", content: query }],
+      return_related_questions: false,
+      max_tokens: 1024,
+      ...(options.recencyFilter ? { search_recency_filter: options.recencyFilter } : {}),
+      ...(options.domainFilter?.length ? { search_domain_filter: options.domainFilter } : {})
+    };
+
     const response = await fetch(PERPLEXITY_API_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${getApiKey()}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        model: "sonar",
-        messages: [{ role: "user", content: query }],
-        return_related_questions: false,
-        max_tokens: 1024,
-        ...(options.recencyFilter ? { search_recency_filter: options.recencyFilter } : {}),
-        ...(options.domainFilter?.length ? { search_domain_filter: options.domainFilter } : {})
-      }),
+      body: JSON.stringify(request),
       signal: options.signal
     });
 
@@ -70,7 +80,12 @@ export async function searchWithPerplexity(query: string, options: SearchOptions
     activityMonitor.logComplete(activityId, response.status);
     return {
       answer: data.choices?.[0]?.message?.content ?? "",
-      results
+      results,
+      native: {
+        provider: "perplexity-api",
+        request,
+        response: data
+      }
     };
   } catch (error) {
     activityMonitor.logError(activityId, errorMessage(error));
