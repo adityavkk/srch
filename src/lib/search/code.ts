@@ -7,7 +7,7 @@ export interface CodeSearchResult {
   text: string;
   native: {
     provider: "exa-mcp";
-    toolName: "get_code_context_exa";
+    toolName: "web_search_exa";
     response: unknown;
   };
   secondary?: {
@@ -40,13 +40,16 @@ export async function codeSearch(query: string, maxTokens = 5000, signal?: Abort
   let primaryText = "";
   let primaryError: Error | null = null;
   try {
-    response = await callExaMcpRaw("get_code_context_exa", { query: normalized, tokensNum: maxTokens }, signal);
+    response = await callExaMcpRaw("web_search_exa", {
+      query: `${normalized} site:github.com OR site:stackoverflow.com OR site:dev.to OR programming`,
+      numResults: Math.min(Math.ceil(maxTokens / 500), 10)
+    }, signal);
     primaryText = exaMcpText(response);
   } catch (error) {
     primaryError = error instanceof Error ? error : new Error(String(error));
     if (!secondary?.meaningful) throw primaryError;
     response = { error: primaryError.message };
-    primaryText = "Primary source unavailable (Exa code context failed).";
+    primaryText = "Primary source unavailable.";
   }
 
   return {
@@ -55,7 +58,7 @@ export async function codeSearch(query: string, maxTokens = 5000, signal?: Abort
     text: mergeSecondary(primaryText, secondary),
     native: {
       provider: "exa-mcp",
-      toolName: "get_code_context_exa",
+      toolName: "web_search_exa",
       response
     },
     ...(secondary?.meaningful ? {
