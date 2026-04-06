@@ -45,6 +45,7 @@ Fallback chain:
 search web bun sqlite wasm
 search web bun sqlite wasm --json
 search web react server components --provider exa
+search web privacy search api --provider brave
 search web ai evals --provider perplexity --json
 ```
 
@@ -244,6 +245,7 @@ Notes:
 ## Notes
 
 - web JSON preserves native Exa / Brave / Perplexity payloads
+- `search web --provider brave` is supported explicitly
 - code JSON preserves native Exa MCP payloads and optional DeepWiki payloads
 - docs JSON preserves native QMD SDK results
 - `--verbose` writes trace output to stderr; stdout remains stable

@@ -18,6 +18,7 @@ async function searchWithGemini(query: string, _options: SearchOptions = {}): Pr
 
 export async function webSearch(query: string, provider: SearchProvider = "auto", options: SearchOptions = {}): Promise<WebSearchResult> {
   if (provider === "exa") return { ...(await searchWithExa(query, options)), provider: "exa" };
+  if (provider === "brave") return { ...(await searchWithBrave(query, options)), provider: "brave" };
   if (provider === "perplexity") return { ...(await searchWithPerplexity(query, options)), provider: "perplexity" };
   if (provider === "gemini") return { ...(await searchWithGemini(query, options)), provider: "gemini" };
 
@@ -34,7 +35,7 @@ export async function webSearch(query: string, provider: SearchProvider = "auto"
 
   if (await isBraveAvailable()) {
     try {
-      return { ...(await searchWithBrave(query, options)), provider: "exa" };
+      return { ...(await searchWithBrave(query, options)), provider: "brave" };
     } catch (error) {
       errors.push(`Brave: ${error instanceof Error ? error.message : String(error)}`);
     }

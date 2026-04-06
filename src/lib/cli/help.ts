@@ -43,7 +43,7 @@ Fallbacks:
   exa -> brave -> perplexity -> gemini
 
 Usage:
-  search web <query...> [--provider auto|exa|perplexity|gemini] [--json] [--verbose]
+  search web <query...> [--provider auto|exa|brave|perplexity|gemini] [--json] [--verbose]
 
 Examples:
   search web bun sqlite wasm
@@ -54,6 +54,7 @@ JSON:
   - answer
   - results[]
   - provider
+  - requestedProvider
   - native backend payload
 `;
 

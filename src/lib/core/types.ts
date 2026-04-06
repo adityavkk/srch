@@ -17,7 +17,7 @@ export interface SearchResponse {
   inlineContent?: ExtractedContent[];
 }
 
-export type SearchProvider = "auto" | "exa" | "perplexity" | "gemini";
+export type SearchProvider = "auto" | "exa" | "brave" | "perplexity" | "gemini";
 
 export interface SearchOptions {
   numResults?: number;

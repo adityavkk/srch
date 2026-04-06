@@ -28,7 +28,7 @@ search inspect tools --json
 
 | Command | What it does | Notes |
 |---------|--------------|-------|
-| `search web` | Web research with citations | Fallbacks: Exa -> Brave -> Perplexity -> Gemini |
+| `search web` | Web research with citations | Explicit providers: exa, brave, perplexity, gemini. Fallbacks: Exa -> Brave -> Perplexity -> Gemini |
 | `search code` | Code/docs context | Primary: Exa MCP. Secondary: DeepWiki when meaningful |
 | `search docs` | Local docs search | Uses QMD SDK; index your own collections |
 | `search fetch-content` | Readable URL extraction | Good for docs/articles/pages |
@@ -42,6 +42,7 @@ search inspect tools --json
 
 ```bash
 search web react compiler
+search web privacy search api --provider brave
 search web ai evals --json
 search web next.js caching --verbose
 ```
