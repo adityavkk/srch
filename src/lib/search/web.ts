@@ -1,5 +1,6 @@
 import type { SearchOptions, SearchProvider, SearchResponse } from "../core/types.js";
 import { isGeminiApiAvailable } from "../upstream/gemini-api.js";
+import { searchWithGemini as searchWithGeminiApi } from "../upstream/gemini.js";
 import { hasExaApiKey, isExaAvailable, searchWithExa } from "../upstream/exa.js";
 import { isBraveAvailable, searchWithBrave } from "../upstream/brave.js";
 import { isPerplexityAvailable, searchWithPerplexity } from "../upstream/perplexity.js";
@@ -9,11 +10,11 @@ export interface WebSearchResult extends SearchResponse {
   native?: unknown;
 }
 
-async function searchWithGemini(query: string, _options: SearchOptions = {}): Promise<WebSearchResult> {
-  if (!isGeminiApiAvailable()) {
-    throw new Error("Gemini search not wired yet. Set provider to exa or perplexity.");
+async function searchWithGemini(query: string, options: SearchOptions = {}): Promise<WebSearchResult> {
+  if (!(await isGeminiApiAvailable())) {
+    throw new Error("Missing Gemini API key");
   }
-  throw new Error("Gemini search not wired yet. Use exa or perplexity.");
+  return { ...(await searchWithGeminiApi(query, options)), provider: "gemini" };
 }
 
 export async function webSearch(query: string, provider: SearchProvider = "auto", options: SearchOptions = {}): Promise<WebSearchResult> {
