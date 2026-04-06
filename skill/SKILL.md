@@ -43,6 +43,7 @@ search inspect tools --json
 ```bash
 search web react compiler
 search web privacy search api --provider brave
+search web sqlite wasm --provider gemini --json
 search web ai evals --json
 search web next.js caching --verbose
 ```

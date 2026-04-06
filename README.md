@@ -47,6 +47,7 @@ search web bun sqlite wasm --json
 search web react server components --provider exa
 search web privacy search api --provider brave
 search web ai evals --provider perplexity --json
+search web sqlite wasm --provider gemini --json
 ```
 
 Good for:
@@ -214,6 +215,7 @@ Preferred: runtime secret refs, not plaintext values.
 ```bash
 search config set-secret-ref exaApiKey op 'op://agent-dev/exa/API Key'
 search config set-secret-ref braveApiKey op 'op://agent-dev/Brave Search/api key'
+search config set-secret-ref geminiApiKey op 'op://agent-dev/Gemini API Key/password'
 ```
 
 fnox refs:
@@ -244,8 +246,8 @@ Notes:
 
 ## Notes
 
-- web JSON preserves native Exa / Brave / Perplexity payloads
-- `search web --provider brave` is supported explicitly
+- web JSON preserves native Exa / Brave / Perplexity / Gemini payloads
+- `search web --provider brave` and `--provider gemini` are supported explicitly
 - code JSON preserves native Exa MCP payloads and optional DeepWiki payloads
 - docs JSON preserves native QMD SDK results
 - `--verbose` writes trace output to stderr; stdout remains stable

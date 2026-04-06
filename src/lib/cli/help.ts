@@ -48,7 +48,8 @@ Usage:
 Examples:
   search web bun sqlite wasm
   search web ai evals --provider perplexity
-  search web react compiler --json
+  search web privacy search api --provider brave
+  search web sqlite wasm --provider gemini --json
 
 JSON:
   - answer
