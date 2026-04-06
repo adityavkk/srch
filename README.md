@@ -1,294 +1,151 @@
-# search
+# srch
 
-Local-first CLI for web research, code context, doc search, and content fetch.
+Local-first research CLI for agents and humans. One command, many backends.
 
-Designed for humans and LLM agents:
-- terse default output
-- stable `--json`
-- progressive `--help`
-- optional `--verbose` trace on stderr
-- runtime secret resolution from 1Password / fnox refs
+<p align="center">
+  <img src="demo.gif" alt="srch demo" width="800">
+</p>
 
 ## Install
 
 ```bash
+git clone https://github.com/adityavkk/srch.git
+cd srch
 npm install
 npm run build
+ln -s $(pwd)/dist/cli.js ~/bin/search
 ```
 
-Local install:
+## What it does
 
-```bash
-npm link
-# or if npm link is restricted, symlink dist/cli.js into a PATH dir
+`search` is a single CLI that routes queries to the right backend and returns grounded, cited results. Designed for LLM agents and humans who want answers fast with minimal tokens.
+
+## Commands
+
+```
+search web <query>           web research with citations
+search code <query>          code/docs context
+search docs <query>          local doc search
+search fetch <url>           readable page extraction
+search twitter <query>       tweet search / read / threads
+search x.com <query>         alias for twitter
+search history               prior runs
+search inspect tools         backend diagnostics
+search config                safe config management
 ```
 
-Then:
+## Web search
 
-```bash
-search --help
-```
-
-## Capabilities
-
-### 1. Web search
-
-Search the web with normalized output plus native backend payloads.
-
-Fallback chain:
-- Exa
-- Brave Search
-- Perplexity
-- Gemini
+Fallback chain: Exa -> Brave -> Perplexity -> Gemini
 
 ```bash
 search web bun sqlite wasm
-search web bun sqlite wasm --json
-search web react server components --provider exa
-search web privacy search api --provider brave
-search web ai evals --provider perplexity --json
-search web sqlite wasm --provider gemini --json
+search web react compiler --provider brave --json
+search web ai evals --provider gemini --json
+search web next.js caching --verbose
 ```
 
-Good for:
-- fast research
-- cited sources
-- agent-friendly JSON
-- backend-native payload preservation
+## Code search
 
-### 2. Code search
-
-Primary source: Exa code context.
-
-Optional secondary source: DeepWiki for public repos when the query clearly references `owner/repo` and DeepWiki has meaningful indexed info.
+Primary: Exa. Secondary: DeepWiki for public repos.
 
 ```bash
 search code "react suspense cache"
 search code "facebook/react hooks" --json
-search code "vercel/next.js app router internals"
-search code "sqlite wal checkpoint" --max-tokens 8000 --json
+search code "sqlite wal checkpoint" --max-tokens 8000
 ```
 
-JSON includes:
-- normalized result text
-- native Exa MCP payload
-- optional `secondary.deepwiki`
+## Local docs
 
-### 3. Local docs search
-
-Backed by QMD SDK.
-
-Add collections:
+Backed by QMD SDK. Index your own collections.
 
 ```bash
 search docs index add ./docs --name project-docs
-search docs index add ~/notes --name notes --pattern "**/*.md"
-```
-
-Build / inspect index:
-
-```bash
 search docs index update
-search docs index embed
-search docs index status --json
-search docs index list
+search docs auth flow --json
 ```
 
-Search:
+## Fetch content
 
-```bash
-search docs auth flow
-search docs deployment checklist --json
-```
+Handles HTML, GitHub repos, PDFs, JS-rendered pages.
 
-### 4. Fetch page content
-
-Fetch readable content from a URL.
-
-Fallback chain for hard pages:
-- direct HTTP + Readability
-- Next.js RSC extraction
-- Jina Reader
-- Gemini URL Context
-
-GitHub URLs are handled specially:
-- repo root -> tree + README + local clone path
-- tree URL -> directory listing
-- blob URL -> actual file contents
+Fallback chain: HTTP + Readability -> RSC -> Jina Reader -> Gemini URL Context
 
 ```bash
 search fetch https://clig.dev
-search fetch https://clig.dev --json
 search fetch https://github.com/tobi/qmd --json
-```
-
-PDFs are handled specially too:
-- downloads bytes
-- extracts text to markdown
-- saves markdown to `~/Downloads`
-
-```bash
 search fetch https://arxiv.org/pdf/1706.03762.pdf --json
 ```
 
-### 5. Twitter / X
+## Twitter / X
 
-Search tweets, read individual tweets, or fetch full threads.
-
-Requires being logged into x.com in Safari/Chrome, or `AUTH_TOKEN` + `CT0` env vars.
+Search tweets, read individual tweets, fetch threads.
 
 ```bash
 search twitter "bun runtime"
-search twitter "from:toaborevol" --count 20 --json
-search twitter read https://x.com/toaborevol/status/123456
-search twitter thread https://x.com/toaborevol/status/123456 --json
-search x.com "react compiler"
+search twitter read https://x.com/i/status/123456
+search twitter thread https://x.com/i/status/123456 --json
+search x.com "react compiler" --count 20
 ```
 
-### 6. Inspect / debug
+## Output
 
-Read-only diagnostics.
+**Default**: short, readable, low-token.
 
-```bash
-search inspect tools
-search inspect tools --json
-search inspect tools --verbose
-# includes redacted secret sources + Gemini browser profile diagnostics + GitHub CLI availability
-```
-
-### 7. History
-
-Review prior runs.
-
-```bash
-search history
-search history docs --json
-search history web
-```
-
-## Output modes
-
-### Default
-
-Short, readable, low-token.
-
-### `--json`
-
-Stable envelope:
+**`--json`**: stable envelope for automation.
 
 ```json
 {
   "ok": true,
   "command": ["web"],
-  "data": {}
+  "data": {
+    "answer": "...",
+    "results": [...],
+    "provider": "exa",
+    "native": { ... }
+  }
 }
 ```
 
-Errors:
+**`--verbose`**: trace view on stderr showing routing, timing, and backend selection.
 
-```json
-{
-  "ok": false,
-  "command": ["code"],
-  "error": { "message": "..." }
-}
-```
+## Safe config
 
-### `--verbose`
-
-Shows a trace view on stderr.
-Useful for timing, routing, and debugging without polluting stdout.
+Runtime secret resolution from 1Password or fnox. No plaintext writes needed.
 
 ```bash
-search web sqlite wasm --json --verbose
+search config set-secret-ref exaApiKey op 'op://vault/exa/API Key'
+search config set-secret-ref braveApiKey op 'op://vault/brave/api key'
+search config set-secret-ref geminiApiKey op 'op://vault/gemini/password'
+search config --json
+search inspect tools --json
 ```
+
+Resolution order: env vars -> config refs -> fnox fallback.
 
 ## Progressive disclosure
 
-Top level:
-
 ```bash
 search --help
-```
-
-Command level:
-
-```bash
 search web --help
 search code --help
 search docs --help
 search twitter --help
-search inspect --help
 search config --help
 ```
 
-Subcommand level:
+## Backends
 
-```bash
-search docs index status --json
-search docs index add ./docs --name docs
-```
+| Capability | Backends |
+|-----------|----------|
+| Web search | Exa, Brave, Perplexity, Gemini API, Gemini Web (cookie fallback) |
+| Code search | Exa MCP, DeepWiki |
+| Local docs | QMD SDK (BM25 + vector + reranking) |
+| Page fetch | Readability, Jina Reader, Gemini URL Context, RSC parser |
+| GitHub | Clone + API fallback via `gh` |
+| PDF | Text extraction via unpdf |
+| Twitter | Bird SDK (cookie auth from Chrome/Safari) |
 
-## Safe config
+## License
 
-Inspect config safely:
-
-```bash
-search config
-search config --json
-search config --help
-```
-
-Set provider:
-
-```bash
-search config set provider exa
-```
-
-Preferred: runtime secret refs, not plaintext values.
-
-1Password refs:
-
-```bash
-search config set-secret-ref exaApiKey op 'op://agent-dev/exa/API Key'
-search config set-secret-ref braveApiKey op 'op://agent-dev/Brave Search/api key'
-search config set-secret-ref geminiApiKey op 'op://agent-dev/Gemini API Key/password'
-```
-
-fnox refs:
-
-```bash
-search config set-secret-ref exaApiKey fnox EXA_API_KEY
-search config set-secret-ref perplexityApiKey fnox PERPLEXITY_API_KEY
-```
-
-Unset fields:
-
-```bash
-search config unset exaApiKey
-search config unset braveApiKey
-search config unset provider
-```
-
-Resolution order:
-- env vars
-- plaintext config values if present
-- config secret refs
-- implicit fnox fallback by conventional env key name
-
-Notes:
-- never prints secret values
-- inspect shows redacted source only
-- prefer `op` / `fnox` refs over plaintext config
-
-## Notes
-
-- twitter JSON preserves native bird SDK payloads
-- `search twitter` and `search x.com` are aliases
-- web JSON preserves native Exa / Brave / Perplexity / Gemini payloads
-- `search web --provider brave` and `--provider gemini` are supported explicitly
-- code JSON preserves native Exa MCP payloads and optional DeepWiki payloads
-- docs JSON preserves native QMD SDK results
-- fetch-content has GitHub-aware handling and stronger page fallbacks
-- Gemini can use API or logged-in browser-cookie fallback
-- `--verbose` writes trace output to stderr; stdout remains stable
+MIT
