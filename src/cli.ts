@@ -112,6 +112,9 @@ async function main(): Promise<void> {
       addHistory({ kind: "code", input: { query, maxTokens }, output: result });
       if (asJson) return printJson(["code"], { ...result, trace: trace.snapshot() });
       printText(result.text);
+      if (result.secondary) {
+        console.log(`\n[secondary source: DeepWiki ${result.secondary.repo}]`);
+      }
       return;
     }
 

@@ -47,6 +47,8 @@ JSON:
   - query
   - maxTokens
   - text
+  - native exa payload
+  - optional secondary.deepwiki
 `;
 
 export const DOCS_HELP = `search docs — local docs via qmd
