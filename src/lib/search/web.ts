@@ -1,6 +1,7 @@
 import type { SearchOptions, SearchProvider, SearchResponse } from "../core/types.js";
 import { isGeminiApiAvailable } from "../upstream/gemini-api.js";
 import { searchWithGemini as searchWithGeminiApi } from "../upstream/gemini.js";
+import { searchWithGeminiWeb } from "../upstream/gemini-web.js";
 import { hasExaApiKey, isExaAvailable, searchWithExa } from "../upstream/exa.js";
 import { isBraveAvailable, searchWithBrave } from "../upstream/brave.js";
 import { isPerplexityAvailable, searchWithPerplexity } from "../upstream/perplexity.js";
@@ -11,10 +12,12 @@ export interface WebSearchResult extends SearchResponse {
 }
 
 async function searchWithGemini(query: string, options: SearchOptions = {}): Promise<WebSearchResult> {
-  if (!(await isGeminiApiAvailable())) {
-    throw new Error("Missing Gemini API key");
+  if (await isGeminiApiAvailable()) {
+    return { ...(await searchWithGeminiApi(query, options)), provider: "gemini" };
   }
-  return { ...(await searchWithGeminiApi(query, options)), provider: "gemini" };
+  const webResult = await searchWithGeminiWeb(query, options);
+  if (webResult) return { ...webResult, provider: "gemini" };
+  throw new Error("Gemini unavailable: no API key and no logged-in browser profile found");
 }
 
 export async function webSearch(query: string, provider: SearchProvider = "auto", options: SearchOptions = {}): Promise<WebSearchResult> {
