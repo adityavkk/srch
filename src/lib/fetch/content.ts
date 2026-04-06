@@ -5,6 +5,7 @@ import { activityMonitor } from "../core/activity.js";
 import { errorMessage, isAbortError, withTimeout } from "../core/http.js";
 import type { ExtractedContent } from "../core/types.js";
 import { extractWithUrlContext } from "./gemini-url-context.js";
+import { extractGitHub } from "./github.js";
 import { extractWithJinaReader } from "./jina.js";
 import { extractRscContent } from "./rsc.js";
 
@@ -96,6 +97,9 @@ async function extractViaHttp(url: string, signal?: AbortSignal): Promise<Extrac
 }
 
 export async function fetchContent(url: string, signal?: AbortSignal): Promise<ExtractedContent> {
+  const githubResult = await extractGitHub(url, signal);
+  if (githubResult) return githubResult;
+
   const httpResult = await extractViaHttp(url, signal);
   if (!httpResult.error) return httpResult;
   if (NON_RECOVERABLE_ERRORS.some((prefix) => httpResult.error?.startsWith(prefix))) return httpResult;
