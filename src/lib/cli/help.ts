@@ -67,8 +67,9 @@ JSON:
 export const CODE_HELP = `search code — code context search
 
 What it does:
-  gets code/docs context from Exa MCP
-  may attach DeepWiki as a secondary source for public repos
+  gets code context from Exa Context API
+  attaches Context7 library docs when available (free)
+  attaches DeepWiki repo context for public repos when available
 
 Usage:
   search code <query...> [--max-tokens N] [--json] [--verbose]
@@ -81,9 +82,9 @@ Examples:
 JSON:
   - query
   - maxTokens
-  - text
-  - native exa payload
-  - optional secondary.deepwiki
+  - text (merged primary + secondary)
+  - native (exa-context-api or exa-mcp)
+  - secondary[] (context7 and/or deepwiki when meaningful)
 `;
 
 export const DOCS_HELP = `search docs — local docs search

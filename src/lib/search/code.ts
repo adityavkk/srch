@@ -1,8 +1,9 @@
 import { inferGithubRepo, queryDeepWiki, type DeepWikiResult } from "../secondary/deepwiki.js";
+import { queryContext7, type Context7Result } from "../secondary/context7.js";
 import { resolveSecret } from "../core/secrets.js";
 import { activityMonitor } from "../core/activity.js";
 import { errorMessage, withTimeout } from "../core/http.js";
-import { callExaMcpRaw, exaMcpText, type ExaMcpResponse } from "../upstream/exa-mcp.js";
+import { callExaMcpRaw, exaMcpText } from "../upstream/exa-mcp.js";
 
 const EXA_CONTEXT_URL = "https://api.exa.ai/context";
 
@@ -15,17 +16,21 @@ export interface CodeSearchResult {
     request: unknown;
     response: unknown;
   };
-  secondary?: {
-    source: "deepwiki";
-    repo: string;
+  secondary?: Array<{
+    source: "deepwiki" | "context7";
+    label: string;
     text: string;
     native: unknown;
-  };
+  }>;
 }
 
-function mergeSecondary(primary: string, secondary: DeepWikiResult | null): string {
-  if (!secondary?.meaningful) return primary;
-  return `${primary}\n\n---\nSecondary source: DeepWiki (${secondary.repo})\n${secondary.text}`;
+function appendSecondary(primary: string, sources: CodeSearchResult["secondary"]): string {
+  if (!sources?.length) return primary;
+  let result = primary;
+  for (const src of sources) {
+    result += `\n\n---\nSecondary source: ${src.label}\n${src.text}`;
+  }
+  return result;
 }
 
 async function searchViaContextApi(query: string, maxTokens: number, signal?: AbortSignal): Promise<{ text: string; native: { provider: "exa-context-api"; request: unknown; response: unknown } }> {
@@ -46,10 +51,7 @@ async function searchViaContextApi(query: string, maxTokens: number, signal?: Ab
     }
     const data = await response.json() as { response?: string; resultsCount?: number; outputTokens?: number };
     activityMonitor.logComplete(activityId, response.status);
-    return {
-      text: data.response ?? "",
-      native: { provider: "exa-context-api", request, response: data }
-    };
+    return { text: data.response ?? "", native: { provider: "exa-context-api", request, response: data } };
   } catch (error) {
     activityMonitor.logError(activityId, errorMessage(error));
     throw error;
@@ -57,54 +59,60 @@ async function searchViaContextApi(query: string, maxTokens: number, signal?: Ab
 }
 
 async function searchViaMcp(query: string, maxTokens: number, signal?: AbortSignal): Promise<{ text: string; native: { provider: "exa-mcp"; request: unknown; response: unknown } }> {
-  const request = {
-    query: `${query} site:github.com OR site:stackoverflow.com OR programming`,
-    numResults: Math.min(Math.ceil(maxTokens / 500), 10)
-  };
+  const request = { query: `${query} site:github.com OR site:stackoverflow.com OR programming`, numResults: Math.min(Math.ceil(maxTokens / 500), 10) };
   const response = await callExaMcpRaw("web_search_exa", request, signal);
-  return {
-    text: exaMcpText(response),
-    native: { provider: "exa-mcp", request, response }
-  };
+  return { text: exaMcpText(response), native: { provider: "exa-mcp", request, response } };
+}
+
+async function gatherSecondary(query: string, signal?: AbortSignal): Promise<CodeSearchResult["secondary"]> {
+  const sources: NonNullable<CodeSearchResult["secondary"]> = [];
+  const [deepwiki, context7] = await Promise.allSettled([
+    (async (): Promise<DeepWikiResult | null> => {
+      const repo = inferGithubRepo(query);
+      if (!repo) return null;
+      return queryDeepWiki(repo, query, signal);
+    })(),
+    queryContext7(query, signal)
+  ]);
+
+  if (deepwiki.status === "fulfilled" && deepwiki.value?.meaningful) {
+    sources.push({ source: "deepwiki", label: `DeepWiki (${deepwiki.value.repo})`, text: deepwiki.value.text, native: deepwiki.value.native });
+  }
+  if (context7.status === "fulfilled" && context7.value?.meaningful) {
+    sources.push({ source: "context7", label: `Context7 (${context7.value.libraryId})`, text: context7.value.text, native: context7.value.native });
+  }
+  return sources.length > 0 ? sources : undefined;
 }
 
 export async function codeSearch(query: string, maxTokens = 5000, signal?: AbortSignal): Promise<CodeSearchResult> {
   const normalized = query.trim();
   if (!normalized) throw new Error("Missing query");
-  const repo = inferGithubRepo(normalized);
-  let secondary: DeepWikiResult | null = null;
-  if (repo) {
-    try {
-      secondary = await queryDeepWiki(repo, normalized, signal);
-    } catch {
-      secondary = null;
-    }
+
+  const [primaryResult, secondary] = await Promise.all([
+    (async () => {
+      try {
+        return await searchViaContextApi(normalized, maxTokens, signal);
+      } catch {
+        try {
+          return await searchViaMcp(normalized, maxTokens, signal);
+        } catch (error) {
+          return null;
+        }
+      }
+    })(),
+    gatherSecondary(normalized, signal)
+  ]);
+
+  if (!primaryResult && !secondary?.length) {
+    throw new Error("No code search results from any source");
   }
 
-  let result: { text: string; native: { provider: "exa-context-api" | "exa-mcp"; request: unknown; response: unknown } };
-  try {
-    result = await searchViaContextApi(normalized, maxTokens, signal);
-  } catch {
-    try {
-      result = await searchViaMcp(normalized, maxTokens, signal);
-    } catch (error) {
-      if (!secondary?.meaningful) throw error;
-      result = { text: "Primary source unavailable.", native: { provider: "exa-mcp", request: {}, response: { error: errorMessage(error) } } };
-    }
-  }
-
+  const text = primaryResult?.text ?? "";
   return {
     query: normalized,
     maxTokens,
-    text: mergeSecondary(result.text, secondary),
-    native: result.native,
-    ...(secondary?.meaningful ? {
-      secondary: {
-        source: "deepwiki" as const,
-        repo: secondary.repo,
-        text: secondary.text,
-        native: secondary.native
-      }
-    } : {})
+    text: appendSecondary(text || "No primary results.", secondary),
+    native: primaryResult?.native ?? { provider: "exa-mcp", request: {}, response: {} },
+    secondary
   };
 }

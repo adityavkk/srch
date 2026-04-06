@@ -47,7 +47,9 @@ search web next.js caching --verbose
 
 ## Code search
 
-Primary: Exa. Secondary: DeepWiki for public repos.
+Primary: Exa Context API. Secondary: Context7 (free library docs) + DeepWiki (public repos).
+
+All available secondary sources are always included when they return meaningful results.
 
 ```bash
 search code "react suspense cache"
@@ -139,7 +141,7 @@ search config --help
 | Capability | Backends |
 |-----------|----------|
 | Web search | Exa, Brave, Perplexity, Gemini API, Gemini Web (cookie fallback) |
-| Code search | Exa MCP, DeepWiki |
+| Code search | Exa Context API, Exa MCP, Context7, DeepWiki |
 | Local docs | QMD SDK (BM25 + vector + reranking) |
 | Page fetch | Readability, Jina Reader, Gemini URL Context, RSC parser |
 | GitHub | Clone + API fallback via `gh` |
