@@ -4,8 +4,12 @@ import TurndownService from "turndown";
 import { activityMonitor } from "../core/activity.js";
 import { errorMessage, isAbortError, withTimeout } from "../core/http.js";
 import type { ExtractedContent } from "../core/types.js";
+import { extractWithUrlContext } from "./gemini-url-context.js";
+import { extractWithJinaReader } from "./jina.js";
+import { extractRscContent } from "./rsc.js";
 
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+const NON_RECOVERABLE_ERRORS = ["Unsupported content type", "Response too large"];
 
 function isLikelyJsRendered(html: string): boolean {
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
@@ -20,7 +24,7 @@ function isLikelyJsRendered(html: string): boolean {
   return text.length < 500 && scriptCount > 3;
 }
 
-export async function fetchContent(url: string, signal?: AbortSignal): Promise<ExtractedContent> {
+async function extractViaHttp(url: string, signal?: AbortSignal): Promise<ExtractedContent> {
   const activityId = activityMonitor.logStart({ type: "fetch", url });
 
   try {
@@ -53,6 +57,8 @@ export async function fetchContent(url: string, signal?: AbortSignal): Promise<E
     const { document } = parseHTML(text);
     const article = new Readability(document as unknown as Document).parse();
     if (!article) {
+      const rsc = extractRscContent(text);
+      if (rsc) return { url, title: rsc.title, content: rsc.content, error: null };
       return {
         url,
         title: "",
@@ -62,11 +68,22 @@ export async function fetchContent(url: string, signal?: AbortSignal): Promise<E
     }
 
     const markdown = turndown.turndown(article.content);
+    if (markdown.length < 200) {
+      const rsc = extractRscContent(text);
+      if (rsc) return { url, title: rsc.title, content: rsc.content, error: null };
+      return {
+        url,
+        title: article.title || new URL(url).hostname,
+        content: markdown,
+        error: isLikelyJsRendered(text) ? "Page appears JavaScript-rendered" : "Extracted content appears incomplete"
+      };
+    }
+
     return {
       url,
       title: article.title || new URL(url).hostname,
       content: markdown,
-      error: markdown.length < 200 && isLikelyJsRendered(text) ? "Page appears JavaScript-rendered" : null
+      error: null
     };
   } catch (error) {
     if (isAbortError(error)) {
@@ -76,4 +93,18 @@ export async function fetchContent(url: string, signal?: AbortSignal): Promise<E
     activityMonitor.logError(activityId, errorMessage(error));
     return { url, title: "", content: "", error: errorMessage(error) };
   }
+}
+
+export async function fetchContent(url: string, signal?: AbortSignal): Promise<ExtractedContent> {
+  const httpResult = await extractViaHttp(url, signal);
+  if (!httpResult.error) return httpResult;
+  if (NON_RECOVERABLE_ERRORS.some((prefix) => httpResult.error?.startsWith(prefix))) return httpResult;
+
+  const jinaResult = await extractWithJinaReader(url, signal);
+  if (jinaResult) return jinaResult;
+
+  const geminiResult = await extractWithUrlContext(url, signal);
+  if (geminiResult) return geminiResult;
+
+  return httpResult;
 }
