@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 export interface HistoryEntry {
   id: string;
-  kind: "web" | "code" | "fetch";
+  kind: "web" | "code" | "fetch" | "docs";
   createdAt: string;
   input: unknown;
   output: unknown;

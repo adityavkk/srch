@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { loadConfig, getConfigPath } from "./lib/core/config.js";
+import { inspectTools } from "./lib/cli/tools.js";
+import { CODE_HELP, DOCS_HELP, FETCH_HELP, HISTORY_HELP, INSPECT_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
+import type { SearchProvider } from "./lib/core/types.js";
+import { docsAddCollection, docsEmbed, docsListCollections, docsSearch, docsStatus, docsUpdate } from "./lib/docs/qmd.js";
 import { fetchContent } from "./lib/fetch/content.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
 import { codeSearch } from "./lib/search/code.js";
 import { webSearch } from "./lib/search/web.js";
-import { CODE_HELP, FETCH_HELP, HISTORY_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
-import type { SearchProvider } from "./lib/core/types.js";
 
 function parseFlags(args: string[]): { flags: Map<string, string | boolean>; rest: string[] } {
   const flags = new Map<string, string | boolean>();
@@ -58,6 +60,15 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "inspect") {
+    if (flags.has("help") || rest[0] !== "tools") {
+      console.log(INSPECT_HELP);
+      return;
+    }
+    const result = inspectTools();
+    return print(asJson ? result : JSON.stringify(result, null, 2), asJson);
+  }
+
   if (command === "web") {
     if (flags.has("help")) return void console.log(WEB_HELP);
     const query = requireQuery(rest, WEB_HELP);
@@ -82,6 +93,47 @@ async function main(): Promise<void> {
     return print(asJson ? { query, maxTokens, text: result } : result, asJson);
   }
 
+  if (command === "docs") {
+    if (flags.has("help")) return void console.log(DOCS_HELP);
+
+    if (rest[0] === "index") {
+      const sub = rest[1];
+      if (sub === "add") {
+        const path = rest[2];
+        const name = flags.get("name");
+        const pattern = (flags.get("pattern") as string | undefined) ?? "**/*.md";
+        if (!path || typeof name !== "string") {
+          console.error(DOCS_HELP);
+          process.exit(1);
+        }
+        const result = await docsAddCollection(path, name, pattern);
+        return print(result, asJson);
+      }
+      if (sub === "list") return print(await docsListCollections(), asJson);
+      if (sub === "update") return print(await docsUpdate(), asJson);
+      if (sub === "embed") return print(await docsEmbed(), asJson);
+      if (sub === "status") return print(await docsStatus(), asJson);
+      console.error(DOCS_HELP);
+      process.exit(1);
+    }
+
+    const query = requireQuery(rest, DOCS_HELP);
+    const result = await docsSearch(query);
+    addHistory({ kind: "docs", input: { query }, output: result });
+    if (asJson) return print(result, true);
+    if (result.length === 0) {
+      console.log("No results.");
+      return;
+    }
+    for (const [index, item] of result.entries()) {
+      console.log(`${index + 1}. ${item.title}`);
+      console.log(`   ${item.file}`);
+      console.log(`   score=${item.score.toFixed(3)}`);
+      if (item.bestChunk) console.log(`   ${item.bestChunk.split("\n")[0]}`);
+    }
+    return;
+  }
+
   if (command === "fetch-content") {
     if (flags.has("help")) return void console.log(FETCH_HELP);
     const url = requireQuery(rest, FETCH_HELP);
@@ -100,7 +152,7 @@ async function main(): Promise<void> {
 
   if (command === "history") {
     if (flags.has("help")) return void console.log(HISTORY_HELP);
-    const kind = rest[0] as "web" | "code" | "fetch" | undefined;
+    const kind = rest[0] as "web" | "code" | "fetch" | "docs" | undefined;
     const entries = listHistory(kind);
     if (asJson) return print(entries, true);
     for (const entry of entries) console.log(`${entry.createdAt}  ${entry.kind}  ${entry.id}`);

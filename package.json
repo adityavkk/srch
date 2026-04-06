@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
+    "@tobilu/qmd": "^2.1.0",
     "linkedom": "^0.18.12",
     "turndown": "^7.2.1"
   },
