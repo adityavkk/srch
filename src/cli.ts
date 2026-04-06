@@ -2,7 +2,9 @@
 import { loadConfig, getConfigPath } from "./lib/core/config.js";
 import { inspectTools } from "./lib/cli/tools.js";
 import { CODE_HELP, DOCS_HELP, FETCH_HELP, HISTORY_HELP, INSPECT_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
+import { fail, ok } from "./lib/cli/output.js";
 import type { SearchProvider } from "./lib/core/types.js";
+import { summarizeBestChunk } from "./lib/docs/format.js";
 import { docsAddCollection, docsEmbed, docsListCollections, docsSearch, docsStatus, docsUpdate } from "./lib/docs/qmd.js";
 import { fetchContent } from "./lib/fetch/content.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
@@ -30,14 +32,23 @@ function parseFlags(args: string[]): { flags: Map<string, string | boolean>; res
   return { flags, rest };
 }
 
-function print(value: unknown, asJson: boolean): void {
-  if (asJson) console.log(JSON.stringify(value, null, 2));
-  else console.log(String(value));
+function printText(value: string): void {
+  console.log(value);
 }
 
-function requireQuery(parts: string[], help: string): string {
+function printJson(command: string[], data: unknown): void {
+  console.log(JSON.stringify(ok(command, data), null, 2));
+}
+
+function exitJsonError(command: string[], message: string): never {
+  console.error(JSON.stringify(fail(command, message), null, 2));
+  process.exit(1);
+}
+
+function requireQuery(parts: string[], help: string, command: string[], asJson: boolean): string {
   const query = parts.join(" ").trim();
   if (!query) {
+    if (asJson) exitJsonError(command, "Missing query");
     console.error(help);
     process.exit(1);
   }
@@ -55,8 +66,9 @@ async function main(): Promise<void> {
   const asJson = flags.has("json");
 
   if (command === "config") {
-    const config = loadConfig();
-    print(asJson ? { path: getConfigPath(), config } : getConfigPath(), asJson);
+    const data = { path: getConfigPath(), config: loadConfig() };
+    if (asJson) return printJson(["config"], data);
+    printText(getConfigPath());
     return;
   }
 
@@ -66,16 +78,18 @@ async function main(): Promise<void> {
       return;
     }
     const result = inspectTools();
-    return print(asJson ? result : JSON.stringify(result, null, 2), asJson);
+    if (asJson) return printJson(["inspect", "tools"], result);
+    printText(JSON.stringify(result, null, 2));
+    return;
   }
 
   if (command === "web") {
     if (flags.has("help")) return void console.log(WEB_HELP);
-    const query = requireQuery(rest, WEB_HELP);
+    const query = requireQuery(rest, WEB_HELP, ["web"], asJson);
     const provider = (flags.get("provider") as SearchProvider | undefined) ?? "auto";
     const result = await webSearch(query, provider);
     addHistory({ kind: "web", input: { query, provider }, output: result });
-    if (asJson) return print(result, true);
+    if (asJson) return printJson(["web"], { query, requestedProvider: provider, ...result });
     console.log(result.answer || "No summary.");
     if (result.results.length > 0) {
       console.log("\nSources:");
@@ -86,11 +100,14 @@ async function main(): Promise<void> {
 
   if (command === "code") {
     if (flags.has("help")) return void console.log(CODE_HELP);
-    const query = requireQuery(rest, CODE_HELP);
+    const query = requireQuery(rest, CODE_HELP, ["code"], asJson);
     const maxTokens = Number(flags.get("max-tokens") ?? 5000);
     const result = await codeSearch(query, maxTokens);
-    addHistory({ kind: "code", input: { query, maxTokens }, output: { text: result } });
-    return print(asJson ? { query, maxTokens, text: result } : result, asJson);
+    const data = { query, maxTokens, text: result };
+    addHistory({ kind: "code", input: { query, maxTokens }, output: data });
+    if (asJson) return printJson(["code"], data);
+    printText(result);
+    return;
   }
 
   if (command === "docs") {
@@ -103,43 +120,74 @@ async function main(): Promise<void> {
         const name = flags.get("name");
         const pattern = (flags.get("pattern") as string | undefined) ?? "**/*.md";
         if (!path || typeof name !== "string") {
+          if (asJson) exitJsonError(["docs", "index", "add"], "Missing path or --name");
           console.error(DOCS_HELP);
           process.exit(1);
         }
         const result = await docsAddCollection(path, name, pattern);
-        return print(result, asJson);
+        if (asJson) return printJson(["docs", "index", "add"], { path, name, pattern, collections: result });
+        printText(`${result.length} collections`);
+        return;
       }
-      if (sub === "list") return print(await docsListCollections(), asJson);
-      if (sub === "update") return print(await docsUpdate(), asJson);
-      if (sub === "embed") return print(await docsEmbed(), asJson);
-      if (sub === "status") return print(await docsStatus(), asJson);
+      if (sub === "list") {
+        const result = await docsListCollections();
+        if (asJson) return printJson(["docs", "index", "list"], { collections: result, count: result.length });
+        for (const item of result) console.log(`${item.name}\t${item.pwd}\t${item.doc_count}`);
+        return;
+      }
+      if (sub === "update") {
+        const result = await docsUpdate();
+        if (asJson) return printJson(["docs", "index", "update"], result);
+        printText(`indexed=${result.indexed} updated=${result.updated} unchanged=${result.unchanged} removed=${result.removed}`);
+        return;
+      }
+      if (sub === "embed") {
+        const result = await docsEmbed();
+        if (asJson) return printJson(["docs", "index", "embed"], result);
+        printText(`docs=${result.docsProcessed} chunks=${result.chunksEmbedded} errors=${result.errors}`);
+        return;
+      }
+      if (sub === "status") {
+        const result = await docsStatus();
+        if (asJson) return printJson(["docs", "index", "status"], result);
+        printText(`docs=${result.status.totalDocuments} collections=${result.collections.length} needsEmbedding=${result.status.needsEmbedding}`);
+        return;
+      }
+      if (asJson) exitJsonError(["docs", "index"], "Unknown docs index subcommand");
       console.error(DOCS_HELP);
       process.exit(1);
     }
 
-    const query = requireQuery(rest, DOCS_HELP);
+    const query = requireQuery(rest, DOCS_HELP, ["docs"], asJson);
     const result = await docsSearch(query);
-    addHistory({ kind: "docs", input: { query }, output: result });
-    if (asJson) return print(result, true);
-    if (result.length === 0) {
-      console.log("No results.");
+    const rows = result.map((item) => ({
+      title: item.title,
+      file: item.file,
+      score: item.score,
+      docid: item.docid,
+      snippet: summarizeBestChunk(item.bestChunk)
+    }));
+    addHistory({ kind: "docs", input: { query }, output: { count: rows.length, results: rows } });
+    if (asJson) return printJson(["docs"], { query, count: rows.length, results: rows });
+    if (rows.length === 0) {
+      printText("No results.");
       return;
     }
-    for (const [index, item] of result.entries()) {
+    for (const [index, item] of rows.entries()) {
       console.log(`${index + 1}. ${item.title}`);
       console.log(`   ${item.file}`);
       console.log(`   score=${item.score.toFixed(3)}`);
-      if (item.bestChunk) console.log(`   ${item.bestChunk.split("\n")[0]}`);
+      if (item.snippet) console.log(`   ${item.snippet}`);
     }
     return;
   }
 
   if (command === "fetch-content") {
     if (flags.has("help")) return void console.log(FETCH_HELP);
-    const url = requireQuery(rest, FETCH_HELP);
+    const url = requireQuery(rest, FETCH_HELP, ["fetch-content"], asJson);
     const result = await fetchContent(url);
     addHistory({ kind: "fetch", input: { url }, output: result });
-    if (asJson) return print(result, true);
+    if (asJson) return printJson(["fetch-content"], result);
     if (result.error) {
       console.log(`Error: ${result.error}`);
       if (result.content) console.log(`\n${result.content}`);
@@ -154,16 +202,22 @@ async function main(): Promise<void> {
     if (flags.has("help")) return void console.log(HISTORY_HELP);
     const kind = rest[0] as "web" | "code" | "fetch" | "docs" | undefined;
     const entries = listHistory(kind);
-    if (asJson) return print(entries, true);
+    if (asJson) return printJson(["history"], { kind: kind ?? null, count: entries.length, entries });
     for (const entry of entries) console.log(`${entry.createdAt}  ${entry.kind}  ${entry.id}`);
     return;
   }
 
+  if (asJson) exitJsonError([command], "Unknown command");
   console.error(ROOT_HELP);
   process.exit(1);
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  const message = error instanceof Error ? error.message : String(error);
+  if (process.argv.includes("--json")) {
+    console.error(JSON.stringify(fail(process.argv.slice(2, 3), message), null, 2));
+  } else {
+    console.error(message);
+  }
   process.exit(1);
 });
