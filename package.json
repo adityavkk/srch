@@ -1,0 +1,25 @@
+{
+  "name": "search-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "search": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.5.0",
+    "linkedom": "^0.18.12",
+    "turndown": "^7.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/turndown": "^5.0.6",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
