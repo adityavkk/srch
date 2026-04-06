@@ -105,9 +105,21 @@ search docs deployment checklist --json
 
 Fetch readable content from a URL.
 
+Fallback chain for hard pages:
+- direct HTTP + Readability
+- Next.js RSC extraction
+- Jina Reader
+- Gemini URL Context
+
+GitHub URLs are handled specially:
+- repo root -> tree + README + local clone path
+- tree URL -> directory listing
+- blob URL -> actual file contents
+
 ```bash
 search fetch-content https://clig.dev
 search fetch-content https://clig.dev --json
+search fetch-content https://github.com/tobi/qmd --json
 ```
 
 ### 5. Inspect / debug
@@ -118,6 +130,7 @@ Read-only diagnostics.
 search inspect tools
 search inspect tools --json
 search inspect tools --verbose
+# includes redacted secret sources + Gemini browser profile diagnostics
 ```
 
 ### 6. History
@@ -250,4 +263,6 @@ Notes:
 - `search web --provider brave` and `--provider gemini` are supported explicitly
 - code JSON preserves native Exa MCP payloads and optional DeepWiki payloads
 - docs JSON preserves native QMD SDK results
+- fetch-content has GitHub-aware handling and stronger page fallbacks
+- Gemini can use API or logged-in browser-cookie fallback
 - `--verbose` writes trace output to stderr; stdout remains stable

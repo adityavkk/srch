@@ -110,6 +110,7 @@ export const FETCH_HELP = `search fetch-content — readable page fetch
 
 What it does:
   fetches a URL and extracts readable content
+  handles GitHub repos and PDFs specially
 
 Usage:
   search fetch-content <url> [--json] [--verbose]
@@ -117,6 +118,8 @@ Usage:
 Examples:
   search fetch-content https://clig.dev
   search fetch-content https://clig.dev --json
+  search fetch-content https://github.com/tobi/qmd --json
+  search fetch-content https://arxiv.org/pdf/1706.03762.pdf --json
 
 JSON:
   - url
@@ -153,6 +156,8 @@ Examples:
 JSON:
   - providers
   - secretResolution (redacted source only)
+  - geminiWeb profile diagnostics
+  - github/gh availability
   - docs backend/db
   - code backend
   - runtime

@@ -7,6 +7,8 @@ import { isGeminiApiAvailable } from "../upstream/gemini-api.js";
 import { isExaAvailable } from "../upstream/exa.js";
 import { isPerplexityAvailable } from "../upstream/perplexity.js";
 import { getDocsDbPath } from "../docs/qmd.js";
+import { inspectGeminiCookieProfiles } from "../fetch/chrome-cookies-inspect.js";
+import { checkGhAvailable } from "../fetch/github-api.js";
 
 export async function inspectTools() {
   const qmdDbPath = getDocsDbPath();
@@ -24,6 +26,10 @@ export async function inspectTools() {
       exa: isExaAvailable(),
       perplexity: await isPerplexityAvailable(),
       geminiApi: await isGeminiApiAvailable()
+    },
+    geminiWeb: inspectGeminiCookieProfiles(),
+    github: {
+      ghCliAvailable: await checkGhAvailable()
     },
     docs: {
       backend: "qmd-sdk",
