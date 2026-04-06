@@ -1,18 +1,16 @@
-export const ROOT_HELP = `search — local-first research CLI
+export const ROOT_HELP = `search — programmable retrieval engine
 
-Use for:
-  web research, code context, local docs, content fetch
+Domain-first grammar:
+  search <domain> [subdomain] [strategy] [target] <query-or-task>
 
-Usage:
-  search <command> [args]
-
-Commands:
-  web            search web with citations
-  code           search code/docs context
-  docs           search local docs via qmd
-  fetch          fetch readable URL content
-  fetch-content  canonical fetch command
-  twitter        search/read X (Twitter) via bird
+Domains:
+  web            web retrieval
+  code           code retrieval
+  docs           local docs retrieval
+  social         social retrieval spaces
+  fetch          readable URL fetch
+  ask            cross-domain retrieval
+  twitter        legacy X/Twitter command
   x.com          alias for twitter
   history        inspect prior runs
   inspect        inspect backends/config
@@ -21,10 +19,10 @@ Commands:
 
 Examples:
   search web bun sqlite wasm
-  search code "react suspense cache"
-  search docs auth flow
+  search code repo facebook/react "useEffect cleanup"
+  search social x "bun runtime"
+  search ask compare "best state management for a docs-heavy react app"
   search fetch https://clig.dev
-  search twitter "bun runtime"
   search inspect tools --json
 
 Output:
@@ -35,7 +33,7 @@ Next help:
   search web --help
   search code --help
   search docs --help
-  search twitter --help
+  search social --help
   search config --help
 `;
 

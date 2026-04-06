@@ -1,11 +1,11 @@
 # srch architecture
 
-`ssearch` today is a local-first retrieval CLI.
+`srch` today is a local-first retrieval CLI.
 
-`ssearch` tomorrow can become an extensible, agentic retrieval harness:
-- stable CLI surface
+`srch` tomorrow should become a programmable retrieval engine:
+- stable domain-first CLI surface
 - declarative source + strategy composition
-- optional agentic planning layer
+- static and agentic strategies
 - strong defaults
 - unix-like pipes, narrow commands, inspectable intermediate results
 
@@ -15,8 +15,9 @@ This doc proposes the concrete direction.
 
 - keep `search` usable as a simple CLI
 - make retrieval backends pluggable
+- make command taxonomy domain-first and extensible
 - make search behavior declarative and inspectable
-- support both deterministic and agentic workflows
+- support both static and agentic strategies
 - preserve low-token defaults and stable JSON
 - follow unix philosophy:
   - small composable parts
@@ -42,9 +43,37 @@ search code "query"
 search code repo owner/repo "query"
 search docs "query"
 search fetch https://example.com
+search ask "compare bun vs node for cli tooling"
 ```
 
 Agentic behavior should be additive, not mandatory.
+
+### 1.1 Domain-first CLI taxonomy
+
+The CLI should follow this grammar:
+
+```text
+search <domain> [subdomain] [strategy] [target] <query-or-task>
+```
+
+Where:
+- `domain` = retrieval space
+- `subdomain` = optional narrower retrieval space
+- `strategy` = named static or agentic retrieval program
+- `target` = optional scope object
+- `query-or-task` = user request
+
+Examples:
+
+```bash
+search web "bun sqlite"
+search code repo facebook/react "useEffect cleanup"
+search social reddit "react compiler"
+search social x thread https://x.com/.../status/123
+search ask compare "best state management for a docs-heavy react app"
+```
+
+`ask` is not a special-case mode. It is simply a cross-domain retrieval domain.
 
 ### 2. Declarative first
 
@@ -159,7 +188,11 @@ It should not decide the full search plan.
 
 ## Layer 2: strategy plugins
 
-A strategy is a recipe for combining sources.
+A strategy is a retrieval program over sources.
+
+Strategies can be:
+- static: fixed recipe
+- agentic: adaptive recipe with evaluation and revision
 
 Examples:
 - `web-default`
@@ -174,6 +207,8 @@ Examples:
 ### Strategy interface
 
 ```ts
+export type StrategyKind = "static" | "agentic";
+
 export interface StrategyInput {
   query?: string;
   target?: string;
@@ -188,6 +223,7 @@ export interface StrategyStepResult {
 
 export interface StrategyResult<TNative = unknown> {
   strategy: string;
+  kind: StrategyKind;
   ok: boolean;
   text?: string;
   items?: unknown[];
@@ -199,6 +235,7 @@ export interface StrategyResult<TNative = unknown> {
 
 export interface StrategyPlugin {
   name: string;
+  kind: StrategyKind;
   description: string;
   capabilities: string[];
   run(input: StrategyInput, ctx: StrategyContext): Promise<StrategyResult>;
@@ -319,19 +356,22 @@ export interface DeclarativeStrategyPlugin extends StrategyPlugin {
 
 This keeps the happy path elegant while preserving power.
 
-## Layer 3: agent layer
+## Layer 3: agentic strategies
 
-This is optional.
+Agentic behavior should usually live inside strategies, not outside the taxonomy.
 
-The agent layer should sit on top of strategies, not raw sources.
+The main abstraction remains `strategy`.
+Some strategies are static.
+Some strategies are agentic.
 
 ### Why
 
 - sources are too low-level for planning
 - strategies encode domain knowledge
-- agents should choose among good recipes, not reinvent them every run
+- agentic behavior should adapt a strategy, not replace the engine
+- `ask` can remain a domain instead of a special one-off mode
 
-### Agent interface
+### Agentic strategy interface
 
 ```ts
 export interface AgentTask {
@@ -354,8 +394,9 @@ export interface AgentResult {
 
 ```bash
 search ask "Find the best React state management approach for a docs-heavy app"
-search ask "Compare Bun vs Node startup/runtime tradeoffs and cite sources" --json
-search ask "How does React implement Suspense caching internally?" --verbose
+search ask compare "bun vs node startup/runtime tradeoffs" --json
+search code investigate "How does React implement Suspense caching internally?" --verbose
+search social reddit research "best recent posts about bun"
 ```
 
 ### Agent execution model
@@ -368,6 +409,52 @@ search ask "How does React implement Suspense caching internally?" --verbose
 6. synthesize answer
 
 This yields agentic retrieval without losing inspectability.
+
+## Domains, subdomains, strategies
+
+Public CLI concepts should map cleanly to engine behavior.
+
+### Domains
+
+Examples:
+- `web`
+- `code`
+- `docs`
+- `social`
+- `fetch`
+- `ask`
+
+### Subdomains
+
+Examples:
+- `social reddit`
+- `social x`
+- `social hn`
+- `code github`
+- `code local`
+- `docs npm`
+
+Subdomains should represent durable retrieval spaces, not backend names.
+
+### Strategies
+
+Examples:
+- `repo`
+- `research`
+- `verify`
+- `investigate`
+- `compare`
+- `thread`
+- `read`
+
+Examples:
+
+```bash
+search web research "best auth for next.js"
+search code repo facebook/react "useEffect cleanup"
+search social x thread https://x.com/.../status/123
+search ask compare "best state management for a docs-heavy react app"
+```
 
 ## Layer 4: transport adapters
 
@@ -605,9 +692,10 @@ This gives srch:
 Use a hybrid model:
 - declarative specs for defaults and common cases
 - imperative hooks for hard cases
-- stable CLI on top
-- agent layer last
+- stable domain-first CLI on top
+- strategy as the main abstraction
+- static and agentic strategies as siblings
 
 That keeps srch elegant, hackable, and unix-like while still enabling the long-term vision:
 
-**srch as the extensible agentic retrieval harness that combines the best retrieval and RAG techniques with agentic exploration over them.**
+**srch as the programmable retrieval engine that combines the best retrieval and RAG techniques with agentic exploration over them.**

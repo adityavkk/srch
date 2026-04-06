@@ -259,6 +259,45 @@ async function main(): Promise<void> {
       return;
     }
 
+    if (command === "social") {
+      if (flags.has("help")) return void console.log(`search social — social retrieval\n\nUsage:\n  search social <query...>\n  search social x <query...>\n  search social x read <id-or-url>\n  search social x thread <id-or-url>\n\nExamples:\n  search social x "bun runtime"\n  search social x thread https://x.com/i/status/123456\n\nNotes:\n  - today, social routes to X/Twitter flows\n  - subdomains like reddit/hn can fit here later\n`);
+      const socialSubdomain = rest[0];
+      const socialRest = socialSubdomain === "x" ? rest.slice(1) : rest;
+      const invokedAs = socialSubdomain === "x" ? "social x" : "social";
+      if (socialRest[0] === "read" && socialRest[1]) {
+        const id = socialRest[1];
+        trace.step("twitter.read", "dispatch", { id, alias: invokedAs });
+        const result = await trace.span("twitter.read", id, async () => twitterRead(id));
+        if (asJson) return printJson(invokedAs.split(" "), { ...result, trace: trace.snapshot() });
+        printText(typeof result.tweet === "string" ? result.tweet : JSON.stringify(result.tweet, null, 2));
+        return;
+      }
+      if (socialRest[0] === "thread" && socialRest[1]) {
+        const id = socialRest[1];
+        trace.step("twitter.thread", "dispatch", { id, alias: invokedAs });
+        const result = await trace.span("twitter.thread", id, async () => twitterThread(id));
+        if (asJson) return printJson(invokedAs.split(" "), { ...result, trace: trace.snapshot() });
+        for (const tweet of result.tweets) printText(typeof tweet === "string" ? tweet : JSON.stringify(tweet, null, 2));
+        return;
+      }
+      const query = requireQuery(socialRest, TWITTER_HELP, invokedAs.split(" "), asJson);
+      const count = Number(flags.get("count") ?? 10);
+      trace.step("twitter.search", "dispatch", { query, count, alias: invokedAs });
+      const result = await trace.span("twitter.search", "bird", async () => twitterSearch(query, count));
+      addHistory({ kind: "web", input: { query, source: "twitter", alias: invokedAs }, output: result });
+      if (asJson) return printJson(invokedAs.split(" "), { ...result, trace: trace.snapshot() });
+      if (result.tweets.length === 0) {
+        printText("No tweets found.");
+        return;
+      }
+      for (const [index, tweet] of result.tweets.entries()) {
+        console.log(`${index + 1}. @${tweet.author}${tweet.createdAt ? " " + tweet.createdAt : ""}`);
+        console.log(`   ${tweet.text.split("\n")[0]}`);
+        console.log(`   https://x.com/i/status/${tweet.id}`);
+      }
+      return;
+    }
+
     if (command === "twitter" || command === "x.com") {
       if (flags.has("help")) return void console.log(TWITTER_HELP);
       const invokedAs = command;
