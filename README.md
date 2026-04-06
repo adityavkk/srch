@@ -117,9 +117,18 @@ GitHub URLs are handled specially:
 - blob URL -> actual file contents
 
 ```bash
-search fetch-content https://clig.dev
-search fetch-content https://clig.dev --json
-search fetch-content https://github.com/tobi/qmd --json
+search fetch https://clig.dev
+search fetch https://clig.dev --json
+search fetch https://github.com/tobi/qmd --json
+```
+
+PDFs are handled specially too:
+- downloads bytes
+- extracts text to markdown
+- saves markdown to `~/Downloads`
+
+```bash
+search fetch https://arxiv.org/pdf/1706.03762.pdf --json
 ```
 
 ### 5. Inspect / debug
@@ -130,7 +139,7 @@ Read-only diagnostics.
 search inspect tools
 search inspect tools --json
 search inspect tools --verbose
-# includes redacted secret sources + Gemini browser profile diagnostics
+# includes redacted secret sources + Gemini browser profile diagnostics + GitHub CLI availability
 ```
 
 ### 6. History

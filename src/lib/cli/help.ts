@@ -10,7 +10,8 @@ Commands:
   web            search web with citations
   code           search code/docs context
   docs           search local docs via qmd
-  fetch-content  fetch readable URL content
+  fetch          fetch readable URL content
+  fetch-content  canonical fetch command
   history        inspect prior runs
   inspect        inspect backends/config
   config         safe config management
@@ -20,7 +21,7 @@ Examples:
   search web bun sqlite wasm
   search code "react suspense cache"
   search docs auth flow
-  search fetch-content https://clig.dev
+  search fetch https://clig.dev
   search inspect tools --json
 
 Output:
@@ -106,20 +107,25 @@ JSON:
   - index status for index subcommands
 `;
 
-export const FETCH_HELP = `search fetch-content — readable page fetch
+export const FETCH_HELP = `search fetch — readable page fetch
 
 What it does:
   fetches a URL and extracts readable content
   handles GitHub repos and PDFs specially
 
 Usage:
+  search fetch <url> [--json] [--verbose]
   search fetch-content <url> [--json] [--verbose]
 
 Examples:
-  search fetch-content https://clig.dev
-  search fetch-content https://clig.dev --json
-  search fetch-content https://github.com/tobi/qmd --json
-  search fetch-content https://arxiv.org/pdf/1706.03762.pdf --json
+  search fetch https://clig.dev
+  search fetch https://clig.dev --json
+  search fetch https://github.com/tobi/qmd --json
+  search fetch https://arxiv.org/pdf/1706.03762.pdf --json
+
+Notes:
+  - prefer search fetch
+  - search fetch-content remains the canonical command name for skills/docs references
 
 JSON:
   - url

@@ -227,13 +227,14 @@ async function main(): Promise<void> {
       return;
     }
 
-    if (command === "fetch-content") {
+    if (command === "fetch-content" || command === "fetch") {
       if (flags.has("help")) return void console.log(FETCH_HELP);
-      const url = requireQuery(rest, FETCH_HELP, ["fetch-content"], asJson);
-      trace.step("fetch", "dispatch", { url });
+      const invokedAs = command;
+      const url = requireQuery(rest, FETCH_HELP, [invokedAs], asJson);
+      trace.step("fetch", "dispatch", { url, alias: invokedAs });
       const result = await trace.span("fetch.content", url, async () => fetchContent(url));
-      addHistory({ kind: "fetch", input: { url }, output: result });
-      if (asJson) return printJson(["fetch-content"], { ...result, trace: trace.snapshot() });
+      addHistory({ kind: "fetch", input: { url, alias: invokedAs }, output: result });
+      if (asJson) return printJson([invokedAs], { alias: invokedAs, canonicalCommand: "fetch-content", ...result, trace: trace.snapshot() });
       if (result.error) {
         console.log(`Error: ${result.error}`);
         if (result.content) console.log(`\n${result.content}`);

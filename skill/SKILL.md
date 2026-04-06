@@ -19,7 +19,7 @@ Prefer `--json` for agent flows. Add `--verbose` only when you need routing/timi
 search web bun sqlite wasm
 search code "react suspense cache"
 search docs auth flow
-search fetch-content https://clig.dev
+search fetch https://clig.dev
 search inspect tools --json
 ```
 
@@ -30,8 +30,8 @@ search inspect tools --json
 | Need web answers with citations | `search web` | `search web react compiler --json` |
 | Need code context for a library/API/repo | `search code` | `search code "facebook/react hooks" --json` |
 | Need to search local docs/notes | `search docs` | `search docs auth flow --json` |
-| Need readable content from a known URL | `search fetch-content` | `search fetch-content https://clig.dev --json` |
-| Need repo-aware content from GitHub URL | `search fetch-content` | `search fetch-content https://github.com/tobi/qmd --json` |
+| Need readable content from a known URL | `search fetch` | `search fetch https://clig.dev --json` |
+| Need repo-aware content from GitHub URL | `search fetch` | `search fetch https://github.com/tobi/qmd --json` |
 | Need diagnostics / secret resolution status | `search inspect tools` | `search inspect tools --json` |
 | Need prior results | `search history` | `search history docs --json` |
 
@@ -63,8 +63,12 @@ search docs deployment checklist --json
 ### Read and extract a page
 
 ```bash
-search fetch-content https://clig.dev --json
-search fetch-content https://github.com/tobi/qmd --json
+search fetch https://clig.dev --json
+search fetch https://github.com/tobi/qmd --json
+
+Canonical note for skills/docs references:
+- prefer the short alias `search fetch` in normal use
+- refer to the canonical command name `search fetch-content` when you need exact command-path naming
 ```
 
 ## Output modes
