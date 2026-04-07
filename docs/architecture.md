@@ -1,41 +1,36 @@
 # srch architecture
 
-`srch` today is a local-first retrieval CLI.
+`srch` is a programmable retrieval engine for developers and agents.
 
-`srch` tomorrow should become a programmable retrieval engine:
-- stable domain-first CLI surface
-- declarative source + strategy composition
-- static and agentic strategies
-- strong defaults
-- unix-like pipes, narrow commands, inspectable intermediate results
+Design center:
+- domain-first CLI
+- sources as retrieval primitives
+- strategies as retrieval programs
+- static and agentic strategies as siblings
+- manifest language and typed SDK as first-class authoring surfaces
+- inspectable plans, runs, evidence, and traces
 
-This doc proposes the concrete direction.
+This document consolidates the current architecture, CLI taxonomy, and SDK/manifest proposal.
 
-## Goals
+## Product thesis
 
-- keep `search` usable as a simple CLI
-- make retrieval backends pluggable
-- make command taxonomy domain-first and extensible
-- make search behavior declarative and inspectable
-- support both static and agentic strategies
-- preserve low-token defaults and stable JSON
-- follow unix philosophy:
-  - small composable parts
-  - text/json in, text/json out
-  - explicit modes
-  - inspectable traces
+`srch` should evolve from a local-first retrieval CLI into a programmable retrieval engine:
+- stable CLI for direct use
+- extensible retrieval runtime underneath
+- declarative specs for composition and ops
+- typed functional SDK for elegant programming
+- optional agentic behavior inside strategies
 
-## Non-goals
+Not goals:
+- generic workflow engine
+- generic multi-agent platform
+- mandatory LLM planning for simple retrieval
 
-- replace general coding agents
-- bury simple commands under mandatory LLM planning
-- force a giant framework onto plugin authors
+## Core principles
 
-## Design principles
+### Explicit over magical
 
-### 1. Explicit over magical
-
-These should continue to work and stay boring:
+These should stay boring:
 
 ```bash
 search web "query"
@@ -46,11 +41,7 @@ search fetch https://example.com
 search ask "compare bun vs node for cli tooling"
 ```
 
-Agentic behavior should be additive, not mandatory.
-
-### 1.1 Domain-first CLI taxonomy
-
-The CLI should follow this grammar:
+### Domain-first grammar
 
 ```text
 search <domain> [subdomain] [strategy] [target] <query-or-task>
@@ -73,348 +64,83 @@ search social x thread https://x.com/.../status/123
 search ask compare "best state management for a docs-heavy react app"
 ```
 
-`ask` is not a special-case mode. It is simply a cross-domain retrieval domain.
+`ask` is not a special-case mode. It is a cross-domain retrieval domain.
 
-### 2. Declarative first
+### Declarative first
 
-Sources, fallback order, strategy steps, prompts, and thresholds should be configurable as data.
+Common behavior should be configurable as data:
+- source registration
+- source selection
+- fallback order
+- strategy steps
+- policies
+- evaluators
+- stop conditions
 
-### 3. Functional composition
+### Functional composition
 
-Sources and strategies should compose like pure transforms where possible:
-- query -> source results
-- source results -> fetched content
-- fetched content -> ranked evidence
-- evidence -> synthesis
+The engine should compose like pipelines:
 
-### 4. Preserve native payloads
+```text
+query
+  |> select sources
+  |> run retrieval
+  |> normalize evidence
+  |> merge / rerank / filter
+  |> fetch follow-up content
+  |> synthesize (optional)
+```
 
-Every adapter normalizes output, but the native provider payload remains available under `native`.
+### Inspectability always
 
-### 5. Free-first by default
+Every layer should be inspectable:
+- catalog
+- query
+- plan
+- run
+- evidence
+- trace
 
-Default plans should prefer free or already-paid-for paths before premium paths.
+## Runtime nouns
+
+### Public nouns
+- domain
+- subdomain
+- source
+- strategy
+- policy
+- evidence
+- run
+
+### Engine nouns
+- query
+- plan
+- operator
+- catalog
+
+### Extension units
+- module
+- evaluator
+- agent-adapter
 
 ## Layered model
 
-srch should expose 4 layers.
-
 ```text
 query/task
-  -> agent layer (optional planner)
-  -> strategy layer (recipes/pipelines)
-  -> source layer (providers/connectors)
-  -> transport layer (HTTP, MCP, CLI, local fs, clone, sqlite, browser cookies)
+  -> domain/subdomain routing
+  -> strategy selection
+  -> plan compilation
+  -> operators over sources
+  -> run
+  -> evidence
+  -> optional synthesis
 ```
-
-## Layer 1: source plugins
-
-A source is the smallest useful retrieval primitive.
-
-Examples:
-- exa-mcp
-- exa-context
-- brave
-- gemini-web
-- gemini-api
-- perplexity
-- context7
-- deepwiki
-- qmd
-- bird
-- github-clone
-- jina-reader
-- readability
-- pdf-extractor
-
-### Source interface
-
-```ts
-export type SourceCapability =
-  | "web"
-  | "code"
-  | "repo"
-  | "docs"
-  | "social"
-  | "fetch"
-  | "pdf";
-
-export type CostTier = "free" | "credits" | "paid";
-
-export interface SourceRequest {
-  capability: SourceCapability;
-  query?: string;
-  target?: string;
-  urls?: string[];
-  limit?: number;
-  maxTokens?: number;
-  signal?: AbortSignal;
-  options?: Record<string, unknown>;
-}
-
-export interface SourceResult<TNative = unknown> {
-  source: string;
-  capability: SourceCapability;
-  ok: boolean;
-  text?: string;
-  items?: unknown[];
-  native?: TNative;
-  costTier: CostTier;
-  latencyMs?: number;
-  error?: string;
-  meta?: Record<string, unknown>;
-}
-
-export interface SourcePlugin {
-  name: string;
-  description: string;
-  capabilities: SourceCapability[];
-  costTier: CostTier;
-  priority?: number;
-  isAvailable(ctx: RuntimeContext): Promise<boolean>;
-  run(req: SourceRequest, ctx: RuntimeContext): Promise<SourceResult>;
-}
-```
-
-### Why sources stay narrow
-
-A source should answer one question well:
-- “search the web”
-- “query versioned library docs”
-- “search inside local repo clone”
-- “fetch readable page content”
-
-It should not decide the full search plan.
-
-## Layer 2: strategy plugins
-
-A strategy is a retrieval program over sources.
-
-Strategies can be:
-- static: fixed recipe
-- agentic: adaptive recipe with evaluation and revision
-
-Examples:
-- `web-default`
-- `web-high-quality`
-- `code-default`
-- `repo-deep-search`
-- `docs-default`
-- `research-deep`
-- `cross-verify`
-- `social-scan`
-
-### Strategy interface
-
-```ts
-export type StrategyKind = "static" | "agentic";
-
-export interface StrategyInput {
-  query?: string;
-  target?: string;
-  args?: Record<string, unknown>;
-  signal?: AbortSignal;
-}
-
-export interface StrategyStepResult {
-  name: string;
-  result: SourceResult | StrategyResult;
-}
-
-export interface StrategyResult<TNative = unknown> {
-  strategy: string;
-  kind: StrategyKind;
-  ok: boolean;
-  text?: string;
-  items?: unknown[];
-  steps: StrategyStepResult[];
-  native?: TNative;
-  error?: string;
-  meta?: Record<string, unknown>;
-}
-
-export interface StrategyPlugin {
-  name: string;
-  kind: StrategyKind;
-  description: string;
-  capabilities: string[];
-  run(input: StrategyInput, ctx: StrategyContext): Promise<StrategyResult>;
-}
-```
-
-### Strategy context
-
-```ts
-export interface StrategyContext {
-  source(name: string, req: SourceRequest): Promise<SourceResult>;
-  sourcesByCapability(capability: SourceCapability): SourcePlugin[];
-  choose(req: SourceRequest, policy?: SelectionPolicy): Promise<SourcePlugin[]>;
-  fetch(url: string): Promise<SourceResult>;
-  fetchMany(urls: string[]): Promise<SourceResult[]>;
-  merge(results: Array<SourceResult | StrategyResult>): StrategyResult;
-  trace: TraceSink;
-  config: SrxhConfig;
-  llm?: LlmFacade;
-}
-```
-
-## Declarative strategies
-
-Strategies should be expressible as data first.
-
-### Example: web default
-
-```json
-{
-  "name": "web-default",
-  "capability": "web",
-  "select": {
-    "order": ["exa-mcp", "brave", "gemini-web", "gemini-api", "perplexity"],
-    "stopOnFirstSuccess": true
-  },
-  "steps": [
-    {
-      "type": "search",
-      "capability": "web",
-      "query": "{query}",
-      "limit": 5
-    }
-  ]
-}
-```
-
-### Example: code default
-
-```json
-{
-  "name": "code-default",
-  "capability": "code",
-  "steps": [
-    {
-      "type": "search",
-      "source": "exa-context",
-      "query": "{query}",
-      "maxTokens": 5000,
-      "required": false
-    },
-    {
-      "type": "search",
-      "source": "context7",
-      "query": "{query}",
-      "mode": "secondary",
-      "required": false
-    },
-    {
-      "type": "search",
-      "source": "deepwiki",
-      "query": "{query}",
-      "mode": "secondary",
-      "required": false,
-      "when": "repoRefPresent"
-    }
-  ],
-  "combine": {
-    "appendSecondary": true
-  }
-}
-```
-
-### Example: repo deep search
-
-```json
-{
-  "name": "repo-deep-search",
-  "capability": "repo",
-  "steps": [
-    {
-      "type": "prepare",
-      "source": "github-clone",
-      "target": "{target}"
-    },
-    {
-      "type": "search",
-      "source": "repo-local-search",
-      "target": "{prepared.localPath}",
-      "query": "{query}"
-    }
-  ]
-}
-```
-
-## Declarative core + imperative escape hatch
-
-Data should cover 80% of use cases.
-
-When a strategy needs dynamic logic, it can provide a custom reducer or planner:
-
-```ts
-export interface DeclarativeStrategyPlugin extends StrategyPlugin {
-  spec?: StrategySpec;
-  customize?: (input: StrategyInput, ctx: StrategyContext, partial: StrategyResult) => Promise<StrategyResult>;
-}
-```
-
-This keeps the happy path elegant while preserving power.
-
-## Layer 3: agentic strategies
-
-Agentic behavior should usually live inside strategies, not outside the taxonomy.
-
-The main abstraction remains `strategy`.
-Some strategies are static.
-Some strategies are agentic.
-
-### Why
-
-- sources are too low-level for planning
-- strategies encode domain knowledge
-- agentic behavior should adapt a strategy, not replace the engine
-- `ask` can remain a domain instead of a special one-off mode
-
-### Agentic strategy interface
-
-```ts
-export interface AgentTask {
-  prompt: string;
-  objective?: string;
-  constraints?: string[];
-  maxSteps?: number;
-}
-
-export interface AgentResult {
-  ok: boolean;
-  answer: string;
-  plan: PlanStep[];
-  evidence: Array<SourceResult | StrategyResult>;
-  error?: string;
-}
-```
-
-### CLI shape
-
-```bash
-search ask "Find the best React state management approach for a docs-heavy app"
-search ask compare "bun vs node startup/runtime tradeoffs" --json
-search code investigate "How does React implement Suspense caching internally?" --verbose
-search social reddit research "best recent posts about bun"
-```
-
-### Agent execution model
-
-1. classify task
-2. choose strategy or compose one
-3. execute strategy steps
-4. evaluate if evidence is sufficient
-5. if not sufficient, refine query / widen source set / fetch more
-6. synthesize answer
-
-This yields agentic retrieval without losing inspectability.
 
 ## Domains, subdomains, strategies
 
-Public CLI concepts should map cleanly to engine behavior.
-
 ### Domains
+
+Top-level retrieval spaces.
 
 Examples:
 - `web`
@@ -426,6 +152,8 @@ Examples:
 
 ### Subdomains
 
+Durable narrower retrieval spaces.
+
 Examples:
 - `social reddit`
 - `social x`
@@ -434,9 +162,25 @@ Examples:
 - `code local`
 - `docs npm`
 
-Subdomains should represent durable retrieval spaces, not backend names.
+Subdomains should be durable retrieval spaces, not backend names.
+
+Good:
+- `reddit`
+- `x`
+- `hn`
+- `github`
+- `local`
+- `npm`
+
+Bad:
+- `exa`
+- `provider-a`
+- `agent-a`
+- `balanced`
 
 ### Strategies
+
+Strategies are the unit of retrieval behavior.
 
 Examples:
 - `repo`
@@ -456,154 +200,634 @@ search social x thread https://x.com/.../status/123
 search ask compare "best state management for a docs-heavy react app"
 ```
 
-## Layer 4: transport adapters
+## Static and agentic strategies
 
-Keep transport concerns separate from retrieval semantics.
+A strategy is a retrieval program over sources.
+
+### Static strategy
+
+Fixed recipe. Little or no runtime adaptation.
 
 Examples:
-- HTTP REST
-- MCP over Streamable HTTP
-- local CLI subprocess
-- browser cookie extraction
-- local clone / filesystem traversal
-- sqlite/local index
+- `web-default`
+- `code-default`
+- `repo-deep-search`
+- `docs-default`
 
-This prevents source plugins from coupling search semantics to transport details.
+### Agentic strategy
 
-## Runtime config
+Adaptive recipe with evaluation and revision.
 
-```json
-{
-  "plugins": [
-    "@srch/context7",
-    "@srch/deepwiki",
-    "@srch/reddit"
-  ],
-  "sources": {
-    "exa-mcp": { "enabled": true, "priority": 1 },
-    "brave": { "enabled": true, "priority": 2 },
-    "gemini-web": { "enabled": true, "priority": 3 },
-    "gemini-api": { "enabled": true, "priority": 4 },
-    "perplexity": { "enabled": true, "priority": 5 }
-  },
-  "strategies": {
-    "web-default": { "enabled": true },
-    "code-default": { "enabled": true },
-    "repo-deep-search": { "enabled": true },
-    "research-deep": { "enabled": false }
-  },
-  "agent": {
-    "enabled": true,
-    "model": "gemini-2.5-flash",
-    "maxSteps": 4,
-    "systemPrompt": "You are a retrieval specialist..."
-  }
-}
+Examples:
+- `research-deep`
+- `cross-verify`
+- `code-investigate`
+- `ask-compare`
+
+Agentic should not mean “uses an LLM.”
+
+Better definition:
+- static = no runtime plan revision
+- agentic = runtime plan revision allowed
+
+Agentic strategies should still operate over `srch` plans/evidence and respect policies.
+
+## Sources
+
+A source is the narrowest useful retrieval primitive.
+
+Examples:
+- exa-mcp
+- exa-context
+- brave
+- gemini-web
+- gemini-api
+- perplexity
+- context7
+- deepwiki
+- qmd
+- bird
+- github-clone
+- repo-local-search
+- jina-reader
+- readability
+- pdf-extractor
+
+Sources should do one thing well and not own the full plan.
+
+## Manifest language
+
+The manifest language is a first-class authoring surface.
+
+It should support:
+- domains
+- subdomains
+- sources
+- strategies
+- policies
+- evaluators
+- modules
+
+Prefer YAML/JSON/TOML.
+
+### Module manifest
+
+```yaml
+kind: srch.module
+name: "@srch/core"
+version: "0.1"
+
+domains:
+  - ref: web
+  - ref: code
+  - ref: docs
+  - ref: social
+  - ref: ask
+
+sources:
+  - ref: exa-mcp
+  - ref: brave
+  - ref: context7
+  - ref: deepwiki
+
+strategies:
+  - ref: web-default
+  - ref: code-default
+  - ref: repo-deep-search
+  - ref: ask-compare
+
+policies:
+  - ref: free-first
+  - ref: balanced
+  - ref: code-authoritative
 ```
 
-## Functional composition model
+### Domain manifest
 
-Think in pipelines:
+```yaml
+kind: srch.domain
+name: code
+description: Code retrieval across remote and local sources
 
-```text
-query
-  |> select sources
-  |> run retrieval
-  |> normalize results
-  |> merge evidence
-  |> rank/filter
-  |> fetch follow-up content
-  |> synthesize (optional)
+subdomains:
+  - github
+  - local
+
+defaultStrategy: code-default
+
+strategies:
+  - code-default
+  - repo-deep-search
+  - code-investigate
+  - code-verify
+
+accepts:
+  query: true
+  target: optional
+
+capabilities:
+  - code
+  - repo
+  - docs
 ```
 
-### Useful combinators
+### Ask domain manifest
+
+```yaml
+kind: srch.domain
+name: ask
+description: Cross-domain retrieval tasks
+
+defaultStrategy: ask-default
+
+strategies:
+  - ask-default
+  - ask-compare
+  - ask-research
+  - ask-verify
+
+capabilities:
+  - web
+  - code
+  - docs
+  - social
+```
+
+### Subdomain manifest
+
+```yaml
+kind: srch.subdomain
+name: reddit
+domain: social
+description: Reddit retrieval space
+
+defaultStrategy: social-default
+
+capabilities:
+  - social
+  - web
+
+sources:
+  - reddit-api
+  - reddit-fetch
+```
+
+### Source manifest
+
+```yaml
+kind: srch.source
+name: brave
+description: Brave web search
+
+capabilities:
+  - web
+
+traits:
+  - fast
+  - keyword
+
+cost:
+  tier: free
+  budgetImpact: low
+
+auth:
+  type: secretRef
+  fields:
+    - braveApiKey
+
+transport:
+  type: http
+
+inputs:
+  query: string
+  limit: number
+
+outputs:
+  evidence:
+    kind: web_result
+```
+
+Traits matter because capabilities are not enough.
+
+Useful traits:
+- authoritative
+- semantic
+- keyword
+- local
+- remote
+- code-native
+- primary
+- low-signal
+- fast
+
+### Static strategy manifest
+
+```yaml
+kind: srch.strategy
+name: code-default
+strategyType: static
+domain: code
+description: Primary code retrieval with secondary doc augmentation
+
+inputs:
+  query: string
+
+steps:
+  - op: search
+    source: exa-context
+    query: "{query}"
+    as: primary
+
+  - op: search
+    source: context7
+    query: "{query}"
+    as: docs
+    optional: true
+
+  - op: search
+    source: deepwiki
+    query: "{query}"
+    as: repoContext
+    optional: true
+
+  - op: merge
+    from: [primary, docs, repoContext]
+    as: merged
+
+  - op: emit
+    from: merged
+```
+
+### Agentic strategy manifest
+
+```yaml
+kind: srch.strategy
+name: ask-compare
+strategyType: agentic
+domain: ask
+description: Compare options across sources and synthesize recommendation
+
+inputs:
+  task: string
+
+seed:
+  strategy: web-default
+
+policy: balanced
+
+loop:
+  maxSteps: 4
+
+  evaluate:
+    - kind: sourceDiversity
+      minSources: 3
+    - kind: evidenceCount
+      minItems: 5
+    - kind: disagreement
+      action: verify
+
+  revise:
+    - if: insufficientPrimaryEvidence
+      then:
+        - op: fetchTopN
+          n: 3
+    - if: disagreementDetected
+      then:
+        - op: runStrategy
+          strategy: web-verify
+    - if: taskLooksCodeHeavy
+      then:
+        - op: runStrategy
+          strategy: code-default
+
+output:
+  mode: answer
+  citations: true
+```
+
+### Policy manifest
+
+```yaml
+kind: srch.policy
+name: code-authoritative
+
+selection:
+  preferTraits:
+    - authoritative
+    - code-native
+    - local
+  avoidTraits:
+    - low-signal
+  allowPaid: false
+
+execution:
+  maxSteps: 4
+  fetchTopN: 2
+  requireSourceDiversity: 2
+
+stopping:
+  minEvidence: 4
+  requirePrimaryEvidence: true
+
+synthesis:
+  citeSources: true
+  answerStyle: concise
+```
+
+### Evaluator manifest
+
+```yaml
+kind: srch.evaluator
+name: sufficiency-basic
+
+input:
+  - query
+  - evidence
+
+output:
+  - sufficient
+  - reason
+  - nextAction
+
+prompt: |
+  Determine whether the evidence is sufficient to answer the query.
+  Prefer authoritative and diverse sources.
+```
+
+## Typed functional SDK
+
+The SDK is also a first-class authoring surface.
+
+It should be:
+- typed
+- tiny
+- composable
+- pleasant to read
+- data-first
+- inspectable
+
+The SDK is not just a manifest generator.
+It is a native programming surface for `srch`.
+
+### Core authoring API
 
 ```ts
-select(capability, policy)
-mapResults(fn)
-filterResults(fn)
-mergeResults(policy)
-fetchTopN(n)
-rerank(model)
-appendSecondary()
-summarize(prompt)
+defineSource(...)
+defineStrategy(...)
+defineDomain(...)
+definePolicy(...)
+defineModule(...)
+defineEvaluator(...)
+defineAgentAdapter(...)
 ```
 
-This keeps the engine elegant while preserving power.
-
-## Unix philosophy mapping
-
-### Do one thing well
-
-Each source plugin does one thing well.
-Each strategy does one recipe well.
-The agent layer plans, but does not replace the lower layers.
-
-### Text streams and JSON
-
-- human mode: concise text
-- automation mode: stable JSON
-- verbose mode: stderr traces
-
-### Inspect intermediate artifacts
-
-- source results visible in JSON
-- strategy steps visible in JSON
-- traces visible in `--verbose`
-- native payloads preserved
-
-### Pipeability
-
-```bash
-search web "react compiler" --json | jq '.data.results[] | .url'
-search code repo . "auth middleware" --json | jq '.data.matches[]'
-```
-
-## Example plugin shapes
-
-### Source plugin example: Reddit
+### Core operator builders
 
 ```ts
+search(...)
+fetch(...)
+merge(...)
+rerank(...)
+when(...)
+emit(...)
+runStrategy(...)
+evaluate(...)
+revise(...)
+```
+
+### Source example
+
+```ts
+import { defineSource } from "@srch/sdk";
+
 export default defineSource({
   name: "reddit",
   capabilities: ["social", "web"],
-  costTier: "free",
-  async isAvailable() { return true; },
+  traits: ["community", "discussion"],
+  cost: { tier: "free" },
+
   async run(req, ctx) {
-    // fetch reddit search
-    return {
-      source: "reddit",
-      capability: "social",
-      ok: true,
-      items: [...],
-      native: {...},
-      costTier: "free"
-    };
+    const results = await ctx.http.get("/reddit/search", { q: req.query });
+    return ctx.evidence.webResults(
+      results.items.map(item => ({
+        title: item.title,
+        url: item.url,
+        snippet: item.snippet,
+        native: item
+      }))
+    );
   }
 });
 ```
 
-### Strategy plugin example: cross verification
+### Static strategy example
 
 ```ts
+import { defineStrategy, search, merge, emit } from "@srch/sdk";
+
 export default defineStrategy({
-  name: "cross-verify",
-  description: "Compare multiple sources and surface disagreements",
-  capabilities: ["research"],
-  async run(input, ctx) {
-    const [web, social, docs] = await Promise.all([
-      ctx.source("exa-mcp", { capability: "web", query: input.query }),
-      ctx.source("reddit", { capability: "social", query: input.query }),
-      ctx.source("qmd", { capability: "docs", query: input.query })
-    ]);
-    return ctx.merge([web, social, docs]);
-  }
+  name: "code-default",
+  type: "static",
+  domain: "code",
+  input: ["query"],
+
+  plan: [
+    search("exa-context", { query: "$query" }).as("primary"),
+    search("context7", { query: "$query" }).optional().as("docs"),
+    search("deepwiki", { query: "$query" }).optional().as("repo"),
+    merge("primary", "docs", "repo").as("merged"),
+    emit("merged")
+  ]
 });
 ```
 
-## Example user value
+### Agentic strategy example
 
-### 1. explicit, deterministic
+```ts
+import {
+  defineStrategy,
+  runStrategy,
+  fetchTopN,
+  evaluate,
+  stopIf,
+  emitAnswer
+} from "@srch/sdk";
+
+export default defineStrategy({
+  name: "ask-compare",
+  type: "agentic",
+  domain: "ask",
+  policy: "balanced",
+
+  seed: runStrategy("web-default", { query: "$task" }).as("initial"),
+
+  loop: {
+    maxSteps: 4,
+    evaluate: evaluate("sufficiency-basic"),
+
+    revise({ state, signals }) {
+      if (signals.disagreementDetected) {
+        return runStrategy("web-verify", { query: state.task });
+      }
+      if (signals.insufficientEvidence) {
+        return fetchTopN("initial", 3);
+      }
+      if (signals.codeHeavy) {
+        return runStrategy("code-default", { query: state.task });
+      }
+      return stopIf("sufficient");
+    }
+  },
+
+  output: emitAnswer({ citations: true })
+});
+```
+
+Desired shape:
+- declarative shell
+- elegant programmable hooks
+
+### Domain example
+
+```ts
+import { defineDomain } from "@srch/sdk";
+
+export default defineDomain({
+  name: "social",
+  subdomains: ["x", "reddit", "hn"],
+  defaultStrategy: "social-default",
+  strategies: ["social-default", "social-scan", "social-thread"],
+  capabilities: ["social", "web"]
+});
+```
+
+### Module example
+
+```ts
+import { defineModule } from "@srch/sdk";
+import reddit from "./sources/reddit";
+import social from "./domains/social";
+import socialResearch from "./strategies/social-research";
+
+export default defineModule({
+  name: "@srch/reddit",
+  sources: [reddit],
+  domains: [social],
+  strategies: [socialResearch]
+});
+```
+
+## Consumer SDK
+
+`srch` should also be usable as a library.
+
+### Object form
+
+```ts
+import { createClient } from "@srch/sdk";
+
+const srch = createClient();
+
+const result = await srch.run({
+  domain: "code",
+  strategy: "repo",
+  target: "facebook/react",
+  query: "useEffect cleanup"
+});
+```
+
+### Fluent form
+
+```ts
+import { createClient } from "@srch/sdk";
+
+const srch = createClient();
+
+const result = await srch
+  .domain("code")
+  .strategy("repo")
+  .target("facebook/react")
+  .query("useEffect cleanup")
+  .run();
+```
+
+### Agentic fluent form
+
+```ts
+const answer = await srch
+  .domain("ask")
+  .strategy("compare")
+  .task("best state management for a docs-heavy React app")
+  .policy("balanced")
+  .mode("answer")
+  .run();
+```
+
+Keep plain object API even if fluent API exists.
+
+## External agent SDK integration
+
+Support external agent SDKs via a clean adapter boundary.
+
+Targets may include:
+- Claude SDK
+- pi-mono / pi-coding-agent style SDKs
+- other retrieval-specialized planners/evaluators
+
+### Agent adapter interface
+
+```ts
+interface AgentAdapter {
+  name: string;
+  plan(task: AgentTask, ctx: AgentContext): Promise<AgentPlan>;
+  evaluate(state: AgentState, ctx: AgentContext): Promise<Evaluation>;
+  synthesize(state: AgentState, ctx: AgentContext): Promise<AgentOutput>;
+}
+```
+
+### Agentic strategy using adapter
+
+```ts
+defineStrategy({
+  name: "ask-claude-compare",
+  type: "agentic",
+  domain: "ask",
+  agent: claudeAdapter({ model: "claude-sonnet-4" })
+});
+```
+
+```ts
+defineStrategy({
+  name: "code-investigate-pi",
+  type: "agentic",
+  domain: "code",
+  agent: piMonoAdapter({ model: "gemini-2.5-flash" }),
+  policy: "code-authoritative"
+});
+```
+
+The adapter should operate over `srch` plans/evidence, not replace the `srch` runtime model.
+
+## Compilation model
+
+Both manifests and SDK-authored objects should compile into the same internal graph:
+
+```text
+module
+  -> catalog registration
+  -> query model
+  -> strategy compilation
+  -> plan
+  -> operators
+  -> run
+  -> evidence
+```
+
+That shared compilation model is what makes both first-class.
+
+## Example value by layer
+
+### Explicit deterministic retrieval
 
 ```bash
 search web "bun sqlite wasm"
@@ -615,87 +839,85 @@ Value:
 - fast
 - cheap
 - stable
-- composable in scripts
+- scriptable
 
-### 2. strategy-level
+### Strategy-level retrieval
 
 ```bash
-search research "best auth patterns for next.js app router"
-search verify "does bun support sqlite in wasm in production"
+search web research "best auth patterns for next.js"
+search code repo . "auth middleware"
 ```
 
 Value:
-- richer retrieval
 - less manual orchestration
+- richer evidence gathering
 - still inspectable
 
-### 3. deep code understanding
+### Agentic retrieval
 
 ```bash
-search code repo facebook/react "useEffect cleanup"
-search code repo . "database connection"
+search ask compare "best state management approach for a docs-heavy react app"
 ```
 
 Value:
-- actual code, not summaries about code
-- clone/cache/local deep search
-- better grounding for agent work
+- adaptive retrieval behavior
+- strategy revision when evidence is weak
+- evidence-backed synthesis
 
-### 4. agentic search
+### SDK-level embedding
 
-```bash
-search ask "What is the best state management approach for a docs-heavy React app and why?"
+```ts
+const result = await srch.run({
+  domain: "code",
+  strategy: "repo",
+  target: ".",
+  query: "database connection"
+});
 ```
 
 Value:
-- strategy selection delegated to specialist harness
-- iterative retrieval under the hood
-- final synthesis with evidence
+- use `srch` as substrate inside another tool or agent
 
-## Why this architecture is worth it
+## Recommended implementation phases
 
-This gives srch:
-- explicit commands for power users
-- declarative strategies for maintainability
-- plugin extensibility for new sources
-- agentic planning for higher-order problems
-- a clean path to become a reusable search substrate for pi, claude, opencode, and others
+### Phase 1
+- source registry
+- strategy registry
+- module loading
+- static strategy execution
+- stable evidence/run schema
 
-## Suggested implementation phases
+### Phase 2
+- domain/subdomain registry
+- policy system
+- manifest validation
+- plan inspection / dry-run
 
-### Phase 1: source registry
-- define source interface
-- adapt current backends into source modules
-- add runtime source discovery
+### Phase 3
+- agentic strategies
+- evaluators
+- plan revision loop
+- external agent adapters
 
-### Phase 2: strategy registry
-- define declarative strategy spec
-- move current `web`, `code`, `repo`, `fetch` behaviors into named strategies
-- preserve current CLI surface
-
-### Phase 3: plugin loading
-- npm/local plugin discovery
-- config-driven enable/disable
-- source + strategy registration
-
-### Phase 4: agent mode
-- add `search ask`
-- planner chooses or composes strategies
-- evidence-first synthesis
-
-### Phase 5: adapters
-- thin pi extension
-- optional MCP server for srch itself
+### Phase 4
+- richer consumer SDK
+- package ecosystem
+- registry/discovery story
 
 ## Recommendation
 
-Use a hybrid model:
-- declarative specs for defaults and common cases
-- imperative hooks for hard cases
-- stable domain-first CLI on top
-- strategy as the main abstraction
-- static and agentic strategies as siblings
+Treat both surfaces as native:
+- manifest language for portability, config, validation, sharing, and ops
+- typed functional SDK for elegance, abstraction, and custom logic
 
-That keeps srch elegant, hackable, and unix-like while still enabling the long-term vision:
+The heart of the system should be:
 
-**srch as the programmable retrieval engine that combines the best retrieval and RAG techniques with agentic exploration over them.**
+> strategies compile into plans made of operators
+
+From that:
+- declarative strategies are data specs
+- programmable strategies emit or revise plans
+- agentic strategies are strategies with evaluation/revision loops
+- sources are execution targets for operators
+
+That is the cleanest path to an elegant, extensible, first-class programmable retrieval engine.
