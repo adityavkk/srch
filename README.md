@@ -16,6 +16,29 @@ npm run build
 ln -s $(pwd)/dist/cli.js ~/bin/search
 ```
 
+### Optional flights domain
+
+`search flights` is intentionally optional so the base install stays lean.
+
+Install the companion JS SDK only if you want flight search + booking:
+
+```bash
+npm install letsfg
+```
+
+LetsFG's local search runtime also needs Python + Playwright:
+
+```bash
+pip install letsfg
+playwright install chromium
+```
+
+If `search` is installed globally, install the companion package globally too:
+
+```bash
+npm install -g letsfg
+```
+
 ## What it does
 
 `search` is a single CLI that routes queries to the right backend and returns grounded, cited results. Designed for LLM agents and humans who want answers fast with minimal tokens.
@@ -27,6 +50,7 @@ search web <query>                    web retrieval
 search code <query>                   code/docs context
 search code repo <target> <query>     deep repo search
 search docs <query>                   local doc search
+search flights <origin> <dest> <date> optional flights via LetsFG
 search social <query>                 social retrieval
 search social x <query>               X/Twitter subdomain
 search fetch <url>                    readable page extraction
@@ -49,6 +73,7 @@ Examples:
 ```bash
 search web "bun sqlite"
 search code repo facebook/react "useEffect cleanup"
+search flights LHR BCN 2026-06-15
 search social x thread https://x.com/.../status/123
 search ask compare "best state management for a docs-heavy react app"
 ```
@@ -107,6 +132,34 @@ search docs index add ./docs --name project-docs
 search docs index update
 search docs auth flow --json
 ```
+
+## Flights
+
+Backed by the optional LetsFG TypeScript SDK.
+
+Default search maps to LetsFG's `search` flow:
+
+```bash
+search flights GDN BER 2026-03-03
+search flights search LON BCN 2026-04-01 --return 2026-04-08 --sort price --json
+```
+
+Useful companion commands:
+
+```bash
+search flights resolve "berlin"
+search flights register --name srch-agent --email me@example.com
+search flights link-github your-github-user
+search flights unlock off_xxx --json
+search flights book off_xxx --passenger '{"id":"pas_xxx","given_name":"John","family_name":"Doe","born_on":"1990-01-15"}' --email john@example.com
+search flights me --json
+search flights system-info
+```
+
+Notes:
+- `search` and `resolve` use LetsFG's local Python runtime
+- `unlock`, `book`, `setup-payment`, and `me` usually require `LETSFG_API_KEY`
+- `book` accepts repeated `--passenger '{...}'` flags or a single `--passengers '[...]'` JSON array
 
 ## Fetch content
 
@@ -194,6 +247,7 @@ search config --help
 | Web search | Exa, Brave, Perplexity, Gemini API, Gemini Web (cookie fallback) |
 | Code search | Exa Context API, Exa MCP, Context7, DeepWiki |
 | Local docs | QMD SDK (BM25 + vector + reranking) |
+| Flights | Optional LetsFG TypeScript SDK + LetsFG local Python runtime |
 | Page fetch | Readability, Jina Reader, Gemini URL Context, RSC parser |
 | GitHub | Clone + API fallback via `gh` |
 | PDF | Text extraction via unpdf |

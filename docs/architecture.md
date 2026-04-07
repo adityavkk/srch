@@ -59,6 +59,7 @@ Examples:
 ```bash
 search web "bun sqlite"
 search code repo facebook/react "useEffect cleanup"
+search flights LHR BCN 2026-06-15
 search social reddit "react compiler"
 search social x thread https://x.com/.../status/123
 search ask compare "best state management for a docs-heavy react app"
@@ -146,9 +147,12 @@ Examples:
 - `web`
 - `code`
 - `docs`
+- `flights`
 - `social`
 - `fetch`
 - `ask`
+
+`flights` is the first optional domain-backed integration: the base CLI stays dependency-light, and users can opt into the LetsFG SDK when they want a travel source installed locally.
 
 ### Subdomains
 
@@ -252,6 +256,9 @@ Examples:
 - jina-reader
 - readability
 - pdf-extractor
+- letsfg-sdk
+
+Optional sources are valid when they unlock a distinct domain but would otherwise bloat the default install. The runtime should detect them explicitly and return actionable install hints instead of failing mysteriously.
 
 Sources should do one thing well and not own the full plan.
 

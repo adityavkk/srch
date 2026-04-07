@@ -9,6 +9,7 @@ import { isPerplexityAvailable } from "../upstream/perplexity.js";
 import { getDocsDbPath } from "../docs/qmd.js";
 import { inspectGeminiCookieProfiles } from "../fetch/chrome-cookies-inspect.js";
 import { checkGhAvailable } from "../fetch/github-api.js";
+import { inspectLetsFG } from "../flights/letsfg.js";
 
 export async function inspectTools() {
   const qmdDbPath = getDocsDbPath();
@@ -40,6 +41,7 @@ export async function inspectTools() {
       backend: "exa-mcp",
       colgrepConfigPresent: existsSync(colgrepConfig)
     },
+    flights: inspectLetsFG(),
     runtime: {
       node: process.version,
       cwd: process.cwd()

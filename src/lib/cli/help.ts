@@ -7,6 +7,7 @@ Domains:
   web            web retrieval
   code           code retrieval
   docs           local docs retrieval
+  flights        optional flight search + booking via LetsFG
   social         social retrieval spaces
   fetch          readable URL fetch
   ask            cross-domain retrieval
@@ -20,6 +21,7 @@ Domains:
 Examples:
   search web bun sqlite wasm
   search code repo facebook/react "useEffect cleanup"
+  search flights LHR BCN 2026-06-15
   search social x "bun runtime"
   search ask compare "best state management for a docs-heavy react app"
   search fetch https://clig.dev
@@ -33,8 +35,59 @@ Next help:
   search web --help
   search code --help
   search docs --help
+  search flights --help
   search social --help
   search config --help
+`;
+
+export const FLIGHTS_HELP = `search flights — optional flight search + booking via LetsFG
+
+What it does:
+  wraps the LetsFG TypeScript SDK inside srch's domain-first CLI
+  keeps flights optional so base srch installs stay lean
+
+Install:
+  npm install letsfg
+  pip install letsfg && playwright install chromium
+
+Usage:
+  search flights <origin> <destination> <date> [flags]
+  search flights search <origin> <destination> <date> [flags]
+  search flights resolve <query...>
+  search flights register --name <agent> --email <email> [--owner <name>] [--description <text>]
+  search flights link-github <username>
+  search flights unlock <offer_id>
+  search flights book <offer_id> --passenger '{...}' [--passenger '{...}'] --email <email> [--phone <phone>] [--idempotency-key <key>]
+  search flights setup-payment [--token <token>]
+  search flights me
+  search flights system-info
+
+Search flags:
+  --return <date>            return date YYYY-MM-DD
+  --adults <n>               adult passengers
+  --children <n>             child passengers
+  --infants <n>              infant passengers
+  --cabin <M|W|C|F>          cabin class
+  --max-stopovers <n>        maximum stopovers
+  --currency <code>          fare currency
+  --limit <n>                max offers returned
+  --sort <price|duration>    offer sort order
+  --max-browsers <n>         local browser concurrency override
+
+Examples:
+  search flights LHR BCN 2026-06-15
+  search flights search LON BCN 2026-06-15 --return 2026-06-22 --sort price --json
+  search flights resolve "berlin"
+  search flights register --name srch-agent --email me@example.com
+  search flights link-github your-github-user
+  search flights unlock off_xxx --json
+  search flights book off_xxx --passenger '{"id":"pas_1","given_name":"Ada","family_name":"Lovelace","born_on":"1990-12-10"}' --email ada@example.com --json
+  search flights me --json
+
+Notes:
+  - search + resolve run through LetsFG's local Python runtime
+  - unlock/book/setup-payment/me require LetsFG account state, and usually LETSFG_API_KEY
+  - use repeated --passenger flags or a single --passengers '[...]' JSON array
 `;
 
 export const WEB_HELP = `search web — web research
@@ -152,7 +205,7 @@ JSON:
 export const HISTORY_HELP = `search history — prior runs
 
 Usage:
-  search history [web|code|fetch|docs] [--json]
+  search history [web|code|fetch|docs|flights] [--json]
 
 Examples:
   search history

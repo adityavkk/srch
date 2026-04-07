@@ -3,13 +3,14 @@ import { getConfigSafe, setProvider, setSecretRef, unsetField } from "./lib/conf
 import { getConfigPath } from "./lib/core/config.js";
 import { inspectTools } from "./lib/cli/tools.js";
 import { CONFIG_HELP } from "./lib/cli/config-help.js";
-import { CODE_HELP, DOCS_HELP, FETCH_HELP, HISTORY_HELP, INSPECT_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
+import { CODE_HELP, DOCS_HELP, FETCH_HELP, FLIGHTS_HELP, HISTORY_HELP, INSPECT_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
 import { TWITTER_HELP } from "./lib/cli/twitter-help.js";
 import { fail, ok } from "./lib/cli/output.js";
 import type { SearchProvider } from "./lib/core/types.js";
 import { summarizeBestChunk } from "./lib/docs/format.js";
 import { docsAddCollection, docsEmbed, docsListCollections, docsSearch, docsStatus, docsUpdate } from "./lib/docs/qmd.js";
 import { fetchContent } from "./lib/fetch/content.js";
+import { bookFlight, formatFlightLocationsText, formatFlightSearchText, getFlightsProfile, getFlightsSystemInfo, linkFlightsGithub, registerFlightsAgent, resolveFlightLocation, searchFlights, setupFlightsPayment, unlockFlightOffer, type LetsFGSearchOptions, type Passenger } from "./lib/flights/letsfg.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
 import { codeSearch } from "./lib/search/code.js";
 import { repoSearch } from "./lib/search/repo.js";
@@ -17,8 +18,10 @@ import { webSearch } from "./lib/search/web.js";
 import { twitterSearch, twitterRead, twitterThread } from "./lib/upstream/bird.js";
 import { createTraceSink } from "./lib/trace.js";
 
-function parseFlags(args: string[]): { flags: Map<string, string | boolean>; rest: string[] } {
-  const flags = new Map<string, string | boolean>();
+type FlagValue = string | boolean | string[];
+
+function parseFlags(args: string[]): { flags: Map<string, FlagValue>; rest: string[] } {
+  const flags = new Map<string, FlagValue>();
   const rest: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -29,13 +32,35 @@ function parseFlags(args: string[]): { flags: Map<string, string | boolean>; res
     const key = arg.slice(2);
     const next = args[i + 1];
     if (next && !next.startsWith("--")) {
-      flags.set(key, next);
+      const existing = flags.get(key);
+      if (Array.isArray(existing)) existing.push(next);
+      else if (typeof existing === "string") flags.set(key, [existing, next]);
+      else flags.set(key, next);
       i++;
     } else {
       flags.set(key, true);
     }
   }
   return { flags, rest };
+}
+
+function getStringFlag(flags: Map<string, FlagValue>, key: string): string | undefined {
+  const value = flags.get(key);
+  if (Array.isArray(value)) return value.at(-1);
+  return typeof value === "string" ? value : undefined;
+}
+
+function getStringFlags(flags: Map<string, FlagValue>, key: string): string[] {
+  const value = flags.get(key);
+  if (Array.isArray(value)) return value;
+  return typeof value === "string" ? [value] : [];
+}
+
+function getNumberFlag(flags: Map<string, FlagValue>, key: string): number | undefined {
+  const value = getStringFlag(flags, key);
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function printText(value: string): void {
@@ -59,6 +84,61 @@ function requireQuery(parts: string[], help: string, command: string[], asJson: 
     process.exit(1);
   }
   return query;
+}
+
+function parseFlightSearchOptions(flags: Map<string, FlagValue>): LetsFGSearchOptions {
+  const cabin = getStringFlag(flags, "cabin");
+  const sort = getStringFlag(flags, "sort");
+  const returnDate = getStringFlag(flags, "return") ?? getStringFlag(flags, "return-date");
+  const currency = getStringFlag(flags, "currency")?.toUpperCase();
+  return {
+    returnDate,
+    adults: getNumberFlag(flags, "adults"),
+    children: getNumberFlag(flags, "children"),
+    infants: getNumberFlag(flags, "infants"),
+    cabinClass: cabin === "M" || cabin === "W" || cabin === "C" || cabin === "F" ? cabin : undefined,
+    maxStopovers: getNumberFlag(flags, "max-stopovers"),
+    currency,
+    limit: getNumberFlag(flags, "limit"),
+    sort: sort === "price" || sort === "duration" ? sort : undefined,
+    maxBrowsers: getNumberFlag(flags, "max-browsers")
+  };
+}
+
+function parsePassengerJson(raw: string, command: string[], asJson: boolean): Passenger {
+  try {
+    const parsed = JSON.parse(raw) as Passenger;
+    if (!parsed || typeof parsed !== "object" || typeof parsed.id !== "string" || typeof parsed.given_name !== "string" || typeof parsed.family_name !== "string" || typeof parsed.born_on !== "string") {
+      throw new Error("Passenger JSON must include id, given_name, family_name, and born_on.");
+    }
+    return parsed;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (asJson) exitJsonError(command, `Invalid passenger JSON: ${message}`);
+    throw new Error(`Invalid passenger JSON: ${message}`);
+  }
+}
+
+function parsePassengers(flags: Map<string, FlagValue>, command: string[], asJson: boolean): Passenger[] {
+  const passengersJson = getStringFlag(flags, "passengers");
+  if (passengersJson) {
+    try {
+      const parsed = JSON.parse(passengersJson) as unknown;
+      if (!Array.isArray(parsed)) throw new Error("--passengers must be a JSON array.");
+      return parsed.map((item) => parsePassengerJson(JSON.stringify(item), command, asJson));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (asJson) exitJsonError(command, `Invalid passengers JSON: ${message}`);
+      throw new Error(`Invalid passengers JSON: ${message}`);
+    }
+  }
+
+  const passengerValues = getStringFlags(flags, "passenger");
+  if (passengerValues.length === 0) {
+    if (asJson) exitJsonError(command, "Missing --passenger or --passengers");
+    throw new Error("Missing --passenger or --passengers");
+  }
+  return passengerValues.map((value) => parsePassengerJson(value, command, asJson));
 }
 
 async function main(): Promise<void> {
@@ -122,6 +202,135 @@ async function main(): Promise<void> {
       if (asJson) return printJson(["inspect", "tools"], { ...result, trace: trace.snapshot() });
       printText(JSON.stringify(result, null, 2));
       return;
+    }
+
+    if (command === "flights") {
+      if (flags.has("help")) return void console.log(FLIGHTS_HELP);
+
+      const sub = rest[0];
+      const flightsSearchMode = !sub || !new Set(["search", "resolve", "register", "link-github", "unlock", "book", "setup-payment", "me", "system-info"]).has(sub);
+      const searchArgs = flightsSearchMode ? rest : sub === "search" ? rest.slice(1) : [];
+
+      if (flightsSearchMode || sub === "search") {
+        const [origin, destination, dateFrom] = searchArgs;
+        if (!origin || !destination || !dateFrom) {
+          if (asJson) exitJsonError(sub === "search" ? ["flights", "search"] : ["flights"], "Usage: search flights <origin> <destination> <date>");
+          console.error(FLIGHTS_HELP);
+          process.exit(1);
+        }
+        const options = parseFlightSearchOptions(flags);
+        trace.step("flights.search", "dispatch", { origin, destination, dateFrom, hasReturn: Boolean(options.returnDate), sort: options.sort });
+        const data = await trace.span("flights.search", `${origin}-${destination}`, async () => searchFlights(origin, destination, dateFrom, options));
+        addHistory({ kind: "flights", input: { origin, destination, dateFrom, options }, output: data });
+        if (asJson) return printJson(sub === "search" ? ["flights", "search"] : ["flights"], { origin, destination, dateFrom, ...data, trace: trace.snapshot() });
+        printText(formatFlightSearchText(data.result, data.offerSummaries, data.bestOffer));
+        return;
+      }
+
+      if (sub === "resolve") {
+        const query = requireQuery(rest.slice(1), FLIGHTS_HELP, ["flights", "resolve"], asJson);
+        trace.step("flights.resolve", "dispatch", { queryChars: query.length });
+        const data = await trace.span("flights.resolve", query, async () => resolveFlightLocation(query));
+        if (asJson) return printJson(["flights", "resolve"], { ...data, trace: trace.snapshot() });
+        printText(formatFlightLocationsText(query, data.locations));
+        return;
+      }
+
+      if (sub === "register") {
+        const name = getStringFlag(flags, "name");
+        const email = getStringFlag(flags, "email");
+        if (!name || !email) {
+          if (asJson) exitJsonError(["flights", "register"], "Usage: search flights register --name <agent> --email <email>");
+          console.error(FLIGHTS_HELP);
+          process.exit(1);
+        }
+        const owner = getStringFlag(flags, "owner");
+        const description = getStringFlag(flags, "description");
+        trace.step("flights.register", "dispatch", { name, email });
+        const data = await trace.span("flights.register", name, async () => registerFlightsAgent(name, email, owner, description));
+        if (asJson) return printJson(["flights", "register"], { ...data, trace: trace.snapshot() });
+        printText(JSON.stringify(data, null, 2));
+        return;
+      }
+
+      if (sub === "link-github") {
+        const username = rest[1];
+        if (!username) {
+          if (asJson) exitJsonError(["flights", "link-github"], "Usage: search flights link-github <username>");
+          console.error(FLIGHTS_HELP);
+          process.exit(1);
+        }
+        trace.step("flights.link-github", "dispatch", { username });
+        const data = await trace.span("flights.link-github", username, async () => linkFlightsGithub(username));
+        if (asJson) return printJson(["flights", "link-github"], { ...data, trace: trace.snapshot() });
+        printText(JSON.stringify(data, null, 2));
+        return;
+      }
+
+      if (sub === "unlock") {
+        const offerId = rest[1];
+        if (!offerId) {
+          if (asJson) exitJsonError(["flights", "unlock"], "Usage: search flights unlock <offer_id>");
+          console.error(FLIGHTS_HELP);
+          process.exit(1);
+        }
+        trace.step("flights.unlock", "dispatch", { offerId });
+        const data = await trace.span("flights.unlock", offerId, async () => unlockFlightOffer(offerId));
+        if (asJson) return printJson(["flights", "unlock"], { ...data, trace: trace.snapshot() });
+        printText(JSON.stringify(data, null, 2));
+        return;
+      }
+
+      if (sub === "book") {
+        const offerId = rest[1];
+        if (!offerId) {
+          if (asJson) exitJsonError(["flights", "book"], "Usage: search flights book <offer_id> --passenger '{...}' --email <email>");
+          console.error(FLIGHTS_HELP);
+          process.exit(1);
+        }
+        const email = getStringFlag(flags, "email");
+        if (!email) {
+          if (asJson) exitJsonError(["flights", "book"], "Missing --email");
+          throw new Error("Missing --email");
+        }
+        const phone = getStringFlag(flags, "phone");
+        const idempotencyKey = getStringFlag(flags, "idempotency-key");
+        const passengers = parsePassengers(flags, ["flights", "book"], asJson);
+        trace.step("flights.book", "dispatch", { offerId, passengers: passengers.length });
+        const data = await trace.span("flights.book", offerId, async () => bookFlight(offerId, passengers, email, phone, idempotencyKey));
+        if (asJson) return printJson(["flights", "book"], { ...data, trace: trace.snapshot() });
+        printText(JSON.stringify(data, null, 2));
+        return;
+      }
+
+      if (sub === "setup-payment") {
+        const token = getStringFlag(flags, "token");
+        trace.step("flights.setup-payment", "dispatch", { hasToken: Boolean(token) });
+        const data = await trace.span("flights.setup-payment", token ? "with-token" : "default", async () => setupFlightsPayment(token));
+        if (asJson) return printJson(["flights", "setup-payment"], { ...data, trace: trace.snapshot() });
+        printText(JSON.stringify(data, null, 2));
+        return;
+      }
+
+      if (sub === "me") {
+        trace.step("flights.me", "dispatch", { hasApiKey: Boolean(process.env.LETSFG_API_KEY) });
+        const data = await trace.span("flights.me", "profile", async () => getFlightsProfile());
+        if (asJson) return printJson(["flights", "me"], { ...data, trace: trace.snapshot() });
+        printText(JSON.stringify(data, null, 2));
+        return;
+      }
+
+      if (sub === "system-info") {
+        trace.step("flights.system-info", "dispatch", {});
+        const data = await trace.span("flights.system-info", "systemInfo", async () => getFlightsSystemInfo());
+        if (asJson) return printJson(["flights", "system-info"], { ...data, trace: trace.snapshot() });
+        printText(JSON.stringify(data.info, null, 2));
+        return;
+      }
+
+      if (asJson) exitJsonError(["flights"], "Unknown flights command");
+      console.error(FLIGHTS_HELP);
+      process.exit(1);
     }
 
     if (command === "web") {
@@ -355,7 +564,7 @@ async function main(): Promise<void> {
 
     if (command === "history") {
       if (flags.has("help")) return void console.log(HISTORY_HELP);
-      const kind = rest[0] as "web" | "code" | "fetch" | "docs" | undefined;
+      const kind = rest[0] as "web" | "code" | "fetch" | "docs" | "flights" | undefined;
       const entries = await trace.span("history", kind ?? "all", async () => listHistory(kind));
       if (asJson) return printJson(["history"], { kind: kind ?? null, count: entries.length, entries, trace: trace.snapshot() });
       for (const entry of entries) console.log(`${entry.createdAt}  ${entry.kind}  ${entry.id}`);
