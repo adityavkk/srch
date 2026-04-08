@@ -10,7 +10,9 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
     "check": "tsc --noEmit -p tsconfig.json",
-    "test": "node --import tsx --test test/**/*.test.ts"
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "install:optional": "tsx src/cli.ts install",
+    "install:all": "tsx src/cli.ts install all"
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",

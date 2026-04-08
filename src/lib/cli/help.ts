@@ -13,6 +13,7 @@ Domains:
   ask            cross-domain retrieval
   twitter        legacy X/Twitter command
   x.com          alias for twitter
+  install        install optional domain dependencies
   history        inspect prior runs
   inspect        inspect backends/config
   config         safe config management
@@ -22,6 +23,7 @@ Examples:
   search web bun sqlite wasm
   search code repo facebook/react "useEffect cleanup"
   search flights LHR BCN 2026-06-15
+  search install flights
   search social x "bun runtime"
   search ask compare "best state management for a docs-heavy react app"
   search fetch https://clig.dev
@@ -36,8 +38,38 @@ Next help:
   search code --help
   search docs --help
   search flights --help
+  search install --help
   search social --help
   search config --help
+`;
+
+export const INSTALL_HELP = `search install — install optional domain dependencies
+
+What it does:
+  installs optional backends and local runtimes for selected srch domains
+
+Usage:
+  search install flights [--global] [--dry-run] [--json]
+  search install all [--global] [--dry-run] [--json]
+
+Targets:
+  flights   install LetsFG npm package + Python runtime + Chromium
+  all       install every current optional domain dependency
+
+Flags:
+  --global   install npm packages globally when srch is globally installed
+  --dry-run  print the plan without executing it
+
+Examples:
+  search install flights
+  search install flights --dry-run --json
+  search install all
+  search install all --global
+
+Notes:
+  - flights installs letsfg through npm and Python
+  - Chromium is installed through Python Playwright for LetsFG local search
+  - use this instead of remembering the individual setup commands
 `;
 
 export const FLIGHTS_HELP = `search flights — optional flight search via LetsFG
@@ -48,8 +80,12 @@ What it does:
   stops at research/search and hands action workflows off to native letsfg
 
 Install:
+  search install flights
+  search install flights --dry-run
+
+Manual fallback:
   npm install letsfg
-  pip install letsfg && playwright install chromium
+  python3 -m pip install letsfg && python3 -m playwright install chromium
 
 Usage:
   search flights <origin> <destination> <date> [flags]

@@ -3,7 +3,7 @@ import { getConfigSafe, setProvider, setSecretRef, unsetField } from "./lib/conf
 import { getConfigPath } from "./lib/core/config.js";
 import { inspectTools } from "./lib/cli/tools.js";
 import { CONFIG_HELP } from "./lib/cli/config-help.js";
-import { CODE_HELP, DOCS_HELP, FETCH_HELP, FLIGHTS_HELP, HISTORY_HELP, INSPECT_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
+import { CODE_HELP, DOCS_HELP, FETCH_HELP, FLIGHTS_HELP, HISTORY_HELP, INSPECT_HELP, INSTALL_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
 import { TWITTER_HELP } from "./lib/cli/twitter-help.js";
 import { fail, ok } from "./lib/cli/output.js";
 import type { SearchProvider } from "./lib/core/types.js";
@@ -12,6 +12,7 @@ import { docsAddCollection, docsEmbed, docsListCollections, docsSearch, docsStat
 import { fetchContent } from "./lib/fetch/content.js";
 import { formatFlightLocationsText, formatFlightSearchText, resolveFlightLocation, searchFlights, type LetsFGSearchOptions } from "./lib/flights/letsfg.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
+import { buildInstallPlan, executeInstallPlan, isOptionalInstallTarget, renderInstallPlan } from "./lib/install/optional.js";
 import { codeSearch } from "./lib/search/code.js";
 import { repoSearch } from "./lib/search/repo.js";
 import { webSearch } from "./lib/search/web.js";
@@ -165,6 +166,31 @@ async function main(): Promise<void> {
       const result = await trace.span("inspect", "collect tool diagnostics", async () => inspectTools());
       if (asJson) return printJson(["inspect", "tools"], { ...result, trace: trace.snapshot() });
       printText(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    if (command === "install") {
+      if (flags.has("help")) return void console.log(INSTALL_HELP);
+      const target = rest[0];
+      if (!isOptionalInstallTarget(target)) {
+        if (asJson) exitJsonError(["install"], "Unknown install target. Use `flights` or `all`.");
+        console.error(INSTALL_HELP);
+        process.exit(1);
+      }
+
+      const globalInstall = flags.has("global");
+      const dryRun = flags.has("dry-run");
+      const plan = buildInstallPlan(target, globalInstall);
+      trace.step("install.plan", target, { globalInstall, dryRun, steps: plan.steps.length });
+
+      if (!asJson) {
+        printText(renderInstallPlan(plan));
+        if (dryRun) return;
+      }
+
+      const result = await trace.span("install.execute", target, async () => executeInstallPlan(plan, { dryRun, captureOutput: asJson }));
+      if (asJson) return printJson(["install", target], { ...result, trace: trace.snapshot() });
+      printText(dryRun ? "Dry run complete." : "Optional install complete.");
       return;
     }
 

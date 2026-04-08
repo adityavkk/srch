@@ -97,3 +97,37 @@ test("search flights returns a clear install hint when LetsFG is missing", () =>
   assert.match(payload.error?.message ?? "", /npm install letsfg/);
   assert.match(payload.error?.message ?? "", /pip install letsfg/);
 });
+
+test("search install flights dry-run returns install plan", () => {
+  const result = runCli(["install", "flights", "--dry-run", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+
+  const payload = parseJson(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.deepEqual(payload.command, ["install", "flights"]);
+  assert.equal(payload.data?.dryRun, true);
+  assert.equal(payload.data?.plan.target, "flights");
+  assert.equal(payload.data?.plan.steps.length, 3);
+  assert.equal(payload.data?.plan.steps[0].command, "npm");
+  assert.deepEqual(payload.data?.plan.steps[0].args, ["install", "letsfg"]);
+});
+
+test("search install all dry-run supports global installs", () => {
+  const result = runCli(["install", "all", "--dry-run", "--global", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+
+  const payload = parseJson(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.deepEqual(payload.command, ["install", "all"]);
+  assert.equal(payload.data?.plan.globalInstall, true);
+  assert.deepEqual(payload.data?.plan.steps[0].args, ["install", "-g", "letsfg"]);
+});
+
+test("search install rejects unknown targets", () => {
+  const result = runCli(["install", "hotels", "--json"]);
+  assert.equal(result.status, 1);
+
+  const payload = parseJson(result.stderr);
+  assert.equal(payload.ok, false);
+  assert.match(payload.error?.message ?? "", /Unknown install target/);
+});

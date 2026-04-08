@@ -20,6 +20,26 @@ ln -s $(pwd)/dist/cli.js ~/bin/search
 
 `search flights` is intentionally optional so the base install stays lean.
 
+You can install optional domains through `srch` directly:
+
+```bash
+search install flights
+search install all
+```
+
+If you want to preview the commands first:
+
+```bash
+search install flights --dry-run
+```
+
+If you're setting up from source before linking the binary, you can also use npm scripts:
+
+```bash
+npm run install:optional -- flights
+npm run install:all
+```
+
 Install the companion JS SDK only if you want flight search + booking:
 
 ```bash
@@ -36,7 +56,7 @@ playwright install chromium
 If `search` is installed globally, install the companion package globally too:
 
 ```bash
-npm install -g letsfg
+search install flights --global
 ```
 
 `srch` only brings in LetsFG's search surface. Booking and account workflows stay in the native `letsfg` tool.
@@ -53,6 +73,7 @@ search code <query>                   code/docs context
 search code repo <target> <query>     deep repo search
 search docs <query>                   local doc search
 search flights <origin> <dest> <date> optional flights via LetsFG
+search install <target>                 install optional domains
 search social <query>                 social retrieval
 search social x <query>               X/Twitter subdomain
 search fetch <url>                    readable page extraction
@@ -143,6 +164,14 @@ Backed by the optional LetsFG TypeScript SDK.
 - flight offer search
 - route / airport resolution
 - handoff guidance into native `letsfg`
+
+Setup helpers:
+
+```bash
+search install flights
+search install flights --dry-run --json
+search install all
+```
 
 Default search maps to LetsFG's `search` flow:
 

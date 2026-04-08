@@ -42,9 +42,21 @@ npm run build
 Optional flights backend:
 
 ```bash
+search install flights
+```
+
+Preview only:
+
+```bash
+search install flights --dry-run
+```
+
+Equivalent manual steps:
+
+```bash
 npm install letsfg
-pip install letsfg
-playwright install chromium
+python3 -m pip install letsfg
+python3 -m playwright install chromium
 ```
 
 ## End-to-end journey
