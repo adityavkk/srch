@@ -16,54 +16,45 @@ npm run build
 ln -s $(pwd)/dist/cli.js ~/bin/search
 ```
 
-### Optional flights domain
+### Flights setup
 
-`search flights` is intentionally optional so the base install stays lean.
+`search flights` is now built in via Duffel.
 
-You can install optional domains through `srch` directly:
-
-```bash
-search install flights
-search install all
-```
-
-If you want to preview the commands first:
+Setup the access token once:
 
 ```bash
-search install flights --dry-run
+search config set-secret-ref duffelAccessToken op 'op://agent-dev/Duffel/access token'
 ```
 
-If you're setting up from source before linking the binary, you can also use npm scripts:
+Manual fallback:
 
 ```bash
-npm run install:optional -- flights
-npm run install:all
+export DUFFEL_ACCESS_TOKEN=dfl_test_xxx
 ```
 
-Install the companion JS SDK only if you want flight search + booking:
-
-```bash
-npm install letsfg
-```
-
-LetsFG's local search runtime also needs Python + Playwright:
-
-```bash
-pip install letsfg
-playwright install chromium
-```
-
-If `search` is installed globally, install the companion package globally too:
-
-```bash
-search install flights --global
-```
-
-`srch` only brings in LetsFG's search surface. Booking and account workflows stay in the native `letsfg` tool.
+Duffel has free signup and test-mode access. Production pricing is commercial and not clearly public in their docs.
 
 ## What it does
 
 `search` is a single CLI that routes queries to the right backend and returns grounded, cited results. Designed for LLM agents and humans who want answers fast with minimal tokens.
+
+## Output and persistence
+
+Default output is concise human-readable text.
+
+Use `--json` for a stable automation envelope.
+
+Use `--out <path>` to persist the final rendered output to a file:
+- without `--json`, saves the same text shown in the terminal
+- with `--json`, saves the same JSON envelope shown in the terminal
+
+Examples:
+
+```bash
+search web "bun sqlite wasm" --out results.txt
+search code repo facebook/react "useEffect cleanup" --json --out react-search.json
+search flights GDN BER 2026-03-03 --out fares.txt
+```
 
 ## Commands
 
@@ -72,8 +63,9 @@ search web <query>                    web retrieval
 search code <query>                   code/docs context
 search code repo <target> <query>     deep repo search
 search docs <query>                   local doc search
-search flights <origin> <dest> <date> optional flights via LetsFG
-search install <target>                 install optional domains
+search flights <origin> <dest> <date> live fares via Duffel
+search rewards-flights <o> <d>        award flights via Seats.aero
+search install <target>               install optional domains
 search social <query>                 social retrieval
 search social x <query>               X/Twitter subdomain
 search fetch <url>                    readable page extraction
@@ -97,6 +89,7 @@ Examples:
 search web "bun sqlite"
 search code repo facebook/react "useEffect cleanup"
 search flights LHR BCN 2026-06-15
+search rewards-flights JFK CDG --date 2026-07-01 --cabin business
 search social x thread https://x.com/.../status/123
 search ask compare "best state management for a docs-heavy react app"
 ```
@@ -158,50 +151,77 @@ search docs auth flow --json
 
 ## Flights
 
-Backed by the optional LetsFG TypeScript SDK.
+Backed by the official Duffel JavaScript SDK.
 
-`srch` exposes the research side only:
-- flight offer search
+`srch` exposes:
+- live fare search
 - route / airport resolution
-- handoff guidance into native `letsfg`
+- reliable cabin-constrained filtering based on returned segment cabins
 
-Setup helpers:
+Setup:
 
 ```bash
-search install flights
-search install flights --dry-run --json
-search install all
+search config set-secret-ref duffelAccessToken op 'op://agent-dev/Duffel/access token'
 ```
 
-Default search maps to LetsFG's `search` flow:
+Manual fallback:
 
 ```bash
-search flights GDN BER 2026-03-03
+export DUFFEL_ACCESS_TOKEN=dfl_test_xxx
+```
+
+Examples:
+
+```bash
+search flights JFK DEL 2026-05-15 --cabin C --sort price
 search flights search LON BCN 2026-04-01 --return 2026-04-08 --sort price --json
-```
-
-Location resolution:
-
-```bash
 search flights resolve "berlin"
 ```
 
 Notes:
-- `search` and `resolve` use LetsFG's local Python runtime
-- `srch` intentionally stops at search/research and does not book flights
-- after finding an offer in `srch`, switch to native `letsfg` for action workflows
+- Duffel supports free signup and test-mode access
+- production pricing is commercial and not clearly public in docs I found
+- `srch` filters returned offers by actual segment cabin when you pass `--cabin`
+- `srch` currently exposes search and place resolution, not booking
 
-Native `letsfg` capabilities you use after handoff:
+## Rewards flights
+
+Backed by the official Seats.aero API.
+
+`srch` exposes award-search workflows directly:
+- cached award availability by route
+- loyalty program filtering
+- trip-level detail lookup
+- monitored route browsing by mileage program
+
+Setup:
 
 ```bash
-letsfg register --name srch-agent --email me@example.com
-letsfg link-github your-github-user
-letsfg unlock off_xxx
-letsfg setup-payment
-letsfg book off_xxx --passenger '{"id":"pas_xxx","given_name":"John","family_name":"Doe","born_on":"1990-01-15"}' --email john@example.com
-letsfg me
-letsfg system-info
+search rewards-flights auth instructions
+search rewards-flights auth set pro_xxx
+search config set-secret-ref seatsAeroApiKey op 'op://agent-dev/Seats Aero/API Key'
 ```
+
+Manual fallback:
+
+```bash
+export SEATS_AERO_API_KEY=pro_xxx
+```
+
+Examples:
+
+```bash
+search rewards-flights auth status
+search rewards-flights JFK CDG --date 2026-07-01 --cabin business --source flyingblue
+search rewards-flights search SFO HND --start-date 2026-10-01 --end-date 2026-10-10 --cabin first --direct --json
+search rewards-flights routes aeroplan
+search rewards-flights trips avail_123 --json
+```
+
+Notes:
+- Seats.aero cached search can lag live airline inventory
+- `srch` uses Seats.aero cached endpoints, not the commercial-only Live Search API
+- always verify award space before transferring points or miles
 
 ## Travel workflow
 
@@ -222,17 +242,12 @@ search fetch https://example.com/barcelona-neighborhood-guide
 ```bash
 search flights JFK BCN 2026-06-12 --return 2026-06-19 --sort price
 search flights resolve "barcelona"
+search rewards-flights JFK BCN --start-date 2026-06-12 --end-date 2026-06-19 --cabin business --source flyingblue
 ```
 
-3. Take action in native tools
+3. Take action in your booking channel
 
-```bash
-letsfg unlock off_xxx
-letsfg setup-payment
-letsfg book off_xxx --passenger '{"id":"pas_xxx",...}' --email you@example.com
-```
-
-This keeps `srch` as the unified research surface and uses purpose-built tools like `letsfg` when you are ready to transact.
+Use `srch` to compare live fares, then complete the booking in your preferred airline, OTA, or future booking integration.
 
 ## Fetch content
 
@@ -273,6 +288,8 @@ search social reddit "react compiler"
 
 **`--json`**: stable envelope for automation.
 
+**`--out <path>`**: persist the final rendered output to a file.
+
 ```json
 {
   "ok": true,
@@ -287,6 +304,13 @@ search social reddit "react compiler"
 ```
 
 **`--verbose`**: trace view on stderr showing routing, timing, and backend selection.
+
+Examples:
+
+```bash
+search web react compiler --out web.txt
+search web react compiler --json --out web.json
+```
 
 ## Safe config
 
@@ -320,7 +344,7 @@ search config --help
 | Web search | Exa, Brave, Perplexity, Gemini API, Gemini Web (cookie fallback) |
 | Code search | Exa Context API, Exa MCP, Context7, DeepWiki |
 | Local docs | QMD SDK (BM25 + vector + reranking) |
-| Flights | Optional LetsFG TypeScript SDK + LetsFG local Python runtime |
+| Flights | Duffel JavaScript SDK |
 | Page fetch | Readability, Jina Reader, Gemini URL Context, RSC parser |
 | GitHub | Clone + API fallback via `gh` |
 | PDF | Text extraction via unpdf |

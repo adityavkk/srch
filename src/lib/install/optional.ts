@@ -39,28 +39,10 @@ export function isOptionalInstallTarget(value: string | undefined): value is Opt
 }
 
 export function buildInstallPlan(target: OptionalInstallTarget, globalInstall = false): InstallPlan {
-  const pythonCmd = process.platform === "win32" ? "python" : "python3";
   const steps: InstallStep[] = [];
 
   if (target === "flights" || target === "all") {
-    steps.push({
-      id: "npm-letsfg",
-      title: `Install letsfg npm package${globalInstall ? " globally" : " locally"}`,
-      command: "npm",
-      args: globalInstall ? ["install", "-g", "letsfg"] : ["install", "letsfg"]
-    });
-    steps.push({
-      id: "python-letsfg",
-      title: "Install LetsFG Python runtime",
-      command: pythonCmd,
-      args: ["-m", "pip", "install", "letsfg"]
-    });
-    steps.push({
-      id: "playwright-chromium",
-      title: "Install Chromium for LetsFG local search",
-      command: pythonCmd,
-      args: ["-m", "playwright", "install", "chromium"]
-    });
+    // Duffel is built in. Flights only require API token setup now.
   }
 
   return {
@@ -75,6 +57,9 @@ export function buildInstallPlan(target: OptionalInstallTarget, globalInstall = 
 
 export function renderInstallPlan(plan: InstallPlan): string {
   const lines = [`Install target: ${plan.target}`];
+  if (plan.steps.length === 0 && plan.includes.flights) {
+    lines.push("- flights: no package install required; configure DUFFEL_ACCESS_TOKEN or search config set-secret-ref duffelAccessToken ...");
+  }
   for (const step of plan.steps) lines.push(`- ${step.title}: ${step.command} ${step.args.join(" ")}`);
   return lines.join("\n");
 }

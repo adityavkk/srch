@@ -1,7 +1,7 @@
 import { loadConfig, saveConfig, type SearchConfig, type SecretField } from "../core/config.js";
 import type { SearchProvider } from "../core/types.js";
 
-const SECRET_FIELDS = new Set(["exaApiKey", "perplexityApiKey", "geminiApiKey", "braveApiKey"] as const);
+const SECRET_FIELDS = new Set(["exaApiKey", "perplexityApiKey", "geminiApiKey", "braveApiKey", "seatsAeroApiKey", "duffelAccessToken"] as const);
 const PUBLIC_FIELDS = new Set(["provider"] as const);
 
 type PublicField = "provider";
@@ -30,7 +30,7 @@ export function setProvider(provider: string): SearchConfig {
 
 export function setSecretRef(field: string, source: string, key: string): SearchConfig {
   if (!SECRET_FIELDS.has(field as SecretField)) {
-    throw new Error("Invalid secret field. Use exaApiKey|perplexityApiKey|geminiApiKey|braveApiKey");
+    throw new Error("Invalid secret field. Use exaApiKey|perplexityApiKey|geminiApiKey|braveApiKey|seatsAeroApiKey|duffelAccessToken");
   }
   if (source !== "fnox" && source !== "op") {
     throw new Error("Invalid secret source. Use fnox|op");
@@ -42,6 +42,23 @@ export function setSecretRef(field: string, source: string, key: string): Search
   config.secrets ??= {};
   config.secrets[field as SecretField] = { source: source as "fnox" | "op", key: key.trim() };
   delete config[field as SecretField];
+  saveConfig(config);
+  return redactConfig(config);
+}
+
+export function setSecret(field: string, value: string): SearchConfig {
+  if (!SECRET_FIELDS.has(field as SecretField)) {
+    throw new Error("Invalid secret field. Use exaApiKey|perplexityApiKey|geminiApiKey|braveApiKey|seatsAeroApiKey|duffelAccessToken");
+  }
+  if (!value.trim()) {
+    throw new Error("Missing secret value");
+  }
+  const config = loadConfig();
+  config[field as SecretField] = value.trim();
+  if (config.secrets && field in config.secrets) {
+    delete config.secrets[field as SecretField];
+    if (Object.keys(config.secrets).length === 0) delete config.secrets;
+  }
   saveConfig(config);
   return redactConfig(config);
 }

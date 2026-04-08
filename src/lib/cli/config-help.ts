@@ -3,16 +3,20 @@ export const CONFIG_HELP = `search config — safe config management
 Usage:
   search config [--json]
   search config set provider <auto|exa|perplexity|gemini> [--json]
-  search config set-secret-ref <exaApiKey|perplexityApiKey|geminiApiKey|braveApiKey> <fnox|op> <KEY_NAME> [--json]
+  search config set-secret <exaApiKey|perplexityApiKey|geminiApiKey|braveApiKey|seatsAeroApiKey|duffelAccessToken> <value> [--json]
+  search config set-secret-ref <exaApiKey|perplexityApiKey|geminiApiKey|braveApiKey|seatsAeroApiKey|duffelAccessToken> <fnox|op> <KEY_NAME> [--json]
   search config unset <field> [--json]
 
 Examples:
   search config --json
   search config set provider exa
+  search config set-secret duffelAccessToken dfl_test_xxx
+  search config set-secret seatsAeroApiKey pro_xxx
   search config set-secret-ref exaApiKey fnox EXA_API_KEY
   search config set-secret-ref exaApiKey op 'op://agent-dev/exa/API Key'
   search config set-secret-ref perplexityApiKey fnox PERPLEXITY_API_KEY
   search config set-secret-ref braveApiKey op 'op://agent-dev/Brave Search/api key'
+  search config set-secret-ref seatsAeroApiKey op 'op://agent-dev/Seats Aero/API Key'
   search config unset exaApiKey
 
 Notes:

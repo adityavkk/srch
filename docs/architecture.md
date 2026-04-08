@@ -60,6 +60,7 @@ Examples:
 search web "bun sqlite"
 search code repo facebook/react "useEffect cleanup"
 search flights LHR BCN 2026-06-15
+search rewards-flights JFK CDG --date 2026-07-01 --cabin business
 search social reddit "react compiler"
 search social x thread https://x.com/.../status/123
 search ask compare "best state management for a docs-heavy react app"
@@ -148,16 +149,17 @@ Examples:
 - `code`
 - `docs`
 - `flights`
+- `rewards-flights`
 - `social`
 - `fetch`
 - `ask`
 
-`flights` is the first optional domain-backed integration: the base CLI stays dependency-light, and users can opt into the LetsFG SDK when they want a travel source installed locally.
+`flights` is a first-class provider-backed domain powered by Duffel.
 
 Current product posture for `flights`:
 - `srch` owns research and fare discovery
-- native tools like `letsfg` own transactional workflows such as unlock, payment setup, and booking
-- domain outputs should include an explicit handoff path into the action tool
+- external booking channels own the checkout and post-booking workflow
+- domain outputs should prefer reliable live-search evidence over broad but noisy scraping
 
 ### Subdomains
 
@@ -261,11 +263,9 @@ Examples:
 - jina-reader
 - readability
 - pdf-extractor
-- letsfg-sdk
+- duffel-sdk
 
 Optional sources are valid when they unlock a distinct domain but would otherwise bloat the default install. The runtime should detect them explicitly and return actionable install hints instead of failing mysteriously.
-
-Some optional sources are intentionally search-only inside `srch`. In those cases the source powers discovery, while downstream action remains delegated to the source's native tool or API surface.
 
 Sources should do one thing well and not own the full plan.
 
@@ -838,6 +838,120 @@ module
 ```
 
 That shared compilation model is what makes both first-class.
+
+## Output architecture and persisted artifacts
+
+A retrieval run should not write directly to stdout from the strategy or source layer.
+
+Instead, the runtime should separate:
+- execution
+- normalization
+- rendering
+- sinks
+
+Target shape:
+
+```text
+query/task
+  -> plan
+  -> run
+  -> evidence
+  -> result
+  -> render
+  -> sinks
+```
+
+Where:
+- `result` = normalized command/run outcome
+- `render` = transform result into human text or stable JSON envelope
+- `sinks` = terminal, file artifact, history, later maybe db/http/clipboard
+
+### Current CLI migration target
+
+The current CLI has useful domain modules already, but `src/cli.ts` still mixes:
+- routing
+- execution
+- formatting
+- stdout/stderr writes
+- history side effects
+
+The next architecture step should introduce a normalized post-execution object at the CLI boundary.
+
+Example shape:
+
+```ts
+interface CliSuccessResult {
+  command: string[];
+  kind: string;
+  data: unknown;
+  text: string;
+}
+```
+
+This is intentionally simple:
+- `data` preserves structured machine output
+- `text` preserves concise human output
+- `command` preserves stable envelope identity
+- `kind` leaves room for history and artifact conventions
+
+### Output emitters and sinks
+
+The CLI should centralize output in a shared emitter layer.
+
+Responsibilities:
+- render JSON envelopes for `--json`
+- render human text by default
+- write to stdout/stderr
+- persist artifacts when requested
+- later fan out to additional sinks without touching domain logic
+
+Near-term sink set:
+- terminal sink
+- file sink via `--out <path>`
+- history sink
+
+Longer-term sink set:
+- artifact directory sink
+- sqlite/db sink
+- remote run sink
+- clipboard sink
+
+### Persisted artifact semantics
+
+For the near term, `--out <path>` should persist the final rendered representation:
+- with `--json`, save the exact stable JSON envelope
+- without `--json`, save the exact human-readable text output
+
+This keeps behavior boring and predictable:
+- terminal output and file output match
+- scripts can opt into JSON explicitly
+- humans can save readable reports without extra format flags
+
+Later, the engine may add separate concepts such as:
+- rendered artifact output
+- normalized run/evidence export
+- trace export
+- plan export
+
+But the first step should stay simple.
+
+### Why this matters for the engine
+
+This output boundary is not just CLI cleanup. It is part of the programmable retrieval model.
+
+A programmable retrieval engine should treat outputs as first-class runtime products:
+- result
+- evidence
+- trace
+- artifact
+
+That means strategies and sources focus on retrieval, while emitters/sinks own delivery.
+
+In practice this enables:
+- reusable consumer SDK responses
+- stable automation envelopes
+- explicit persistence of search results to files
+- future multi-sink execution without duplicating command logic
 
 ## Example value by layer
 

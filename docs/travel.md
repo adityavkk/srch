@@ -7,9 +7,10 @@ Use it to:
 - compare neighborhoods and hotels
 - sketch itineraries
 - discover flights and fares
+- compare award travel options with points and miles
 - collect links and evidence before booking
 
-Use native action tools like `letsfg` when you are ready to transact.
+Use `srch` to research and compare, then complete the booking in your preferred airline, OTA, or future booking integration.
 
 ## Product boundary
 
@@ -18,15 +19,13 @@ Use native action tools like `letsfg` when you are ready to transact.
 - page fetch and extraction
 - flight discovery through `search flights`
 - route and airport resolution through `search flights resolve`
-- action handoff guidance into `letsfg`
+- award availability discovery through `search rewards-flights`
+- reward-search auth guidance through `search rewards-flights auth`
 
-`letsfg` owns:
-- agent registration
-- GitHub linking for LetsFG access
-- offer unlock
-- payment setup
-- booking
-- account/profile inspection
+External booking channels own:
+- final booking completion
+- passenger and payment collection
+- post-booking servicing
 
 This split keeps `srch` focused on search and synthesis while letting purpose-built transactional tools handle real booking flows.
 
@@ -39,24 +38,16 @@ npm install
 npm run build
 ```
 
-Optional flights backend:
+Flights provider setup:
 
 ```bash
-search install flights
+search config set-secret-ref duffelAccessToken op 'op://agent-dev/Duffel/access token'
 ```
 
-Preview only:
+Manual fallback:
 
 ```bash
-search install flights --dry-run
-```
-
-Equivalent manual steps:
-
-```bash
-npm install letsfg
-python3 -m pip install letsfg
-python3 -m playwright install chromium
+export DUFFEL_ACCESS_TOKEN=dfl_test_xxx
 ```
 
 ## End-to-end journey
@@ -106,43 +97,29 @@ Then search fares.
 ```bash
 search flights JFK BCN 2026-06-12 --return 2026-06-19 --sort price
 search flights EWR BCN 2026-06-12 --return 2026-06-19 --sort duration
+search rewards-flights auth status
+search rewards-flights JFK BCN --start-date 2026-06-12 --end-date 2026-06-19 --cabin business --source flyingblue
 ```
 
 What `search flights` gives you:
-- fare discovery through LetsFG search
+- live fare discovery through Duffel
 - normalized result output inside `srch`
-- best-offer summary
-- explicit handoff commands for `letsfg`
+- airport/city resolution through Duffel suggestions
+- cabin filtering validated against returned segment data
 
-### 4. Switch to action mode
+What `search rewards-flights` gives you:
+- cached points-and-miles availability via Seats.aero
+- loyalty program filtering like `flyingblue`, `aeroplan`, or `alaska`
+- trip-level award detail lookup for a specific availability result
+- monitored route browsing for a mileage program
 
-Once you know what you want, switch to `letsfg`.
+### 4. Switch to booking
 
-```bash
-letsfg register --name my-agent --email me@example.com
-letsfg link-github <github-username>
-letsfg unlock <offer_id>
-letsfg setup-payment
-letsfg book <offer_id> --passenger '{"id":"pas_xxx",...}' --email you@example.com
-letsfg me
-```
+Once you know what you want, use the fare research from `srch` to complete the booking in your preferred booking channel.
 
 This is the intended transition:
 - `srch` for research and decision support
-- `letsfg` for irreversible or account-bound steps
-
-## Why Playwright is part of the setup
-
-LetsFG's local search runtime uses browser automation for airline connectors.
-
-That is why the optional travel setup includes:
-
-```bash
-pip install letsfg
-playwright install chromium
-```
-
-`srch` does not use Playwright directly. It relies on LetsFG's local runtime for flight search.
+- airline or OTA checkout for irreversible booking steps
 
 ## Command reference
 
@@ -152,18 +129,9 @@ In `srch`:
 search flights <origin> <destination> <date>
 search flights search <origin> <destination> <date>
 search flights resolve <query>
-```
-
-In native `letsfg`:
-
-```bash
-letsfg register --name my-agent --email me@example.com
-letsfg link-github <github-username>
-letsfg unlock <offer_id>
-letsfg setup-payment
-letsfg book <offer_id> --passenger '{...}' --email you@example.com
-letsfg me
-letsfg system-info
+search rewards-flights <origin> <destination>
+search rewards-flights routes <source>
+search rewards-flights trips <availability_id>
 ```
 
 ## Design principle
@@ -174,6 +142,6 @@ The intended UX is:
 1. Research in one place with `srch`
 2. Compare options in one place with `srch`
 3. Decide in `srch`
-4. Handoff cleanly to the action tool when it is time to book
+4. Hand off cleanly to a booking channel when it is time to buy
 
 That keeps the high-trust search layer separate from the high-risk transactional layer.

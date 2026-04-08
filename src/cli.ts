@@ -1,23 +1,25 @@
 #!/usr/bin/env node
-import { getConfigSafe, setProvider, setSecretRef, unsetField } from "./lib/config/commands.js";
-import { getConfigPath } from "./lib/core/config.js";
+import { getConfigSafe, setProvider, setSecret, setSecretRef, unsetField } from "./lib/config/commands.js";
+import { getConfigPath, loadConfig } from "./lib/core/config.js";
 import { inspectTools } from "./lib/cli/tools.js";
 import { CONFIG_HELP } from "./lib/cli/config-help.js";
-import { CODE_HELP, DOCS_HELP, FETCH_HELP, FLIGHTS_HELP, HISTORY_HELP, INSPECT_HELP, INSTALL_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
+import { CODE_HELP, DOCS_HELP, FETCH_HELP, FLIGHTS_HELP, HISTORY_HELP, INSPECT_HELP, INSTALL_HELP, REWARDS_FLIGHTS_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
 import { TWITTER_HELP } from "./lib/cli/twitter-help.js";
-import { fail, ok } from "./lib/cli/output.js";
+import { emitFailure, emitSuccess } from "./lib/cli/emit.js";
 import type { SearchProvider } from "./lib/core/types.js";
 import { summarizeBestChunk } from "./lib/docs/format.js";
 import { docsAddCollection, docsEmbed, docsListCollections, docsSearch, docsStatus, docsUpdate } from "./lib/docs/qmd.js";
 import { fetchContent } from "./lib/fetch/content.js";
-import { formatFlightLocationsText, formatFlightSearchText, resolveFlightLocation, searchFlights, type LetsFGSearchOptions } from "./lib/flights/letsfg.js";
+import { formatFlightLocationsText, formatFlightSearchText, resolveFlightLocation, searchFlights, type DuffelFlightSearchOptions } from "./lib/flights/duffel.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
 import { buildInstallPlan, executeInstallPlan, isOptionalInstallTarget, renderInstallPlan } from "./lib/install/optional.js";
+import { formatRewardsFlightSearchText, formatRewardsRoutesText, formatRewardsTripsText, getRewardFlightRoutes, getRewardFlightTrips, searchRewardFlights, type RewardsCabin, type RewardsFlightSearchOptions } from "./lib/rewards-flights/seats-aero.js";
 import { codeSearch } from "./lib/search/code.js";
 import { repoSearch } from "./lib/search/repo.js";
 import { webSearch } from "./lib/search/web.js";
 import { twitterSearch, twitterRead, twitterThread } from "./lib/upstream/bird.js";
 import { createTraceSink } from "./lib/trace.js";
+import { inspectSecretSources } from "./lib/core/secrets.js";
 
 type FlagValue = string | boolean | string[];
 
@@ -64,17 +66,8 @@ function getNumberFlag(flags: Map<string, FlagValue>, key: string): number | und
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function printText(value: string): void {
-  console.log(value);
-}
-
-function printJson(command: string[], data: unknown): void {
-  console.log(JSON.stringify(ok(command, data), null, 2));
-}
-
 function exitJsonError(command: string[], message: string): never {
-  console.error(JSON.stringify(fail(command, message), null, 2));
-  process.exit(1);
+  emitFailure(command, message, { asJson: true });
 }
 
 function requireQuery(parts: string[], help: string, command: string[], asJson: boolean): string {
@@ -87,7 +80,7 @@ function requireQuery(parts: string[], help: string, command: string[], asJson: 
   return query;
 }
 
-function parseFlightSearchOptions(flags: Map<string, FlagValue>): LetsFGSearchOptions {
+function parseFlightSearchOptions(flags: Map<string, FlagValue>): DuffelFlightSearchOptions {
   const cabin = getStringFlag(flags, "cabin");
   const sort = getStringFlag(flags, "sort");
   const returnDate = getStringFlag(flags, "return") ?? getStringFlag(flags, "return-date");
@@ -101,8 +94,63 @@ function parseFlightSearchOptions(flags: Map<string, FlagValue>): LetsFGSearchOp
     maxStopovers: getNumberFlag(flags, "max-stopovers"),
     currency,
     limit: getNumberFlag(flags, "limit"),
-    sort: sort === "price" || sort === "duration" ? sort : undefined,
-    maxBrowsers: getNumberFlag(flags, "max-browsers")
+    sort: sort === "price" || sort === "duration" ? sort : undefined
+  };
+}
+
+function parseRewardsFlightSearchOptions(originAirport: string, destinationAirport: string, flags: Map<string, FlagValue>): RewardsFlightSearchOptions {
+  const date = getStringFlag(flags, "date");
+  const startDate = date ?? getStringFlag(flags, "start-date");
+  const endDate = date ?? getStringFlag(flags, "end-date");
+  const cabins = getStringFlags(flags, "cabin").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean) as RewardsCabin[];
+  const sources = getStringFlags(flags, "source").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+  const carriers = getStringFlags(flags, "carrier").flatMap((value) => value.split(",")).map((value) => value.trim().toUpperCase()).filter(Boolean);
+  return {
+    originAirport: originAirport.toUpperCase(),
+    destinationAirport: destinationAirport.toUpperCase(),
+    startDate,
+    endDate,
+    cabins: cabins.length ? cabins : undefined,
+    sources: sources.length ? sources : undefined,
+    carriers: carriers.length ? carriers : undefined,
+    take: getNumberFlag(flags, "take"),
+    skip: getNumberFlag(flags, "skip"),
+    includeTrips: flags.has("include-trips"),
+    includeFiltered: flags.has("include-filtered"),
+    onlyDirectFlights: flags.has("direct"),
+    orderBy: getStringFlag(flags, "order-by") === "lowest_mileage" ? "lowest_mileage" : "default"
+  };
+}
+
+function rewardsFlightsAuthInstructions(): string {
+  return [
+    "Seats.aero API key setup",
+    "",
+    "1. Log in to your Seats.aero account.",
+    "2. Open Settings -> API.",
+    "3. Generate or copy your Pro API key (looks like `pro_xxx`).",
+    "4. Save it in srch with one of:",
+    "   search rewards-flights auth set pro_xxx",
+    "   search config set-secret seatsAeroApiKey pro_xxx",
+    "   search config set-secret-ref seatsAeroApiKey op 'op://agent-dev/Seats Aero/API Key'",
+    "",
+    "Then verify with:",
+    "  search rewards-flights auth status",
+    "",
+    "Note: srch cannot fetch the key automatically because Seats.aero exposes it only inside your logged-in account settings."
+  ].join("\n");
+}
+
+async function getRewardsFlightsAuthStatus() {
+  const config = loadConfig();
+  const sources = await inspectSecretSources(config);
+  const seats = sources.seatsAeroApiKey;
+  return {
+    configured: seats.configured,
+    source: seats.source,
+    keyName: seats.keyName ?? null,
+    configPath: getConfigPath(),
+    instructions: rewardsFlightsAuthInstructions()
   };
 }
 
@@ -115,6 +163,7 @@ async function main(): Promise<void> {
 
   const { flags, rest } = parseFlags(argv);
   const asJson = flags.has("json");
+  const outPath = getStringFlag(flags, "out");
   const trace = createTraceSink(flags.has("verbose"));
   trace.step("cli", `${command} start`, { asJson, cwd: process.cwd() });
 
@@ -127,31 +176,54 @@ async function main(): Promise<void> {
       const sub = rest[0];
       if (!sub) {
         const data = await trace.span("config", "inspect config", async () => ({ path: getConfigPath(), config: getConfigSafe() }));
-        if (asJson) return printJson(["config"], { ...data, trace: trace.snapshot() });
-        printText(getConfigPath());
-        return;
+        return emitSuccess({
+          command: ["config"],
+          kind: "config",
+          data: { ...data, trace: trace.snapshot() },
+          text: getConfigPath()
+        }, { asJson, outPath });
       }
       if (sub === "set" && rest[1] === "provider" && rest[2]) {
         const config = await trace.span("config.set", "set provider", async () => setProvider(rest[2]!));
-        if (asJson) return printJson(["config", "set", "provider"], { path: getConfigPath(), config, trace: trace.snapshot() });
-        printText(`provider=${config.provider ?? "auto"}`);
-        return;
+        return emitSuccess({
+          command: ["config", "set", "provider"],
+          kind: "config",
+          data: { path: getConfigPath(), config, trace: trace.snapshot() },
+          text: `provider=${config.provider ?? "auto"}`
+        }, { asJson, outPath });
+      }
+      if (sub === "set-secret" && rest[1] && rest[2]) {
+        const field = rest[1];
+        const value = rest[2];
+        const config = await trace.span("config.set-secret", field, async () => setSecret(field, value));
+        return emitSuccess({
+          command: ["config", "set-secret", field],
+          kind: "config",
+          data: { path: getConfigPath(), config, trace: trace.snapshot() },
+          text: `${field}=[set]`
+        }, { asJson, outPath });
       }
       if (sub === "set-secret-ref" && rest[1] && rest[2] && rest[3]) {
         const field = rest[1];
         const source = rest[2];
         const key = rest[3];
         const config = await trace.span("config.set-secret-ref", field, async () => setSecretRef(field, source, key));
-        if (asJson) return printJson(["config", "set-secret-ref", field], { path: getConfigPath(), config, trace: trace.snapshot() });
-        printText(`${field}=ref:${source}:${key}`);
-        return;
+        return emitSuccess({
+          command: ["config", "set-secret-ref", field],
+          kind: "config",
+          data: { path: getConfigPath(), config, trace: trace.snapshot() },
+          text: `${field}=ref:${source}:${key}`
+        }, { asJson, outPath });
       }
       if (sub === "unset" && rest[1]) {
         const field = rest[1];
         const config = await trace.span("config.unset", field, async () => unsetField(field));
-        if (asJson) return printJson(["config", "unset", field], { path: getConfigPath(), config, trace: trace.snapshot() });
-        printText(`${field}=unset`);
-        return;
+        return emitSuccess({
+          command: ["config", "unset", field],
+          kind: "config",
+          data: { path: getConfigPath(), config, trace: trace.snapshot() },
+          text: `${field}=unset`
+        }, { asJson, outPath });
       }
       if (asJson) exitJsonError(["config"], "Invalid config command");
       console.error(CONFIG_HELP);
@@ -164,9 +236,12 @@ async function main(): Promise<void> {
         return;
       }
       const result = await trace.span("inspect", "collect tool diagnostics", async () => inspectTools());
-      if (asJson) return printJson(["inspect", "tools"], { ...result, trace: trace.snapshot() });
-      printText(JSON.stringify(result, null, 2));
-      return;
+      return emitSuccess({
+        command: ["inspect", "tools"],
+        kind: "inspect",
+        data: { ...result, trace: trace.snapshot() },
+        text: JSON.stringify(result, null, 2)
+      }, { asJson, outPath });
     }
 
     if (command === "install") {
@@ -183,40 +258,32 @@ async function main(): Promise<void> {
       const plan = buildInstallPlan(target, globalInstall);
       trace.step("install.plan", target, { globalInstall, dryRun, steps: plan.steps.length });
 
-      if (!asJson) {
-        printText(renderInstallPlan(plan));
-        if (dryRun) return;
+      const installPlanText = renderInstallPlan(plan);
+      if (dryRun && !asJson) {
+        return emitSuccess({
+          command: ["install", target],
+          kind: "install",
+          data: { dryRun: true, plan, trace: trace.snapshot() },
+          text: installPlanText
+        }, { asJson, outPath });
       }
 
       const result = await trace.span("install.execute", target, async () => executeInstallPlan(plan, { dryRun, captureOutput: asJson }));
-      if (asJson) return printJson(["install", target], { ...result, trace: trace.snapshot() });
-      printText(dryRun ? "Dry run complete." : "Optional install complete.");
-      return;
+      return emitSuccess({
+        command: ["install", target],
+        kind: "install",
+        data: { ...result, trace: trace.snapshot() },
+        text: dryRun ? installPlanText : "Optional install complete."
+      }, { asJson, outPath });
     }
 
     if (command === "flights") {
       if (flags.has("help")) return void console.log(FLIGHTS_HELP);
 
       const sub = rest[0];
-      const delegatedSubcommands = new Set(["register", "link-github", "unlock", "book", "setup-payment", "me", "system-info"]);
-      const flightsSearchMode = !sub || (!new Set(["search", "resolve"]).has(sub) && !delegatedSubcommands.has(sub));
+      const flightsSubcommands = new Set(["search", "resolve"]);
+      const flightsSearchMode = !sub || !flightsSubcommands.has(sub);
       const searchArgs = flightsSearchMode ? rest : sub === "search" ? rest.slice(1) : [];
-
-      if (sub && delegatedSubcommands.has(sub)) {
-        const examples: Record<string, string> = {
-          register: "letsfg register --name my-agent --email me@example.com",
-          "link-github": "letsfg link-github <github-username>",
-          unlock: `letsfg unlock ${rest[1] ?? "<offer_id>"}`,
-          book: `letsfg book ${rest[1] ?? "<offer_id>"} --passenger '{\"id\":\"pas_xxx\",...}' --email you@example.com`,
-          "setup-payment": "letsfg setup-payment",
-          me: "letsfg me",
-          "system-info": "letsfg system-info"
-        };
-        const message = `search flights only supports search and resolve. Use the native letsfg CLI for ${sub}. Example: ${examples[sub]}`;
-        if (asJson) exitJsonError(["flights", sub], message);
-        console.error(`${message}\n\n${FLIGHTS_HELP}`);
-        process.exit(1);
-      }
 
       if (flightsSearchMode || sub === "search") {
         const [origin, destination, dateFrom] = searchArgs;
@@ -229,22 +296,158 @@ async function main(): Promise<void> {
         trace.step("flights.search", "dispatch", { origin, destination, dateFrom, hasReturn: Boolean(options.returnDate), sort: options.sort });
         const data = await trace.span("flights.search", `${origin}-${destination}`, async () => searchFlights(origin, destination, dateFrom, options));
         addHistory({ kind: "flights", input: { origin, destination, dateFrom, options }, output: data });
-        if (asJson) return printJson(sub === "search" ? ["flights", "search"] : ["flights"], { origin, destination, dateFrom, ...data, trace: trace.snapshot() });
-        printText(formatFlightSearchText(data.result, data.offerSummaries, data.bestOffer));
-        return;
+        return emitSuccess({
+          command: sub === "search" ? ["flights", "search"] : ["flights"],
+          kind: "flights",
+          data: { origin, destination, dateFrom, ...data, trace: trace.snapshot() },
+          text: formatFlightSearchText(data.result, data.offerSummaries, data.bestOffer)
+        }, { asJson, outPath });
       }
 
       if (sub === "resolve") {
         const query = requireQuery(rest.slice(1), FLIGHTS_HELP, ["flights", "resolve"], asJson);
         trace.step("flights.resolve", "dispatch", { queryChars: query.length });
         const data = await trace.span("flights.resolve", query, async () => resolveFlightLocation(query));
-        if (asJson) return printJson(["flights", "resolve"], { ...data, trace: trace.snapshot() });
-        printText(formatFlightLocationsText(query, data.locations));
-        return;
+        return emitSuccess({
+          command: ["flights", "resolve"],
+          kind: "flights",
+          data: { ...data, trace: trace.snapshot() },
+          text: formatFlightLocationsText(query, data.locations)
+        }, { asJson, outPath });
       }
 
       if (asJson) exitJsonError(["flights"], "Unknown flights command");
       console.error(FLIGHTS_HELP);
+      process.exit(1);
+    }
+
+    if (command === "rewards-flights") {
+      if (flags.has("help")) return void console.log(REWARDS_FLIGHTS_HELP);
+
+      const sub = rest[0];
+      const rewardsSubcommands = new Set(["search", "routes", "trips", "auth"]);
+      const rewardsSearchMode = !sub || !rewardsSubcommands.has(sub);
+      const searchArgs = rewardsSearchMode ? rest : sub === "search" ? rest.slice(1) : [];
+
+      if (rewardsSearchMode || sub === "search") {
+        const [originAirport, destinationAirport] = searchArgs;
+        if (!originAirport || !destinationAirport) {
+          if (asJson) exitJsonError(sub === "search" ? ["rewards-flights", "search"] : ["rewards-flights"], "Usage: search rewards-flights <origin> <destination>");
+          console.error(REWARDS_FLIGHTS_HELP);
+          process.exit(1);
+        }
+        const query = parseRewardsFlightSearchOptions(originAirport, destinationAirport, flags);
+        trace.step("rewards-flights.search", "dispatch", { originAirport: query.originAirport, destinationAirport: query.destinationAirport, cabins: query.cabins?.join(",") ?? null, sources: query.sources?.join(",") ?? null });
+        const data = await trace.span("rewards-flights.search", `${query.originAirport}-${query.destinationAirport}`, async () => searchRewardFlights(query));
+        addHistory({ kind: "rewards-flights", input: query, output: data });
+        return emitSuccess({
+          command: sub === "search" ? ["rewards-flights", "search"] : ["rewards-flights"],
+          kind: "rewards-flights",
+          data: { ...data, trace: trace.snapshot() },
+          text: formatRewardsFlightSearchText(data)
+        }, { asJson, outPath });
+      }
+
+      if (sub === "routes") {
+        const source = rest[1];
+        if (!source) {
+          if (asJson) exitJsonError(["rewards-flights", "routes"], "Usage: search rewards-flights routes <source>");
+          console.error(REWARDS_FLIGHTS_HELP);
+          process.exit(1);
+        }
+        trace.step("rewards-flights.routes", "dispatch", { source });
+        const data = await trace.span("rewards-flights.routes", source, async () => getRewardFlightRoutes(source));
+        addHistory({ kind: "rewards-flights", input: { source, mode: "routes" }, output: data });
+        return emitSuccess({
+          command: ["rewards-flights", "routes"],
+          kind: "rewards-flights",
+          data: { ...data, trace: trace.snapshot() },
+          text: formatRewardsRoutesText(data)
+        }, { asJson, outPath });
+      }
+
+      if (sub === "auth") {
+        const authSub = rest[1] ?? "status";
+
+        if (authSub === "status") {
+          const data = await trace.span("rewards-flights.auth.status", "status", async () => getRewardsFlightsAuthStatus());
+          return emitSuccess({
+            command: ["rewards-flights", "auth", "status"],
+            kind: "rewards-flights",
+            data: { ...data, trace: trace.snapshot() },
+            text: [
+              `Configured: ${data.configured ? "yes" : "no"}`,
+              `Source: ${data.source}`,
+              data.keyName ? `Key reference: ${data.keyName}` : null,
+              `Config path: ${data.configPath}`,
+              "",
+              data.instructions
+            ].filter(Boolean).join("\n")
+          }, { asJson, outPath });
+        }
+
+        if (authSub === "instructions") {
+          const text = rewardsFlightsAuthInstructions();
+          return emitSuccess({
+            command: ["rewards-flights", "auth", "instructions"],
+            kind: "rewards-flights",
+            data: { instructions: text, trace: trace.snapshot() },
+            text
+          }, { asJson, outPath });
+        }
+
+        if (authSub === "set") {
+          const key = rest[2] ?? getStringFlag(flags, "key");
+          if (!key) {
+            if (asJson) exitJsonError(["rewards-flights", "auth", "set"], "Usage: search rewards-flights auth set <pro_key>");
+            console.error(REWARDS_FLIGHTS_HELP);
+            process.exit(1);
+          }
+          const config = await trace.span("rewards-flights.auth.set", "set key", async () => setSecret("seatsAeroApiKey", key));
+          return emitSuccess({
+            command: ["rewards-flights", "auth", "set"],
+            kind: "rewards-flights",
+            data: { path: getConfigPath(), config, trace: trace.snapshot() },
+            text: `seatsAeroApiKey saved to ${getConfigPath()}`
+          }, { asJson, outPath });
+        }
+
+        if (authSub === "clear") {
+          const config = await trace.span("rewards-flights.auth.clear", "clear key", async () => unsetField("seatsAeroApiKey"));
+          return emitSuccess({
+            command: ["rewards-flights", "auth", "clear"],
+            kind: "rewards-flights",
+            data: { path: getConfigPath(), config, trace: trace.snapshot() },
+            text: `seatsAeroApiKey removed from ${getConfigPath()}`
+          }, { asJson, outPath });
+        }
+
+        if (asJson) exitJsonError(["rewards-flights", "auth"], "Unknown rewards-flights auth command");
+        console.error(REWARDS_FLIGHTS_HELP);
+        process.exit(1);
+      }
+
+      if (sub === "trips") {
+        const availabilityId = rest[1];
+        if (!availabilityId) {
+          if (asJson) exitJsonError(["rewards-flights", "trips"], "Usage: search rewards-flights trips <availability_id>");
+          console.error(REWARDS_FLIGHTS_HELP);
+          process.exit(1);
+        }
+        const includeFiltered = flags.has("include-filtered");
+        trace.step("rewards-flights.trips", "dispatch", { availabilityId, includeFiltered });
+        const data = await trace.span("rewards-flights.trips", availabilityId, async () => getRewardFlightTrips(availabilityId, includeFiltered));
+        addHistory({ kind: "rewards-flights", input: { availabilityId, includeFiltered, mode: "trips" }, output: data });
+        return emitSuccess({
+          command: ["rewards-flights", "trips"],
+          kind: "rewards-flights",
+          data: { ...data, trace: trace.snapshot() },
+          text: formatRewardsTripsText(data)
+        }, { asJson, outPath });
+      }
+
+      if (asJson) exitJsonError(["rewards-flights"], "Unknown rewards-flights command");
+      console.error(REWARDS_FLIGHTS_HELP);
       process.exit(1);
     }
 
@@ -257,13 +460,17 @@ async function main(): Promise<void> {
       const result = await trace.span("web.search", hq ? "exa-paid" : provider, async () => webSearch(query, provider, { hq }));
       trace.step("web.result", "provider selected", { requestedProvider: provider, hq, provider: result.provider, nativeProvider: typeof result.native === "object" && result.native && "provider" in result.native ? String((result.native as { provider?: unknown }).provider) : undefined, resultCount: result.results.length });
       addHistory({ kind: "web", input: { query, provider }, output: result });
-      if (asJson) return printJson(["web"], { query, requestedProvider: provider, ...result, trace: trace.snapshot() });
-      console.log(result.answer || "No summary.");
+      const webTextLines = [result.answer || "No summary."];
       if (result.results.length > 0) {
-        console.log("\nSources:");
-        for (const [index, item] of result.results.entries()) console.log(`${index + 1}. ${item.title}\n   ${item.url}`);
+        webTextLines.push("", "Sources:");
+        for (const [index, item] of result.results.entries()) webTextLines.push(`${index + 1}. ${item.title}\n   ${item.url}`);
       }
-      return;
+      return emitSuccess({
+        command: ["web"],
+        kind: "web",
+        data: { query, requestedProvider: provider, ...result, trace: trace.snapshot() },
+        text: webTextLines.join("\n")
+      }, { asJson, outPath });
     }
 
     if (command === "code") {
@@ -284,16 +491,18 @@ async function main(): Promise<void> {
           return r;
         });
         addHistory({ kind: "code", input: { target, query: repoQuery, mode: "repo" }, output: result });
-        if (asJson) return printJson(["code", "repo"], { ...result, trace: trace.snapshot() });
-        if (result.matches.length === 0) {
-          printText(`No matches in ${result.localPath}`);
-          return;
-        }
-        printText(`${result.matchCount} matches in ${result.localPath}${result.cached ? " (cached)" : ""}${result.truncated ? " (truncated)" : ""}`);
-        for (const m of result.matches) {
-          console.log(`  ${m.file}:${m.line}  ${m.text}`);
-        }
-        return;
+        const repoTextLines = result.matches.length === 0
+          ? [`No matches in ${result.localPath}`]
+          : [
+              `${result.matchCount} matches in ${result.localPath}${result.cached ? " (cached)" : ""}${result.truncated ? " (truncated)" : ""}`,
+              ...result.matches.map((m) => `  ${m.file}:${m.line}  ${m.text}`)
+            ];
+        return emitSuccess({
+          command: ["code", "repo"],
+          kind: "code",
+          data: { ...result, trace: trace.snapshot() },
+          text: repoTextLines.join("\n")
+        }, { asJson, outPath });
       }
 
       const query = requireQuery(rest, CODE_HELP, ["code"], asJson);
@@ -301,12 +510,16 @@ async function main(): Promise<void> {
       trace.step("code", "dispatch", { maxTokens, queryChars: query.length });
       const result = await trace.span("code.search", "exa-mcp", async () => codeSearch(query, maxTokens));
       addHistory({ kind: "code", input: { query, maxTokens }, output: result });
-      if (asJson) return printJson(["code"], { ...result, trace: trace.snapshot() });
-      printText(result.text);
+      const codeTextLines = [result.text];
       if (result.secondary?.length) {
-        for (const src of result.secondary) console.log(`\n[secondary: ${src.label}]`);
+        for (const src of result.secondary) codeTextLines.push(`\n[secondary: ${src.label}]`);
       }
-      return;
+      return emitSuccess({
+        command: ["code"],
+        kind: "code",
+        data: { ...result, trace: trace.snapshot() },
+        text: codeTextLines.join("\n")
+      }, { asJson, outPath });
     }
 
     if (command === "docs") {
@@ -324,33 +537,48 @@ async function main(): Promise<void> {
             process.exit(1);
           }
           const result = await trace.span("docs.index.add", name, async () => docsAddCollection(path, name, pattern), { path, pattern });
-          if (asJson) return printJson(["docs", "index", "add"], { path, name, pattern, collections: result, trace: trace.snapshot() });
-          printText(`${result.length} collections`);
-          return;
+          return emitSuccess({
+            command: ["docs", "index", "add"],
+            kind: "docs",
+            data: { path, name, pattern, collections: result, trace: trace.snapshot() },
+            text: `${result.length} collections`
+          }, { asJson, outPath });
         }
         if (sub === "list") {
           const result = await trace.span("docs.index.list", "qmd collections", async () => docsListCollections());
-          if (asJson) return printJson(["docs", "index", "list"], { collections: result, count: result.length, trace: trace.snapshot() });
-          for (const item of result) console.log(`${item.name}\t${item.pwd}\t${item.doc_count}`);
-          return;
+          return emitSuccess({
+            command: ["docs", "index", "list"],
+            kind: "docs",
+            data: { collections: result, count: result.length, trace: trace.snapshot() },
+            text: result.map((item) => `${item.name}\t${item.pwd}\t${item.doc_count}`).join("\n")
+          }, { asJson, outPath });
         }
         if (sub === "update") {
           const result = await trace.span("docs.index.update", "qmd update", async () => docsUpdate());
-          if (asJson) return printJson(["docs", "index", "update"], { ...result, trace: trace.snapshot() });
-          printText(`indexed=${result.indexed} updated=${result.updated} unchanged=${result.unchanged} removed=${result.removed}`);
-          return;
+          return emitSuccess({
+            command: ["docs", "index", "update"],
+            kind: "docs",
+            data: { ...result, trace: trace.snapshot() },
+            text: `indexed=${result.indexed} updated=${result.updated} unchanged=${result.unchanged} removed=${result.removed}`
+          }, { asJson, outPath });
         }
         if (sub === "embed") {
           const result = await trace.span("docs.index.embed", "qmd embed", async () => docsEmbed());
-          if (asJson) return printJson(["docs", "index", "embed"], { ...result, trace: trace.snapshot() });
-          printText(`docs=${result.docsProcessed} chunks=${result.chunksEmbedded} errors=${result.errors}`);
-          return;
+          return emitSuccess({
+            command: ["docs", "index", "embed"],
+            kind: "docs",
+            data: { ...result, trace: trace.snapshot() },
+            text: `docs=${result.docsProcessed} chunks=${result.chunksEmbedded} errors=${result.errors}`
+          }, { asJson, outPath });
         }
         if (sub === "status") {
           const result = await trace.span("docs.index.status", "qmd status", async () => docsStatus());
-          if (asJson) return printJson(["docs", "index", "status"], { ...result, trace: trace.snapshot() });
-          printText(`docs=${result.status.totalDocuments} collections=${result.collections.length} needsEmbedding=${result.status.needsEmbedding}`);
-          return;
+          return emitSuccess({
+            command: ["docs", "index", "status"],
+            kind: "docs",
+            data: { ...result, trace: trace.snapshot() },
+            text: `docs=${result.status.totalDocuments} collections=${result.collections.length} needsEmbedding=${result.status.needsEmbedding}`
+          }, { asJson, outPath });
         }
         if (asJson) exitJsonError(["docs", "index"], "Unknown docs index subcommand");
         console.error(DOCS_HELP);
@@ -369,18 +597,20 @@ async function main(): Promise<void> {
       }));
       const data = { ...result, count: rows.length, results: rows };
       addHistory({ kind: "docs", input: { query }, output: data });
-      if (asJson) return printJson(["docs"], { ...data, trace: trace.snapshot() });
-      if (rows.length === 0) {
-        printText("No results.");
-        return;
-      }
-      for (const [index, item] of rows.entries()) {
-        console.log(`${index + 1}. ${item.title}`);
-        console.log(`   ${item.file}`);
-        console.log(`   score=${item.score.toFixed(3)}`);
-        if (item.snippet) console.log(`   ${item.snippet}`);
-      }
-      return;
+      const docsTextLines = rows.length === 0
+        ? ["No results."]
+        : rows.flatMap((item, index) => [
+            `${index + 1}. ${item.title}`,
+            `   ${item.file}`,
+            `   score=${item.score.toFixed(3)}`,
+            ...(item.snippet ? [`   ${item.snippet}`] : [])
+          ]);
+      return emitSuccess({
+        command: ["docs"],
+        kind: "docs",
+        data: { ...data, trace: trace.snapshot() },
+        text: docsTextLines.join("\n")
+      }, { asJson, outPath });
     }
 
     if (command === "social") {
@@ -392,34 +622,38 @@ async function main(): Promise<void> {
         const id = socialRest[1];
         trace.step("twitter.read", "dispatch", { id, alias: invokedAs });
         const result = await trace.span("twitter.read", id, async () => twitterRead(id));
-        if (asJson) return printJson(invokedAs.split(" "), { ...result, trace: trace.snapshot() });
-        printText(typeof result.tweet === "string" ? result.tweet : JSON.stringify(result.tweet, null, 2));
-        return;
+        return emitSuccess({
+          command: invokedAs.split(" "),
+          kind: "social",
+          data: { ...result, trace: trace.snapshot() },
+          text: typeof result.tweet === "string" ? result.tweet : JSON.stringify(result.tweet, null, 2)
+        }, { asJson, outPath });
       }
       if (socialRest[0] === "thread" && socialRest[1]) {
         const id = socialRest[1];
         trace.step("twitter.thread", "dispatch", { id, alias: invokedAs });
         const result = await trace.span("twitter.thread", id, async () => twitterThread(id));
-        if (asJson) return printJson(invokedAs.split(" "), { ...result, trace: trace.snapshot() });
-        for (const tweet of result.tweets) printText(typeof tweet === "string" ? tweet : JSON.stringify(tweet, null, 2));
-        return;
+        return emitSuccess({
+          command: invokedAs.split(" "),
+          kind: "social",
+          data: { ...result, trace: trace.snapshot() },
+          text: result.tweets.map((tweet) => typeof tweet === "string" ? tweet : JSON.stringify(tweet, null, 2)).join("\n")
+        }, { asJson, outPath });
       }
       const query = requireQuery(socialRest, TWITTER_HELP, invokedAs.split(" "), asJson);
       const count = Number(flags.get("count") ?? 10);
       trace.step("twitter.search", "dispatch", { query, count, alias: invokedAs });
       const result = await trace.span("twitter.search", "bird", async () => twitterSearch(query, count));
       addHistory({ kind: "web", input: { query, source: "twitter", alias: invokedAs }, output: result });
-      if (asJson) return printJson(invokedAs.split(" "), { ...result, trace: trace.snapshot() });
-      if (result.tweets.length === 0) {
-        printText("No tweets found.");
-        return;
-      }
-      for (const [index, tweet] of result.tweets.entries()) {
-        console.log(`${index + 1}. @${tweet.author}${tweet.createdAt ? " " + tweet.createdAt : ""}`);
-        console.log(`   ${tweet.text.split("\n")[0]}`);
-        console.log(`   https://x.com/i/status/${tweet.id}`);
-      }
-      return;
+      const socialSearchText = result.tweets.length === 0
+        ? "No tweets found."
+        : result.tweets.map((tweet, index) => `${index + 1}. @${tweet.author}${tweet.createdAt ? " " + tweet.createdAt : ""}\n   ${tweet.text.split("\n")[0]}\n   https://x.com/i/status/${tweet.id}`).join("\n");
+      return emitSuccess({
+        command: invokedAs.split(" "),
+        kind: "social",
+        data: { ...result, trace: trace.snapshot() },
+        text: socialSearchText
+      }, { asJson, outPath });
     }
 
     if (command === "twitter" || command === "x.com") {
@@ -429,34 +663,38 @@ async function main(): Promise<void> {
         const id = rest[1];
         trace.step("twitter.read", "dispatch", { id, alias: invokedAs });
         const result = await trace.span("twitter.read", id, async () => twitterRead(id));
-        if (asJson) return printJson([invokedAs, "read"], { ...result, trace: trace.snapshot() });
-        printText(typeof result.tweet === "string" ? result.tweet : JSON.stringify(result.tweet, null, 2));
-        return;
+        return emitSuccess({
+          command: [invokedAs, "read"],
+          kind: "social",
+          data: { ...result, trace: trace.snapshot() },
+          text: typeof result.tweet === "string" ? result.tweet : JSON.stringify(result.tweet, null, 2)
+        }, { asJson, outPath });
       }
       if (rest[0] === "thread" && rest[1]) {
         const id = rest[1];
         trace.step("twitter.thread", "dispatch", { id, alias: invokedAs });
         const result = await trace.span("twitter.thread", id, async () => twitterThread(id));
-        if (asJson) return printJson([invokedAs, "thread"], { ...result, trace: trace.snapshot() });
-        for (const tweet of result.tweets) printText(typeof tweet === "string" ? tweet : JSON.stringify(tweet, null, 2));
-        return;
+        return emitSuccess({
+          command: [invokedAs, "thread"],
+          kind: "social",
+          data: { ...result, trace: trace.snapshot() },
+          text: result.tweets.map((tweet) => typeof tweet === "string" ? tweet : JSON.stringify(tweet, null, 2)).join("\n")
+        }, { asJson, outPath });
       }
       const query = requireQuery(rest, TWITTER_HELP, [invokedAs], asJson);
       const count = Number(flags.get("count") ?? 10);
       trace.step("twitter.search", "dispatch", { query, count, alias: invokedAs });
       const result = await trace.span("twitter.search", "bird", async () => twitterSearch(query, count));
       addHistory({ kind: "web", input: { query, source: "twitter", alias: invokedAs }, output: result });
-      if (asJson) return printJson([invokedAs], { ...result, trace: trace.snapshot() });
-      if (result.tweets.length === 0) {
-        printText("No tweets found.");
-        return;
-      }
-      for (const [index, tweet] of result.tweets.entries()) {
-        console.log(`${index + 1}. @${tweet.author}${tweet.createdAt ? " " + tweet.createdAt : ""}`);
-        console.log(`   ${tweet.text.split("\n")[0]}`);
-        console.log(`   https://x.com/i/status/${tweet.id}`);
-      }
-      return;
+      const twitterSearchText = result.tweets.length === 0
+        ? "No tweets found."
+        : result.tweets.map((tweet, index) => `${index + 1}. @${tweet.author}${tweet.createdAt ? " " + tweet.createdAt : ""}\n   ${tweet.text.split("\n")[0]}\n   https://x.com/i/status/${tweet.id}`).join("\n");
+      return emitSuccess({
+        command: [invokedAs],
+        kind: "social",
+        data: { ...result, trace: trace.snapshot() },
+        text: twitterSearchText
+      }, { asJson, outPath });
     }
 
     if (command === "fetch-content" || command === "fetch") {
@@ -466,24 +704,27 @@ async function main(): Promise<void> {
       trace.step("fetch", "dispatch", { url, alias: invokedAs });
       const result = await trace.span("fetch.content", url, async () => fetchContent(url));
       addHistory({ kind: "fetch", input: { url, alias: invokedAs }, output: result });
-      if (asJson) return printJson([invokedAs], { alias: invokedAs, canonicalCommand: "fetch-content", ...result, trace: trace.snapshot() });
-      if (result.error) {
-        console.log(`Error: ${result.error}`);
-        if (result.content) console.log(`\n${result.content}`);
-        return;
-      }
-      console.log(`# ${result.title}\n`);
-      console.log(result.content);
-      return;
+      const fetchText = result.error
+        ? [`Error: ${result.error}`, ...(result.content ? ["", result.content] : [])].join("\n")
+        : `# ${result.title}\n\n${result.content}`;
+      return emitSuccess({
+        command: [invokedAs],
+        kind: "fetch",
+        data: { alias: invokedAs, canonicalCommand: "fetch-content", ...result, trace: trace.snapshot() },
+        text: fetchText
+      }, { asJson, outPath });
     }
 
     if (command === "history") {
       if (flags.has("help")) return void console.log(HISTORY_HELP);
-      const kind = rest[0] as "web" | "code" | "fetch" | "docs" | "flights" | undefined;
+      const kind = rest[0] as "web" | "code" | "fetch" | "docs" | "flights" | "rewards-flights" | undefined;
       const entries = await trace.span("history", kind ?? "all", async () => listHistory(kind));
-      if (asJson) return printJson(["history"], { kind: kind ?? null, count: entries.length, entries, trace: trace.snapshot() });
-      for (const entry of entries) console.log(`${entry.createdAt}  ${entry.kind}  ${entry.id}`);
-      return;
+      return emitSuccess({
+        command: ["history"],
+        kind: "history",
+        data: { kind: kind ?? null, count: entries.length, entries, trace: trace.snapshot() },
+        text: entries.map((entry) => `${entry.createdAt}  ${entry.kind}  ${entry.id}`).join("\n")
+      }, { asJson, outPath });
     }
 
     if (asJson) exitJsonError([command], "Unknown command");
@@ -497,9 +738,8 @@ async function main(): Promise<void> {
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
   if (process.argv.includes("--json")) {
-    console.error(JSON.stringify(fail(process.argv.slice(2, 3), message), null, 2));
+    emitFailure(process.argv.slice(2, 3), message, { asJson: true });
   } else {
-    console.error(message);
+    emitFailure(process.argv.slice(2, 3), message, { asJson: false });
   }
-  process.exit(1);
 });
