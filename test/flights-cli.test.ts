@@ -42,6 +42,8 @@ test("search flights default search matches LetsFG README-style search flow", ()
   assert.equal(payload.data?.result.destination, "BER");
   assert.equal(payload.data?.bestOffer.id, "off_best");
   assert.equal(payload.data?.offerSummaries[0], "EUR 89.00 | LO | GDN -> BER");
+  assert.equal(payload.data?.handoff.tool, "letsfg");
+  assert.match(payload.data?.handoff.commands[2] ?? "", /letsfg unlock off_best/);
 });
 
 test("search flights search alias accepts LetsFG-style return-trip flags", () => {
@@ -64,66 +66,24 @@ test("search flights resolve returns location candidates", () => {
   assert.deepEqual(payload.command, ["flights", "resolve"]);
   assert.equal(payload.data?.locations.length, 2);
   assert.equal(payload.data?.locations[0].code, "BER");
+  assert.equal(payload.data?.handoff.tool, "letsfg");
 });
 
-test("search flights register mirrors LetsFG register example", () => {
-  const result = runCli(["flights", "register", "--name", "srch-agent", "--email", "me@example.com", "--owner", "Ada", "--description", "flight tests", "--json"]);
+test("search flights text output includes letsfg handoff guidance", () => {
+  const result = runCli(["flights", "GDN", "BER", "2026-03-03"]);
   assert.equal(result.status, 0, result.stderr);
-
-  const payload = parseJson(result.stdout);
-  assert.equal(payload.ok, true);
-  assert.deepEqual(payload.command, ["flights", "register"]);
-  assert.equal(payload.data?.api_key, "trav_test_123");
-  assert.equal(payload.data?.agent_name, "srch-agent");
-  assert.equal(payload.data?.owner_name, "Ada");
+  assert.match(result.stdout, /Action handoff:/);
+  assert.match(result.stdout, /letsfg unlock off_best/);
 });
 
-test("search flights unlock mirrors LetsFG unlock flow", () => {
-  const result = runCli(["flights", "unlock", "off_best", "--json"]);
-  assert.equal(result.status, 0, result.stderr);
+test("search flights delegates transactional commands to native letsfg", () => {
+  const result = runCli(["flights", "book", "off_best", "--json"]);
+  assert.equal(result.status, 1);
 
-  const payload = parseJson(result.stdout);
-  assert.equal(payload.ok, true);
-  assert.deepEqual(payload.command, ["flights", "unlock"]);
-  assert.equal(payload.data?.unlock_status, "unlocked");
-  assert.equal(payload.data?.offer_id, "off_best");
-});
-
-test("search flights book accepts repeated passenger flags like LetsFG examples", () => {
-  const result = runCli([
-    "flights",
-    "book",
-    "off_best",
-    "--passenger",
-    '{"id":"pas_ada","given_name":"Ada","family_name":"Lovelace","born_on":"1990-12-10"}',
-    "--passenger",
-    '{"id":"pas_charles","given_name":"Charles","family_name":"Babbage","born_on":"1991-12-10"}',
-    "--email",
-    "ada@example.com",
-    "--idempotency-key",
-    "idem_123",
-    "--json"
-  ]);
-  assert.equal(result.status, 0, result.stderr);
-
-  const payload = parseJson(result.stdout);
-  assert.equal(payload.ok, true);
-  assert.deepEqual(payload.command, ["flights", "book"]);
-  assert.equal(payload.data?.booking_reference, "PNR123");
-  assert.equal(payload.data?.details.passengers.length, 2);
-  assert.equal(payload.data?.details.contactEmail, "ada@example.com");
-  assert.equal(payload.data?.details.idempotencyKey, "idem_123");
-});
-
-test("search flights system-info returns LetsFG runtime details", () => {
-  const result = runCli(["flights", "system-info", "--json"]);
-  assert.equal(result.status, 0, result.stderr);
-
-  const payload = parseJson(result.stdout);
-  assert.equal(payload.ok, true);
-  assert.deepEqual(payload.command, ["flights", "system-info"]);
-  assert.equal(payload.data?.info.tier, "standard");
-  assert.equal(payload.data?.info.recommended_max_browsers, 8);
+  const payload = parseJson(result.stderr);
+  assert.equal(payload.ok, false);
+  assert.match(payload.error?.message ?? "", /only supports search and resolve/);
+  assert.match(payload.error?.message ?? "", /letsfg book off_best/);
 });
 
 test("search flights returns a clear install hint when LetsFG is missing", () => {

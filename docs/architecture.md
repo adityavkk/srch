@@ -154,6 +154,11 @@ Examples:
 
 `flights` is the first optional domain-backed integration: the base CLI stays dependency-light, and users can opt into the LetsFG SDK when they want a travel source installed locally.
 
+Current product posture for `flights`:
+- `srch` owns research and fare discovery
+- native tools like `letsfg` own transactional workflows such as unlock, payment setup, and booking
+- domain outputs should include an explicit handoff path into the action tool
+
 ### Subdomains
 
 Durable narrower retrieval spaces.
@@ -259,6 +264,8 @@ Examples:
 - letsfg-sdk
 
 Optional sources are valid when they unlock a distinct domain but would otherwise bloat the default install. The runtime should detect them explicitly and return actionable install hints instead of failing mysteriously.
+
+Some optional sources are intentionally search-only inside `srch`. In those cases the source powers discovery, while downstream action remains delegated to the source's native tool or API surface.
 
 Sources should do one thing well and not own the full plan.
 

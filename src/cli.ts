@@ -10,7 +10,7 @@ import type { SearchProvider } from "./lib/core/types.js";
 import { summarizeBestChunk } from "./lib/docs/format.js";
 import { docsAddCollection, docsEmbed, docsListCollections, docsSearch, docsStatus, docsUpdate } from "./lib/docs/qmd.js";
 import { fetchContent } from "./lib/fetch/content.js";
-import { bookFlight, formatFlightLocationsText, formatFlightSearchText, getFlightsProfile, getFlightsSystemInfo, linkFlightsGithub, registerFlightsAgent, resolveFlightLocation, searchFlights, setupFlightsPayment, unlockFlightOffer, type LetsFGSearchOptions, type Passenger } from "./lib/flights/letsfg.js";
+import { formatFlightLocationsText, formatFlightSearchText, resolveFlightLocation, searchFlights, type LetsFGSearchOptions } from "./lib/flights/letsfg.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
 import { codeSearch } from "./lib/search/code.js";
 import { repoSearch } from "./lib/search/repo.js";
@@ -105,42 +105,6 @@ function parseFlightSearchOptions(flags: Map<string, FlagValue>): LetsFGSearchOp
   };
 }
 
-function parsePassengerJson(raw: string, command: string[], asJson: boolean): Passenger {
-  try {
-    const parsed = JSON.parse(raw) as Passenger;
-    if (!parsed || typeof parsed !== "object" || typeof parsed.id !== "string" || typeof parsed.given_name !== "string" || typeof parsed.family_name !== "string" || typeof parsed.born_on !== "string") {
-      throw new Error("Passenger JSON must include id, given_name, family_name, and born_on.");
-    }
-    return parsed;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (asJson) exitJsonError(command, `Invalid passenger JSON: ${message}`);
-    throw new Error(`Invalid passenger JSON: ${message}`);
-  }
-}
-
-function parsePassengers(flags: Map<string, FlagValue>, command: string[], asJson: boolean): Passenger[] {
-  const passengersJson = getStringFlag(flags, "passengers");
-  if (passengersJson) {
-    try {
-      const parsed = JSON.parse(passengersJson) as unknown;
-      if (!Array.isArray(parsed)) throw new Error("--passengers must be a JSON array.");
-      return parsed.map((item) => parsePassengerJson(JSON.stringify(item), command, asJson));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (asJson) exitJsonError(command, `Invalid passengers JSON: ${message}`);
-      throw new Error(`Invalid passengers JSON: ${message}`);
-    }
-  }
-
-  const passengerValues = getStringFlags(flags, "passenger");
-  if (passengerValues.length === 0) {
-    if (asJson) exitJsonError(command, "Missing --passenger or --passengers");
-    throw new Error("Missing --passenger or --passengers");
-  }
-  return passengerValues.map((value) => parsePassengerJson(value, command, asJson));
-}
-
 async function main(): Promise<void> {
   const [, , command, ...argv] = process.argv;
   if (!command || command === "help" || command === "--help") {
@@ -208,8 +172,25 @@ async function main(): Promise<void> {
       if (flags.has("help")) return void console.log(FLIGHTS_HELP);
 
       const sub = rest[0];
-      const flightsSearchMode = !sub || !new Set(["search", "resolve", "register", "link-github", "unlock", "book", "setup-payment", "me", "system-info"]).has(sub);
+      const delegatedSubcommands = new Set(["register", "link-github", "unlock", "book", "setup-payment", "me", "system-info"]);
+      const flightsSearchMode = !sub || (!new Set(["search", "resolve"]).has(sub) && !delegatedSubcommands.has(sub));
       const searchArgs = flightsSearchMode ? rest : sub === "search" ? rest.slice(1) : [];
+
+      if (sub && delegatedSubcommands.has(sub)) {
+        const examples: Record<string, string> = {
+          register: "letsfg register --name my-agent --email me@example.com",
+          "link-github": "letsfg link-github <github-username>",
+          unlock: `letsfg unlock ${rest[1] ?? "<offer_id>"}`,
+          book: `letsfg book ${rest[1] ?? "<offer_id>"} --passenger '{\"id\":\"pas_xxx\",...}' --email you@example.com`,
+          "setup-payment": "letsfg setup-payment",
+          me: "letsfg me",
+          "system-info": "letsfg system-info"
+        };
+        const message = `search flights only supports search and resolve. Use the native letsfg CLI for ${sub}. Example: ${examples[sub]}`;
+        if (asJson) exitJsonError(["flights", sub], message);
+        console.error(`${message}\n\n${FLIGHTS_HELP}`);
+        process.exit(1);
+      }
 
       if (flightsSearchMode || sub === "search") {
         const [origin, destination, dateFrom] = searchArgs;
@@ -233,98 +214,6 @@ async function main(): Promise<void> {
         const data = await trace.span("flights.resolve", query, async () => resolveFlightLocation(query));
         if (asJson) return printJson(["flights", "resolve"], { ...data, trace: trace.snapshot() });
         printText(formatFlightLocationsText(query, data.locations));
-        return;
-      }
-
-      if (sub === "register") {
-        const name = getStringFlag(flags, "name");
-        const email = getStringFlag(flags, "email");
-        if (!name || !email) {
-          if (asJson) exitJsonError(["flights", "register"], "Usage: search flights register --name <agent> --email <email>");
-          console.error(FLIGHTS_HELP);
-          process.exit(1);
-        }
-        const owner = getStringFlag(flags, "owner");
-        const description = getStringFlag(flags, "description");
-        trace.step("flights.register", "dispatch", { name, email });
-        const data = await trace.span("flights.register", name, async () => registerFlightsAgent(name, email, owner, description));
-        if (asJson) return printJson(["flights", "register"], { ...data, trace: trace.snapshot() });
-        printText(JSON.stringify(data, null, 2));
-        return;
-      }
-
-      if (sub === "link-github") {
-        const username = rest[1];
-        if (!username) {
-          if (asJson) exitJsonError(["flights", "link-github"], "Usage: search flights link-github <username>");
-          console.error(FLIGHTS_HELP);
-          process.exit(1);
-        }
-        trace.step("flights.link-github", "dispatch", { username });
-        const data = await trace.span("flights.link-github", username, async () => linkFlightsGithub(username));
-        if (asJson) return printJson(["flights", "link-github"], { ...data, trace: trace.snapshot() });
-        printText(JSON.stringify(data, null, 2));
-        return;
-      }
-
-      if (sub === "unlock") {
-        const offerId = rest[1];
-        if (!offerId) {
-          if (asJson) exitJsonError(["flights", "unlock"], "Usage: search flights unlock <offer_id>");
-          console.error(FLIGHTS_HELP);
-          process.exit(1);
-        }
-        trace.step("flights.unlock", "dispatch", { offerId });
-        const data = await trace.span("flights.unlock", offerId, async () => unlockFlightOffer(offerId));
-        if (asJson) return printJson(["flights", "unlock"], { ...data, trace: trace.snapshot() });
-        printText(JSON.stringify(data, null, 2));
-        return;
-      }
-
-      if (sub === "book") {
-        const offerId = rest[1];
-        if (!offerId) {
-          if (asJson) exitJsonError(["flights", "book"], "Usage: search flights book <offer_id> --passenger '{...}' --email <email>");
-          console.error(FLIGHTS_HELP);
-          process.exit(1);
-        }
-        const email = getStringFlag(flags, "email");
-        if (!email) {
-          if (asJson) exitJsonError(["flights", "book"], "Missing --email");
-          throw new Error("Missing --email");
-        }
-        const phone = getStringFlag(flags, "phone");
-        const idempotencyKey = getStringFlag(flags, "idempotency-key");
-        const passengers = parsePassengers(flags, ["flights", "book"], asJson);
-        trace.step("flights.book", "dispatch", { offerId, passengers: passengers.length });
-        const data = await trace.span("flights.book", offerId, async () => bookFlight(offerId, passengers, email, phone, idempotencyKey));
-        if (asJson) return printJson(["flights", "book"], { ...data, trace: trace.snapshot() });
-        printText(JSON.stringify(data, null, 2));
-        return;
-      }
-
-      if (sub === "setup-payment") {
-        const token = getStringFlag(flags, "token");
-        trace.step("flights.setup-payment", "dispatch", { hasToken: Boolean(token) });
-        const data = await trace.span("flights.setup-payment", token ? "with-token" : "default", async () => setupFlightsPayment(token));
-        if (asJson) return printJson(["flights", "setup-payment"], { ...data, trace: trace.snapshot() });
-        printText(JSON.stringify(data, null, 2));
-        return;
-      }
-
-      if (sub === "me") {
-        trace.step("flights.me", "dispatch", { hasApiKey: Boolean(process.env.LETSFG_API_KEY) });
-        const data = await trace.span("flights.me", "profile", async () => getFlightsProfile());
-        if (asJson) return printJson(["flights", "me"], { ...data, trace: trace.snapshot() });
-        printText(JSON.stringify(data, null, 2));
-        return;
-      }
-
-      if (sub === "system-info") {
-        trace.step("flights.system-info", "dispatch", {});
-        const data = await trace.span("flights.system-info", "systemInfo", async () => getFlightsSystemInfo());
-        if (asJson) return printJson(["flights", "system-info"], { ...data, trace: trace.snapshot() });
-        printText(JSON.stringify(data.info, null, 2));
         return;
       }
 

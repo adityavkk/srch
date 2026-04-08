@@ -56,48 +56,6 @@ export interface FlightSearchResult {
   pricing_note: string;
 }
 
-export interface UnlockResult {
-  offer_id: string;
-  unlock_status: string;
-  payment_charged: boolean;
-  payment_amount_cents: number;
-  payment_currency: string;
-  payment_intent_id: string;
-  confirmed_price: number | null;
-  confirmed_currency: string;
-  offer_expires_at: string;
-  message: string;
-}
-
-export interface Passenger {
-  id: string;
-  given_name: string;
-  family_name: string;
-  born_on: string;
-  gender?: string;
-  title?: string;
-  email?: string;
-  phone_number?: string;
-}
-
-export interface BookingResult {
-  booking_id: string;
-  status: string;
-  booking_type: string;
-  offer_id: string;
-  flight_price: number;
-  service_fee: number;
-  service_fee_percentage: number;
-  total_charged: number;
-  currency: string;
-  order_id: string;
-  booking_reference: string;
-  unlock_payment_id: string;
-  fee_payment_id: string;
-  created_at: string;
-  details: Record<string, unknown>;
-}
-
 export interface LetsFGSearchOptions {
   returnDate?: string;
   adults?: number;
@@ -114,24 +72,24 @@ export interface LetsFGSearchOptions {
 type LetsFGClient = {
   search(origin: string, destination: string, dateFrom: string, options?: LetsFGSearchOptions): Promise<FlightSearchResult>;
   resolveLocation(query: string): Promise<Array<Record<string, unknown>>>;
-  unlock(offerId: string): Promise<UnlockResult>;
-  book(offerId: string, passengers: Passenger[], contactEmail: string, contactPhone?: string, idempotencyKey?: string): Promise<BookingResult>;
-  setupPayment(token?: string): Promise<Record<string, unknown>>;
-  linkGithub(githubUsername: string): Promise<Record<string, unknown>>;
-  me(): Promise<Record<string, unknown>>;
 };
 
 type LetsFGConstructor = {
   new(config?: { apiKey?: string; baseUrl?: string; timeout?: number }): LetsFGClient;
-  register(agentName: string, email: string, baseUrl?: string, ownerName?: string, description?: string): Promise<Record<string, unknown>>;
 };
 
 type LetsFGModule = {
   LetsFG: LetsFGConstructor;
   offerSummary?: (offer: FlightOffer) => string;
   cheapestOffer?: (result: FlightSearchResult) => FlightOffer | null;
-  systemInfo?: () => Promise<Record<string, unknown>>;
 };
+
+export interface FlightsHandoff {
+  tool: "letsfg";
+  summary: string;
+  commands: string[];
+  capabilities: string[];
+}
 
 export interface FlightsInspectResult {
   backend: "letsfg-sdk";
@@ -199,11 +157,13 @@ export async function searchFlights(origin: string, destination: string, dateFro
   const mod = loadLetsFGModule();
   const client = createClient(mod);
   const result = await client.search(origin, destination, dateFrom, options);
+  const bestOffer = mod.cheapestOffer?.(result) ?? result.offers[0] ?? null;
   return {
     provider: "letsfg-sdk",
     result,
-    bestOffer: mod.cheapestOffer?.(result) ?? result.offers[0] ?? null,
-    offerSummaries: result.offers.slice(0, 10).map((offer) => summarizeOffer(offer, mod.offerSummary))
+    bestOffer,
+    offerSummaries: result.offers.slice(0, 10).map((offer) => summarizeOffer(offer, mod.offerSummary)),
+    handoff: buildLetsFGHandoff(bestOffer?.id)
   };
 }
 
@@ -211,51 +171,7 @@ export async function resolveFlightLocation(query: string) {
   const mod = loadLetsFGModule();
   const client = createClient(mod);
   const locations = await client.resolveLocation(query);
-  return { provider: "letsfg-sdk", query, locations };
-}
-
-export async function unlockFlightOffer(offerId: string) {
-  const mod = loadLetsFGModule();
-  const client = createClient(mod);
-  return { provider: "letsfg-sdk", ...(await client.unlock(offerId)) };
-}
-
-export async function bookFlight(offerId: string, passengers: Passenger[], email: string, phone?: string, idempotencyKey?: string) {
-  const mod = loadLetsFGModule();
-  const client = createClient(mod);
-  return { provider: "letsfg-sdk", ...(await client.book(offerId, passengers, email, phone, idempotencyKey)) };
-}
-
-export async function registerFlightsAgent(name: string, email: string, owner?: string, description?: string) {
-  const mod = loadLetsFGModule();
-  return {
-    provider: "letsfg-sdk",
-    ...(await mod.LetsFG.register(name, email, process.env.LETSFG_BASE_URL, owner, description))
-  };
-}
-
-export async function linkFlightsGithub(username: string) {
-  const mod = loadLetsFGModule();
-  const client = createClient(mod);
-  return { provider: "letsfg-sdk", ...(await client.linkGithub(username)) };
-}
-
-export async function setupFlightsPayment(token?: string) {
-  const mod = loadLetsFGModule();
-  const client = createClient(mod);
-  return { provider: "letsfg-sdk", ...(await client.setupPayment(token)) };
-}
-
-export async function getFlightsProfile() {
-  const mod = loadLetsFGModule();
-  const client = createClient(mod);
-  return { provider: "letsfg-sdk", ...(await client.me()) };
-}
-
-export async function getFlightsSystemInfo() {
-  const mod = loadLetsFGModule();
-  if (typeof mod.systemInfo !== "function") throw new Error("Installed letsfg package does not expose systemInfo().");
-  return { provider: "letsfg-sdk", info: await mod.systemInfo() };
+  return { provider: "letsfg-sdk", query, locations, handoff: buildLetsFGHandoff() };
 }
 
 function formatDuration(seconds: number): string {
@@ -287,6 +203,11 @@ export function formatFlightSearchText(result: FlightSearchResult, summaries: st
     lines.push("");
     for (const [index, summary] of summaries.entries()) lines.push(`${index + 1}. ${summary}`);
   }
+  const handoff = buildLetsFGHandoff(bestOffer?.id);
+  lines.push("");
+  lines.push("Action handoff:");
+  lines.push(`- ${handoff.summary}`);
+  for (const command of handoff.commands) lines.push(`- ${command}`);
   return lines.join("\n");
 }
 
@@ -299,5 +220,32 @@ export function formatFlightLocationsText(query: string, locations: Array<Record
     const country = typeof location.country === "string" ? location.country : undefined;
     lines.push(`${index + 1}. ${name} (${code})${country ? ` — ${country}` : ""}`);
   }
+  lines.push("");
+  lines.push("Next: use these codes with `search flights <origin> <destination> <date>`.");
   return lines.join("\n");
+}
+
+export function buildLetsFGHandoff(bestOfferId?: string): FlightsHandoff {
+  const commands = [
+    "letsfg register --name my-agent --email me@example.com",
+    "letsfg link-github <github-username>",
+    bestOfferId ? `letsfg unlock ${bestOfferId}` : "letsfg unlock <offer_id>",
+    "letsfg setup-payment",
+    bestOfferId ? `letsfg book ${bestOfferId} --passenger '{\"id\":\"pas_xxx\",...}' --email you@example.com` : "letsfg book <offer_id> --passenger '{\"id\":\"pas_xxx\",...}' --email you@example.com",
+    "letsfg me"
+  ];
+
+  return {
+    tool: "letsfg",
+    summary: "Use srch for research and fare discovery. Switch to the native letsfg CLI for account setup, unlock, payment, booking, and post-search actions.",
+    commands,
+    capabilities: [
+      "register an agent account",
+      "link GitHub to unlock LetsFG access",
+      "unlock an offer",
+      "set up payment",
+      "book a flight",
+      "inspect agent/account status"
+    ]
+  };
 }

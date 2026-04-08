@@ -7,7 +7,7 @@ Domains:
   web            web retrieval
   code           code retrieval
   docs           local docs retrieval
-  flights        optional flight search + booking via LetsFG
+  flights        optional flight search via LetsFG + native handoff
   social         social retrieval spaces
   fetch          readable URL fetch
   ask            cross-domain retrieval
@@ -40,11 +40,12 @@ Next help:
   search config --help
 `;
 
-export const FLIGHTS_HELP = `search flights — optional flight search + booking via LetsFG
+export const FLIGHTS_HELP = `search flights — optional flight search via LetsFG
 
 What it does:
-  wraps the LetsFG TypeScript SDK inside srch's domain-first CLI
+  wraps LetsFG's search capabilities inside srch's domain-first CLI
   keeps flights optional so base srch installs stay lean
+  stops at research/search and hands action workflows off to native letsfg
 
 Install:
   npm install letsfg
@@ -54,13 +55,6 @@ Usage:
   search flights <origin> <destination> <date> [flags]
   search flights search <origin> <destination> <date> [flags]
   search flights resolve <query...>
-  search flights register --name <agent> --email <email> [--owner <name>] [--description <text>]
-  search flights link-github <username>
-  search flights unlock <offer_id>
-  search flights book <offer_id> --passenger '{...}' [--passenger '{...}'] --email <email> [--phone <phone>] [--idempotency-key <key>]
-  search flights setup-payment [--token <token>]
-  search flights me
-  search flights system-info
 
 Search flags:
   --return <date>            return date YYYY-MM-DD
@@ -78,16 +72,20 @@ Examples:
   search flights LHR BCN 2026-06-15
   search flights search LON BCN 2026-06-15 --return 2026-06-22 --sort price --json
   search flights resolve "berlin"
-  search flights register --name srch-agent --email me@example.com
-  search flights link-github your-github-user
-  search flights unlock off_xxx --json
-  search flights book off_xxx --passenger '{"id":"pas_1","given_name":"Ada","family_name":"Lovelace","born_on":"1990-12-10"}' --email ada@example.com --json
-  search flights me --json
+
+Native letsfg CLI capabilities:
+  letsfg register --name my-agent --email me@example.com
+  letsfg link-github <github-username>
+  letsfg unlock <offer_id>
+  letsfg setup-payment
+  letsfg book <offer_id> --passenger '{...}' --email you@example.com
+  letsfg me
+  letsfg system-info
 
 Notes:
   - search + resolve run through LetsFG's local Python runtime
-  - unlock/book/setup-payment/me require LetsFG account state, and usually LETSFG_API_KEY
-  - use repeated --passenger flags or a single --passengers '[...]' JSON array
+  - use srch for fare discovery and travel research, then switch to letsfg to take action
+  - srch intentionally does not book flights; it hands you off to letsfg for that step
 `;
 
 export const WEB_HELP = `search web — web research

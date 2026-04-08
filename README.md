@@ -39,6 +39,8 @@ If `search` is installed globally, install the companion package globally too:
 npm install -g letsfg
 ```
 
+`srch` only brings in LetsFG's search surface. Booking and account workflows stay in the native `letsfg` tool.
+
 ## What it does
 
 `search` is a single CLI that routes queries to the right backend and returns grounded, cited results. Designed for LLM agents and humans who want answers fast with minimal tokens.
@@ -137,6 +139,11 @@ search docs auth flow --json
 
 Backed by the optional LetsFG TypeScript SDK.
 
+`srch` exposes the research side only:
+- flight offer search
+- route / airport resolution
+- handoff guidance into native `letsfg`
+
 Default search maps to LetsFG's `search` flow:
 
 ```bash
@@ -144,22 +151,59 @@ search flights GDN BER 2026-03-03
 search flights search LON BCN 2026-04-01 --return 2026-04-08 --sort price --json
 ```
 
-Useful companion commands:
+Location resolution:
 
 ```bash
 search flights resolve "berlin"
-search flights register --name srch-agent --email me@example.com
-search flights link-github your-github-user
-search flights unlock off_xxx --json
-search flights book off_xxx --passenger '{"id":"pas_xxx","given_name":"John","family_name":"Doe","born_on":"1990-01-15"}' --email john@example.com
-search flights me --json
-search flights system-info
 ```
 
 Notes:
 - `search` and `resolve` use LetsFG's local Python runtime
-- `unlock`, `book`, `setup-payment`, and `me` usually require `LETSFG_API_KEY`
-- `book` accepts repeated `--passenger '{...}'` flags or a single `--passengers '[...]'` JSON array
+- `srch` intentionally stops at search/research and does not book flights
+- after finding an offer in `srch`, switch to native `letsfg` for action workflows
+
+Native `letsfg` capabilities you use after handoff:
+
+```bash
+letsfg register --name srch-agent --email me@example.com
+letsfg link-github your-github-user
+letsfg unlock off_xxx
+letsfg setup-payment
+letsfg book off_xxx --passenger '{"id":"pas_xxx","given_name":"John","family_name":"Doe","born_on":"1990-01-15"}' --email john@example.com
+letsfg me
+letsfg system-info
+```
+
+## Travel workflow
+
+See `docs/travel.md` for the dedicated end-to-end travel workflow.
+
+Recommended user journey:
+
+1. Research destinations, hotels, and itinerary ideas in `srch`
+
+```bash
+search web "best boutique hotels in barcelona near sagrada familia"
+search web "3 day barcelona itinerary for first time visitors"
+search fetch https://example.com/barcelona-neighborhood-guide
+```
+
+2. Search fares in `srch`
+
+```bash
+search flights JFK BCN 2026-06-12 --return 2026-06-19 --sort price
+search flights resolve "barcelona"
+```
+
+3. Take action in native tools
+
+```bash
+letsfg unlock off_xxx
+letsfg setup-payment
+letsfg book off_xxx --passenger '{"id":"pas_xxx",...}' --email you@example.com
+```
+
+This keeps `srch` as the unified research surface and uses purpose-built tools like `letsfg` when you are ready to transact.
 
 ## Fetch content
 
