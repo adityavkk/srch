@@ -12,7 +12,7 @@ Core thesis: domain-boundary artifacts (typed SDK with rich semantics) outperfor
 - [x] Slice 2 -- strategy interface + web-default strategy + empty state handling
 - [x] Slice 3 -- domain + module + config-is-code
 - [x] Slice 4 -- CLI as thin frontend + AXI ergonomics
-- [ ] Slice 5 -- flights + rewards-flights domains
+- [x] Slice 5 -- flights + rewards-flights domains
 - [ ] Slice 6 -- session hooks (generic adapter system)
 - [ ] Slice 7 -- agent harness interface
 
@@ -429,13 +429,13 @@ Verify: retrieval CLI commands (`web`, `code`, `docs`, `social`, `fetch`) delega
 
 Port flights and rewards-flights into SDK domain model with domain-specific Evidence payloads.
 
-Verify: `client.run({ domain: "flights", query: "JFK DEL 2026-05-15" })` returns Evidence<FlightOffer[]>. CLI `search flights` renders same output as before.
+Verify: `client.run({ domain: "flights", query: "JFK DEL 2026-05-15" })` works through Fli. `client.run({ domain: "rewards-flights", query: "JFK CDG", date: "2026-07-01" })` works through Seats.aero. Existing CLI `search flights` and `search rewards-flights` continue to render the same output.
 
-- `src/sdk/sources/fli.ts` -- port fli.ts as defineSource (optional, detect + install hint)
-- `src/sdk/sources/seats-aero.ts` -- port seats-aero.ts as defineSource
+- `src/sdk/sources/fli.ts` -- Fli search source (optional backend, install hint preserved at strategy layer)
+- `src/sdk/sources/seats-aero.ts` -- Seats.aero search source
 - `src/sdk/strategies/flights-default.ts`, `rewards-default.ts`
 - `src/sdk/domains/flights.ts`, `rewards-flights.ts`
-- `src/cli/commands/flights.ts`, `rewards-flights.ts` -- thin CLI handlers
+- `src/sdk/modules/flights.ts` -- optional flights module, not part of `coreModule`
 - `test/sdk/domain-flights.test.ts`
 
 ### Slice 6: Session hooks (generic adapter system)

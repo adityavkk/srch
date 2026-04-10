@@ -12,6 +12,11 @@ export {
   type BirdSourceRequest
 } from "./sdk/sources/bird.js";
 export {
+  fliSource,
+  type FliEvidencePayload,
+  type FliSourceRequest
+} from "./sdk/sources/fli.js";
+export {
   braveSource,
   type BraveEvidencePayload
 } from "./sdk/sources/brave.js";
@@ -39,6 +44,11 @@ export {
   type FetchEvidencePayload
 } from "./sdk/sources/fetch-content.js";
 export {
+  seatsAeroSource,
+  type SeatsAeroEvidencePayload,
+  type SeatsAeroSourceRequest
+} from "./sdk/sources/seats-aero.js";
+export {
   exaSource,
   createExaSource,
   type ExaEvidencePayload,
@@ -57,9 +67,12 @@ export {
 export { codeDomain } from "./sdk/domains/code.js";
 export { docsDomain } from "./sdk/domains/docs.js";
 export { fetchDomain } from "./sdk/domains/fetch.js";
+export { flightsDomain } from "./sdk/domains/flights.js";
+export { rewardsFlightsDomain } from "./sdk/domains/rewards-flights.js";
 export { socialDomain } from "./sdk/domains/social.js";
 export { webDomain } from "./sdk/domains/web.js";
 export { coreModule } from "./sdk/modules/core.js";
+export { flightsModule } from "./sdk/modules/flights.js";
 export {
   codeDefaultStrategy,
   type CodeStrategyRequest
@@ -69,6 +82,14 @@ export {
   type DocsStrategyRequest
 } from "./sdk/strategies/docs-default.js";
 export { fetchDefaultStrategy } from "./sdk/strategies/fetch-default.js";
+export {
+  flightsDefaultStrategy,
+  type FlightsStrategyRequest
+} from "./sdk/strategies/flights-default.js";
+export {
+  rewardsDefaultStrategy,
+  type RewardsStrategyRequest
+} from "./sdk/strategies/rewards-default.js";
 export {
   socialDefaultStrategy,
   type SocialStrategyRequest

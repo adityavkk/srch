@@ -89,7 +89,7 @@ export type Source<
   run: (req: TRequest, ctx: SourceContext) => Promise<Evidence<TPayload>[]>;
 };
 
-export type AnySource = Source<SourceRequest, unknown>;
+export type AnySource = Source<any, unknown>;
 
 export type StrategyRequest = {
   query: string;
