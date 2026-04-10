@@ -1,5 +1,8 @@
 export { createClient, type ClientSearch, type SrchClient } from "./sdk/client.js";
-export { defineSource, defineStrategy } from "./sdk/define.js";
+export { loadConfig, findConfigPath, resolveConfig, type CreateClientOptions, type LoadConfigOptions } from "./sdk/config.js";
+export { defineConfig, defineDomain, defineModule, defineSource, defineStrategy } from "./sdk/define.js";
+export { DomainRegistry } from "./sdk/domain.js";
+export { defineModule as createModule } from "./sdk/define.js";
 export { merge, dedupe, sort, filter } from "./sdk/operators.js";
 export { SourceRegistry } from "./sdk/registry.js";
 export { StrategyRegistry } from "./sdk/strategy.js";
@@ -23,6 +26,8 @@ export {
   perplexitySource,
   type PerplexityEvidencePayload
 } from "./sdk/sources/perplexity.js";
+export { webDomain } from "./sdk/domains/web.js";
+export { coreModule } from "./sdk/modules/core.js";
 export {
   webDefaultStrategy,
   createWebDefaultStrategy,
@@ -32,8 +37,10 @@ export {
 export type {
   AnySource,
   AnyStrategy,
+  Domain,
   Evidence,
   HttpClient,
+  Module,
   NonEmptyArray,
   Provenance,
   ProviderAttempt,
@@ -50,6 +57,7 @@ export type {
   SourceContext,
   SourceHealth,
   SourceRequest,
+  SrchConfig,
   SrchStatus,
   StaticStrategy,
   StrategyContext,

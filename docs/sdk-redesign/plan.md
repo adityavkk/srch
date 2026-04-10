@@ -11,6 +11,8 @@ Core thesis: domain-boundary artifacts (typed SDK with rich semantics) outperfor
 - [x] Slice 1 -- core types + Source interface + exa tracer bullet
 - [x] Slice 2 -- strategy interface + web-default strategy + empty state handling
 - [ ] Slice 3 -- domain + module + config-is-code
+  - tracer bullet landed: DomainRegistry, Module, coreModule(web), `defineConfig()`, `loadConfig()` for `srch.config.ts`
+  - remaining: code/docs/fetch/social domain ports
 - [ ] Slice 4 -- CLI as thin frontend + AXI ergonomics
 - [ ] Slice 5 -- flights + rewards-flights domains
 - [ ] Slice 6 -- session hooks (generic adapter system)
@@ -401,19 +403,26 @@ Verify: `createClient().run({ domain: "web", query: "bun sqlite" })` returns Run
 
 Register domains. Load modules. Support `srch.config.ts`.
 
-Verify: `defineConfig({ modules: [coreModule] })` registers all built-in domains/sources/strategies. `createClient(config).run({ domain: "code", query: "..." })` works end-to-end.
+Tracer bullet verify: `defineConfig({ modules: [coreModule] })` registers the built-in web domain/sources/strategy. `loadConfig()` loads `srch.config.ts`. `createClient({ config }).run({ domain: "notes", query: "..." })` works for custom modules.
+
+Follow-on verify for remaining ports: `createClient({ config }).run({ domain: "code", query: "..." })` works once code/docs/fetch/social domains are ported.
 
 - `src/sdk/domain.ts` -- Domain type, DomainRegistry, defineDomain()
 - `src/sdk/module.ts` -- Module type, defineModule()
 - `src/sdk/config.ts` -- defineConfig(), config loading from srch.config.ts
-- `src/sdk/modules/core.ts` -- core module bundling all built-in domains/sources/strategies
-- `src/sdk/sources/context7.ts`, `deepwiki.ts`, `exa-mcp.ts` -- port remaining sources
-- `src/sdk/sources/bird.ts` -- port twitter/bird as defineSource
-- `src/sdk/strategies/code-default.ts` -- port code.ts (primary + parallel secondary fan-out)
-- `src/sdk/strategies/fetch-default.ts` -- port content.ts (extraction chain)
-- `src/sdk/strategies/social-default.ts` -- port bird-backed social strategy
-- `src/sdk/domains/web.ts`, `code.ts`, `docs.ts`, `fetch.ts`, `social.ts`
-- `test/sdk/module-core.test.ts` -- verify all domains reachable, registry populated
+- `src/sdk/domain.ts` -- DomainRegistry
+- `src/sdk/module.ts` -- Module validation (`defineModule()` rejects empty modules)
+- `src/sdk/config.ts` -- `defineConfig()`, config resolution, additive module merge, `loadConfig()` for `srch.config.ts`
+- `src/sdk/modules/core.ts` -- current tracer bullet: built-in web domain + web sources + web/default strategy
+- `src/sdk/domains/web.ts` -- first concrete domain
+- `test/sdk/module-core.test.ts` -- verify object config, core module, and TS config-file loading
+- remaining follow-on in this slice:
+  - `src/sdk/sources/context7.ts`, `deepwiki.ts`, `exa-mcp.ts`
+  - `src/sdk/sources/bird.ts`
+  - `src/sdk/strategies/code-default.ts`
+  - `src/sdk/strategies/fetch-default.ts`
+  - `src/sdk/strategies/social-default.ts`
+  - `src/sdk/domains/code.ts`, `docs.ts`, `fetch.ts`, `social.ts`
 
 ### Slice 4: CLI as thin frontend + AXI ergonomics
 

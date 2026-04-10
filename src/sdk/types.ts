@@ -135,6 +135,33 @@ export type StaticStrategy<
 
 export type AnyStrategy = StaticStrategy<StrategyRequest, RunResult>;
 
+export type Domain = {
+  name: string;
+  defaultStrategy: string;
+  strategies: NonEmptyArray<string>;
+  sources: NonEmptyArray<string>;
+  capabilities: NonEmptyArray<string>;
+  subdomains: string[];
+};
+
+export type Module = {
+  name: string;
+  sources: AnySource[];
+  strategies: AnyStrategy[];
+  domains: Domain[];
+};
+
+export type SrchConfig = {
+  sources?: AnySource[];
+  strategies?: AnyStrategy[];
+  domains?: Domain[];
+  modules?: Module[];
+  defaults?: {
+    domain?: string;
+    strategy?: string;
+  };
+};
+
 export type SourceHealth =
   | { name: string; status: "healthy" }
   | { name: string; status: "unavailable"; reason: string };

@@ -1,10 +1,11 @@
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { tsImport } from "tsx/esm/api";
 import { resolveSecret } from "../lib/core/secrets.js";
 import { createTraceSink } from "../lib/trace.js";
-import { braveSource } from "./sources/brave.js";
-import { exaSource } from "./sources/exa.js";
-import { geminiSource } from "./sources/gemini.js";
-import { perplexitySource } from "./sources/perplexity.js";
-import type { AnySource, AnyStrategy, HttpClient, SecretResolver, SourceContext } from "./types.js";
+import { coreModule } from "./modules/core.js";
+import type { AnySource, AnyStrategy, Domain, HttpClient, Module, SecretResolver, SourceContext, SrchConfig } from "./types.js";
 
 export type CreateClientOptions = {
   trace?: boolean;
@@ -12,7 +13,21 @@ export type CreateClientOptions = {
   secrets?: SecretResolver;
   sources?: AnySource[];
   strategies?: AnyStrategy[];
+  domains?: Domain[];
+  config?: SrchConfig;
 };
+
+export type LoadConfigOptions = {
+  cwd?: string;
+  path?: string;
+};
+
+const CONFIG_FILENAMES = [
+  "srch.config.ts",
+  "srch.config.mts",
+  "srch.config.js",
+  "srch.config.mjs"
+] as const;
 
 const defaultSecrets: SecretResolver = {
   resolve(name) {
@@ -32,11 +47,93 @@ export function createSourceContext(options: CreateClientOptions = {}): SourceCo
   };
 }
 
-export function resolveSources(options: CreateClientOptions = {}): AnySource[] {
-  if (options.sources) {
-    if (options.sources.length === 0) throw new Error("createClient requires at least one source");
-    return [...options.sources];
+function dedupeByName<T extends { name: string }>(items: T[]): T[] {
+  const byName = new Map<string, T>();
+  for (const item of items) byName.set(item.name, item);
+  return [...byName.values()];
+}
+
+export function expandModules(modules: Module[]): Pick<Required<SrchConfig>, "sources" | "strategies" | "domains"> {
+  return {
+    sources: modules.flatMap((module) => module.sources),
+    strategies: modules.flatMap((module) => module.strategies),
+    domains: modules.flatMap((module) => module.domains)
+  };
+}
+
+export function resolveConfig(options: CreateClientOptions = {}): Required<Pick<SrchConfig, "sources" | "strategies" | "domains">> & { defaults?: SrchConfig["defaults"] } {
+  const config = options.config;
+  const modules = config?.modules ?? [coreModule];
+  const expanded = expandModules(modules);
+
+  const configSources = dedupeByName([...expanded.sources, ...(config?.sources ?? [])]);
+  const configStrategies = dedupeByName([...expanded.strategies, ...(config?.strategies ?? [])]);
+  const configDomains = dedupeByName([...expanded.domains, ...(config?.domains ?? [])]);
+
+  const sources = options.sources ? [...options.sources] : configSources;
+  const strategies = options.strategies ? [...options.strategies] : configStrategies;
+  const domains = options.domains ? [...options.domains] : configDomains;
+
+  if (sources.length === 0) throw new Error("createClient requires at least one source");
+  if (strategies.length === 0) throw new Error("createClient requires at least one strategy");
+  if (domains.length === 0) throw new Error("createClient requires at least one domain");
+
+  return {
+    sources: [...sources],
+    strategies: [...strategies],
+    domains: [...domains],
+    defaults: config?.defaults
+  };
+}
+
+export function findConfigPath(startDir = process.cwd()): string | null {
+  let current = resolve(startDir);
+
+  while (true) {
+    for (const filename of CONFIG_FILENAMES) {
+      const candidate = join(current, filename);
+      if (existsSync(candidate)) return candidate;
+    }
+
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+function unwrapDefault(value: unknown): unknown {
+  let current = value;
+
+  while (current && typeof current === "object") {
+    const record = current as Record<string, unknown>;
+    if ("default" in record) {
+      current = record.default;
+      continue;
+    }
+    if ("config" in record) {
+      current = record.config;
+      continue;
+    }
+    break;
   }
 
-  return [exaSource, braveSource, geminiSource, perplexitySource];
+  return current;
+}
+
+function normalizeImportedConfig(module: unknown, filePath: string): SrchConfig {
+  const candidate = unwrapDefault(module);
+
+  if (!candidate || typeof candidate !== "object") {
+    throw new Error(`Config ${filePath} must export an object or default object`);
+  }
+
+  return candidate as SrchConfig;
+}
+
+export async function loadConfig(options: LoadConfigOptions = {}): Promise<SrchConfig | null> {
+  const filePath = options.path ?? findConfigPath(options.cwd);
+  if (!filePath) return null;
+
+  const imported = await tsImport(pathToFileURL(filePath).href, import.meta.url);
+  return normalizeImportedConfig(imported, filePath);
 }
