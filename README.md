@@ -1,6 +1,6 @@
 # srch
 
-Local-first research CLI for agents and humans. One command, many backends.
+Local-first retrieval SDK for agents. CLI thin frontend.
 
 <p align="center">
   <img src="demo.gif" alt="srch demo" width="800">
@@ -37,13 +37,26 @@ python3 -m pip install flights
 
 ## What it does
 
-`srch` is a local-first programmable retrieval engine.
+`srch` is an agent-first programmable retrieval engine.
 
-Two frontends:
-- CLI for humans and shell automation
-- TypeScript SDK for codeact agents and apps
+Core idea:
+- search should be a domain, not a flat bag of tools
+- agents should program against typed retrieval nouns and verbs
+- CLI should be a thin frontend over the same model
 
-The CLI is thin. The SDK owns the retrieval model: domains, sources, strategies, evidence, hooks.
+The SDK owns the retrieval model:
+- `domain`: stable retrieval space like `web`, `code`, `docs`, `fetch`, `social`
+- `source`: one retrieval primitive or provider
+- `strategy`: retrieval program over sources
+- `evidence`: grounded result with provenance
+- `hooks`: ambient session context for agent runtimes
+
+For agents, this gives a better interface than a tool list:
+- fewer tool-selection mistakes
+- typed requests/results
+- stable domain vocabulary
+- code-is-config and code-is-plan
+- same retrieval model in CLI and SDK
 
 ## SDK
 
@@ -59,13 +72,43 @@ Import from the package root:
 import { createClient } from "search-tool";
 
 const client = createClient();
-const result = await client.run({
+
+const web = await client.run({
   domain: "web",
   query: "bun sqlite"
 });
+
+if (web.kind === "success") {
+  console.log(web.evidence[0].payload);
+}
 ```
 
-Low-level source access:
+This is the main agent surface.
+
+An agent does not need to pick from a long list of ad hoc tools. It can stay inside the search domain:
+
+```ts
+import { createClient } from "search-tool";
+
+const client = createClient();
+
+const web = await client.run({
+  domain: "web",
+  query: "best bun sqlite docs"
+});
+
+const code = await client.run({
+  domain: "code",
+  query: "bun sqlite transactions"
+});
+
+const page = await client.run({
+  domain: "fetch",
+  query: "https://bun.sh/docs/runtime/sqlite"
+});
+```
+
+Low-level source access is available when the agent wants to control routing directly:
 
 ```ts
 import { createClient, exaSource } from "search-tool";
@@ -90,6 +133,13 @@ export default defineConfig({
   }
 });
 ```
+
+Agent-specific pieces:
+- `createClient()` for execution
+- `defineSource()` for retrieval adapters
+- `defineStrategy()` / `defineAgenticStrategy()` for retrieval programs
+- `defineModule()` for bundling domains, sources, and strategies
+- `search hooks install` for session-start ambient context
 
 ## Output and persistence
 
@@ -128,12 +178,20 @@ search inspect tools                  backend diagnostics
 search config                         safe config management
 ```
 
-## Command taxonomy
+## Search as a domain
 
-`srch` is moving toward a domain-first grammar:
+`srch` is built around a domain-first grammar:
 
 ```text
 search <domain> [subdomain] [strategy] [target] <query-or-task>
+```
+
+Same idea in the SDK:
+
+```ts
+await client.run({ domain: "web", query: "bun sqlite" });
+await client.run({ domain: "code", query: "bun sqlite transactions" });
+await client.run({ domain: "docs", query: "auth middleware" });
 ```
 
 Examples:
@@ -152,7 +210,7 @@ Concepts:
 - `subdomain`: optional narrower space like `x`, `reddit`, `github`
 - `strategy`: static or agentic retrieval behavior like `repo`, `research`, `verify`, `compare`
 
-`ask` is not a special case. It is a cross-domain retrieval domain.
+This is the main design goal: give agents the best possible access to search as a coherent domain model instead of forcing them to juggle unrelated tools.
 
 ## Web search
 
