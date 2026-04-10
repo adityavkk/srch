@@ -91,6 +91,50 @@ export type Source<
 
 export type AnySource = Source<SourceRequest, unknown>;
 
+export type StrategyRequest = {
+  query: string;
+  target?: string;
+  signal?: AbortSignal;
+};
+
+export type RunRequest = StrategyRequest & {
+  domain: string;
+  strategy?: string;
+};
+
+export type SearchFn = {
+  <TRequest extends SourceRequest, TPayload>(
+    source: Source<TRequest, TPayload>,
+    req: TRequest
+  ): Promise<Evidence<TPayload>[]>;
+  (sourceName: string, req: SourceRequest): Promise<Evidence[]>;
+};
+
+export type StrategyContext = SourceContext & {
+  sources: {
+    get(name: string): AnySource;
+    list(): AnySource[];
+  };
+  strategies: {
+    get(name: string): AnyStrategy;
+    list(): AnyStrategy[];
+  };
+  search: SearchFn;
+  merge: (...results: Evidence[][]) => Evidence[];
+};
+
+export type StaticStrategy<
+  TRequest extends StrategyRequest = StrategyRequest,
+  TResult extends RunResult = RunResult
+> = {
+  kind: "static";
+  name: string;
+  domain: string;
+  run: (req: TRequest, ctx: StrategyContext) => Promise<TResult>;
+};
+
+export type AnyStrategy = StaticStrategy<StrategyRequest, RunResult>;
+
 export type SourceHealth =
   | { name: string; status: "healthy" }
   | { name: string; status: "unavailable"; reason: string };

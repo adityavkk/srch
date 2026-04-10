@@ -1,26 +1,14 @@
 import type { ExtractedContent, SearchOptions } from "../../lib/core/types.js";
 import { searchWithExa, searchWithExaPaid, type ExaSearchResult } from "../../lib/upstream/exa.js";
 import { defineSource } from "../define.js";
-import type { Evidence, Source, SourceRequest } from "../types.js";
+import type { Source } from "../types.js";
+import { mapSearchResponseEvidence, type WebEvidencePayload, type WebSourceRequest } from "./web-shared.js";
 
-export type ExaSourceRequest = SourceRequest & {
+export type ExaSourceRequest = WebSourceRequest & {
   mode?: "mcp" | "api";
-  numResults?: number;
-  includeContent?: boolean;
-  recencyFilter?: SearchOptions["recencyFilter"];
-  domainFilter?: string[];
 };
 
-export type ExaEvidencePayload = {
-  kind: "search-result";
-  title: string;
-  url: string;
-  snippet: string;
-  content:
-    | { kind: "none" }
-    | { kind: "inline"; text: string };
-  native: ExaSearchResult["native"];
-};
+export type ExaEvidencePayload = WebEvidencePayload<ExaSearchResult["native"]>;
 
 export type ExaSourceDeps = {
   searchMcp: typeof searchWithExa;
@@ -40,35 +28,12 @@ function indexInlineContent(items: ExtractedContent[] | undefined): Map<string, 
   return byUrl;
 }
 
-function mapEvidence(query: string, response: ExaSearchResult): Evidence<ExaEvidencePayload>[] {
-  const inlineContent = indexInlineContent(response.inlineContent);
+function mapEvidence(query: string, response: ExaSearchResult) {
+  const inlineContent = new Map(
+    [...indexInlineContent(response.inlineContent)].map(([url, item]) => [url, item.content])
+  );
 
-  return response.results.map((result) => {
-    const content = inlineContent.get(result.url);
-
-    return {
-      source: "exa",
-      domain: "web",
-      query,
-      provenance: {
-        kind: "web",
-        url: result.url,
-        transport: response.native.provider,
-        timestamp: Date.now(),
-        cached: false
-      },
-      payload: {
-        kind: "search-result",
-        title: result.title,
-        url: result.url,
-        snippet: result.snippet,
-        content: content
-          ? { kind: "inline", text: content.content }
-          : { kind: "none" },
-        native: response.native
-      }
-    };
-  });
+  return mapSearchResponseEvidence("exa", query, response, response.native.provider, inlineContent);
 }
 
 export function createExaSource(deps: ExaSourceDeps = defaultDeps): Source<ExaSourceRequest, ExaEvidencePayload> {

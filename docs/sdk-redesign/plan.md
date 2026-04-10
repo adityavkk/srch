@@ -9,7 +9,7 @@ Core thesis: domain-boundary artifacts (typed SDK with rich semantics) outperfor
 ## Implementation Status
 
 - [x] Slice 1 -- core types + Source interface + exa tracer bullet
-- [ ] Slice 2 -- strategy interface + web-default strategy + empty state handling
+- [x] Slice 2 -- strategy interface + web-default strategy + empty state handling
 - [ ] Slice 3 -- domain + module + config-is-code
 - [ ] Slice 4 -- CLI as thin frontend + AXI ergonomics
 - [ ] Slice 5 -- flights + rewards-flights domains
@@ -134,22 +134,31 @@ type SourceContext = {
 // Strategy -- discriminated union
 // ---------------------------------------------------------------------------
 
-type StaticStrategy = {
+type StaticStrategy<
+  TRequest extends StrategyRequest = StrategyRequest,
+  TResult extends RunResult = RunResult
+> = {
   kind: "static";
   name: string;
   domain: string;
-  run: (req: StrategyRequest, ctx: StrategyContext) => Promise<RunResult>;
+  run: (req: TRequest, ctx: StrategyContext) => Promise<TResult>;
 };
 
-type AgenticStrategy = {
+type AgenticStrategy<
+  TRequest extends StrategyRequest = StrategyRequest,
+  TResult extends RunResult = RunResult
+> = {
   kind: "agentic";
   name: string;
   domain: string;
   adapter: string;           // which agent adapter to use (e.g. "pi-mono")
-  run: (req: StrategyRequest, ctx: AgenticStrategyContext) => Promise<RunResult>;
+  run: (req: TRequest, ctx: AgenticStrategyContext) => Promise<TResult>;
 };
 
-type Strategy = StaticStrategy | AgenticStrategy;
+type Strategy<
+  TRequest extends StrategyRequest = StrategyRequest,
+  TResult extends RunResult = RunResult
+> = StaticStrategy<TRequest, TResult> | AgenticStrategy<TRequest, TResult>;
 
 type StrategyRequest = {
   query: string;

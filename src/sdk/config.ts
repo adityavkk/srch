@@ -1,13 +1,17 @@
 import { resolveSecret } from "../lib/core/secrets.js";
 import { createTraceSink } from "../lib/trace.js";
+import { braveSource } from "./sources/brave.js";
 import { exaSource } from "./sources/exa.js";
-import type { AnySource, HttpClient, SecretResolver, SourceContext } from "./types.js";
+import { geminiSource } from "./sources/gemini.js";
+import { perplexitySource } from "./sources/perplexity.js";
+import type { AnySource, AnyStrategy, HttpClient, SecretResolver, SourceContext } from "./types.js";
 
 export type CreateClientOptions = {
   trace?: boolean;
   http?: HttpClient;
   secrets?: SecretResolver;
   sources?: AnySource[];
+  strategies?: AnyStrategy[];
 };
 
 const defaultSecrets: SecretResolver = {
@@ -34,5 +38,5 @@ export function resolveSources(options: CreateClientOptions = {}): AnySource[] {
     return [...options.sources];
   }
 
-  return [exaSource];
+  return [exaSource, braveSource, geminiSource, perplexitySource];
 }
