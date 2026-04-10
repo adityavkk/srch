@@ -10,8 +10,7 @@ const FALLBACK_ENV_KEYS: Record<SecretField, string> = {
   perplexityApiKey: "PERPLEXITY_API_KEY",
   geminiApiKey: "GEMINI_API_KEY",
   braveApiKey: "BRAVE_API_KEY",
-  seatsAeroApiKey: "SEATS_AERO_API_KEY",
-  duffelAccessToken: "DUFFEL_ACCESS_TOKEN"
+  seatsAeroApiKey: "SEATS_AERO_API_KEY"
 };
 
 export interface SecretResolution {

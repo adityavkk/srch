@@ -16,23 +16,24 @@ npm run build
 ln -s $(pwd)/dist/cli.js ~/bin/search
 ```
 
-### Flights setup
+### Optional flights domain
 
-`search flights` is now built in via Duffel.
+`search flights` is intentionally optional so the base install stays lean.
 
-Setup the access token once:
+Install it through `srch` directly:
 
 ```bash
-search config set-secret-ref duffelAccessToken op 'op://agent-dev/Duffel/access token'
+search install flights
+search install all
 ```
 
 Manual fallback:
 
 ```bash
-export DUFFEL_ACCESS_TOKEN=dfl_test_xxx
+python3 -m pip install flights
 ```
 
-Duffel has free signup and test-mode access. Production pricing is commercial and not clearly public in their docs.
+`srch` integrates with the Python `fli` SDK package (`flights`) for Google Flights-style search.
 
 ## What it does
 
@@ -63,7 +64,7 @@ search web <query>                    web retrieval
 search code <query>                   code/docs context
 search code repo <target> <query>     deep repo search
 search docs <query>                   local doc search
-search flights <origin> <dest> <date> live fares via Duffel
+search flights <origin> <dest> <date> optional flight search via Fli
 search rewards-flights <o> <d>        award flights via Seats.aero
 search install <target>               install optional domains
 search social <query>                 social retrieval
@@ -151,23 +152,25 @@ search docs auth flow --json
 
 ## Flights
 
-Backed by the official Duffel JavaScript SDK.
+Backed by the optional Python `fli` SDK package (`flights`).
 
 `srch` exposes:
-- live fare search
+- fare search
 - route / airport resolution
-- reliable cabin-constrained filtering based on returned segment cabins
+- normalized result output inside `srch`
 
-Setup:
+Install:
 
 ```bash
-search config set-secret-ref duffelAccessToken op 'op://agent-dev/Duffel/access token'
+search install flights
+search install flights --dry-run --json
+search install all
 ```
 
 Manual fallback:
 
 ```bash
-export DUFFEL_ACCESS_TOKEN=dfl_test_xxx
+python3 -m pip install flights
 ```
 
 Examples:
@@ -179,10 +182,10 @@ search flights resolve "berlin"
 ```
 
 Notes:
-- Duffel supports free signup and test-mode access
-- production pricing is commercial and not clearly public in docs I found
-- `srch` filters returned offers by actual segment cabin when you pass `--cabin`
-- `srch` currently exposes search and place resolution, not booking
+- Fli is a Python SDK/CLI for Google Flights-style search
+- `search install flights` installs the Python package `flights`
+- `resolve` matches against Fli's bundled airport data
+- `srch` currently exposes search and airport lookup, not booking
 
 ## Rewards flights
 
@@ -344,7 +347,7 @@ search config --help
 | Web search | Exa, Brave, Perplexity, Gemini API, Gemini Web (cookie fallback) |
 | Code search | Exa Context API, Exa MCP, Context7, DeepWiki |
 | Local docs | QMD SDK (BM25 + vector + reranking) |
-| Flights | Duffel JavaScript SDK |
+| Flights | Fli Python SDK (`flights`) |
 | Page fetch | Readability, Jina Reader, Gemini URL Context, RSC parser |
 | GitHub | Clone + API fallback via `gh` |
 | PDF | Text extraction via unpdf |

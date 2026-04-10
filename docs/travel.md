@@ -41,13 +41,13 @@ npm run build
 Flights provider setup:
 
 ```bash
-search config set-secret-ref duffelAccessToken op 'op://agent-dev/Duffel/access token'
+search install flights
 ```
 
 Manual fallback:
 
 ```bash
-export DUFFEL_ACCESS_TOKEN=dfl_test_xxx
+python3 -m pip install flights
 ```
 
 ## End-to-end journey
@@ -102,10 +102,10 @@ search rewards-flights JFK BCN --start-date 2026-06-12 --end-date 2026-06-19 --c
 ```
 
 What `search flights` gives you:
-- live fare discovery through Duffel
+- fare discovery through Fli
 - normalized result output inside `srch`
-- airport/city resolution through Duffel suggestions
-- cabin filtering validated against returned segment data
+- airport/city resolution through Fli's airport data
+- optional install so the base CLI stays lean
 
 What `search rewards-flights` gives you:
 - cached points-and-miles availability via Seats.aero

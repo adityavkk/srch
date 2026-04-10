@@ -17,7 +17,7 @@ Use `search` when you need to:
 - search or read tweets/threads on X (Twitter)
 - inspect prior runs or diagnose search/config state
 
-Prefer `--json` for agent flows. Add `--verbose` only when you need routing/timing traces.
+Prefer `--json` for agent flows. Add `--verbose` only when you need routing/timing traces. Add `--out <path>` when you want to persist the final rendered result for later use.
 
 ## Quick start
 
@@ -101,6 +101,9 @@ Canonical note for skills/docs references:
 
 - `--json` -- stable envelope: `{ ok, command, data|error }`
 - `--verbose` -- concise stderr trace; stdout stays clean
+- `--out <path>` -- persist final output to a file
+  - default mode saves human-readable text
+  - `--json` saves the stable JSON envelope
 
 ## Agent guidelines
 
@@ -142,4 +145,5 @@ search config set-secret-ref exaApiKey op 'op://agent-dev/exa/API Key'
 search config set-secret-ref braveApiKey op 'op://agent-dev/Brave Search/api key'
 search config set-secret-ref geminiApiKey op 'op://agent-dev/Gemini API Key/password'
 search inspect tools --json
+search web bun sqlite wasm --json --out web.json
 ```

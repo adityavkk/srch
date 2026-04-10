@@ -7,7 +7,7 @@ Domains:
   web            web retrieval
   code           code retrieval
   docs           local docs retrieval
-  flights        live cash fare search via Duffel
+  flights        optional flight search via Fli
   rewards-flights award travel search via Seats.aero
   social         social retrieval spaces
   fetch          readable URL fetch
@@ -75,6 +75,8 @@ Search flags:
   --source <program>          repeatable mileage program filter
   --carrier <AA>              repeatable carrier filter
   --direct                    only show direct award options
+  --min-seats <n>             require at least n seats when seat counts are known
+  --include-zero-seats        keep zero-seat results instead of filtering them out
   --take <n>                  max results (10-1000)
   --skip <n>                  skip results for pagination
   --order-by <lowest_mileage> sort by cheapest mileage first
@@ -91,6 +93,7 @@ Examples:
 
 Notes:
   - Seats.aero cached search can lag live airline inventory
+  - srch filters out zero-seat results by default when seat counts are known
   - Seats.aero Live Search API is commercial-only; srch uses the cached endpoints
   - verify award space before transferring points or miles
 `;
@@ -105,11 +108,11 @@ Usage:
   search install all [--global] [--dry-run] [--json]
 
 Targets:
-  flights   no-op (Duffel is built in; only API token setup is required)
+  flights   install the optional Fli Python SDK
   all       install every current optional domain dependency
 
 Flags:
-  --global   install npm packages globally when srch is globally installed
+  --global   preserve global-install intent for optional domains
   --dry-run  print the plan without executing it
 
 Examples:
@@ -119,22 +122,23 @@ Examples:
   search install all --global
 
 Notes:
-  - flights uses built-in Duffel SDK and only needs DUFFEL_ACCESS_TOKEN configured
+  - flights installs the Python package \`flights\`, which exposes the \`fli\` SDK
   - use this instead of remembering the individual setup commands
+  - for flights, \`--global\` is metadata only; install runs through the selected Python interpreter
 `;
 
-export const FLIGHTS_HELP = `search flights — live cash fare search via Duffel
+export const FLIGHTS_HELP = `search flights — optional flight search via Fli
 
 What it does:
-  searches live fares through Duffel offer requests
-  supports airport/city suggestions via Duffel places
-  enforces returned cabin matching so business/first searches stay trustworthy
+  searches fares through the optional Fli Python SDK
+  supports airport/code lookup through Fli's airport data
+  keeps flights optional so the base install stays lean
 
-Setup:
-  search config set-secret-ref duffelAccessToken op 'op://agent-dev/Duffel/access token'
+Install:
+  search install flights
 
 Manual fallback:
-  export DUFFEL_ACCESS_TOKEN=dfl_test_xxx
+  python3 -m pip install flights
 
 Usage:
   search flights <origin> <destination> <date> [flags]
@@ -158,9 +162,10 @@ Examples:
   search flights resolve "berlin"
 
 Notes:
-  - Duffel offers free signup and test mode access
-  - production pricing is commercial and not clearly public in Duffel docs
-  - srch filters returned offers by actual cabin when you pass --cabin
+  - Fli is a Python SDK/CLI for Google Flights-style search
+  - srch drops zero-price/invalid cash offers before ranking results
+  - install it on demand with \`search install flights\`
+  - \`resolve\` matches against Fli's bundled airport data
 `;
 
 export const WEB_HELP = `search web — web research

@@ -154,12 +154,12 @@ Examples:
 - `fetch`
 - `ask`
 
-`flights` is a first-class provider-backed domain powered by Duffel.
+`flights` is a provider-backed domain powered by the optional Fli Python SDK.
 
 Current product posture for `flights`:
 - `srch` owns research and fare discovery
 - external booking channels own the checkout and post-booking workflow
-- domain outputs should prefer reliable live-search evidence over broad but noisy scraping
+- the Fli dependency stays optional so the base install remains lean
 
 ### Subdomains
 
@@ -263,7 +263,7 @@ Examples:
 - jina-reader
 - readability
 - pdf-extractor
-- duffel-sdk
+- fli-sdk
 
 Optional sources are valid when they unlock a distinct domain but would otherwise bloat the default install. The runtime should detect them explicitly and return actionable install hints instead of failing mysteriously.
 

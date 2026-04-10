@@ -9,7 +9,7 @@ import { isPerplexityAvailable } from "../upstream/perplexity.js";
 import { getDocsDbPath } from "../docs/qmd.js";
 import { inspectGeminiCookieProfiles } from "../fetch/chrome-cookies-inspect.js";
 import { checkGhAvailable } from "../fetch/github-api.js";
-import { inspectDuffel } from "../flights/duffel.js";
+import { inspectFli } from "../flights/fli.js";
 import { inspectSeatsAero } from "../rewards-flights/seats-aero.js";
 
 export async function inspectTools() {
@@ -42,7 +42,7 @@ export async function inspectTools() {
       backend: "exa-mcp",
       colgrepConfigPresent: existsSync(colgrepConfig)
     },
-    flights: await inspectDuffel(),
+    flights: await inspectFli(),
     rewardsFlights: await inspectSeatsAero(),
     runtime: {
       node: process.version,

@@ -33,16 +33,18 @@ globalThis.fetch = async (input, init) => {
           JAvailable: true,
           JMileageCost: 50000,
           JTotalTaxes: 220,
+          JRemainingSeats: 2,
           Trips: [{ FlightNumber: "AF011", OriginAirport: "JFK", DestinationAirport: "CDG" }]
         },
         {
           ID: "avail_2",
           Date: "2026-07-02",
-          Source: "aeroplan",
+          Source: "qatar",
           Route: { OriginAirport: "JFK", DestinationAirport: "CDG" },
-          YAvailable: true,
-          YMileageCost: 22000,
-          YTotalTaxes: 89
+          JAvailable: true,
+          JMileageCost: 70000,
+          JTotalTaxes: 180,
+          JRemainingSeats: 0
         }
       ]
     }), { status: 200, headers: responseHeaders });

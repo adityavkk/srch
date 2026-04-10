@@ -10,7 +10,7 @@ import type { SearchProvider } from "./lib/core/types.js";
 import { summarizeBestChunk } from "./lib/docs/format.js";
 import { docsAddCollection, docsEmbed, docsListCollections, docsSearch, docsStatus, docsUpdate } from "./lib/docs/qmd.js";
 import { fetchContent } from "./lib/fetch/content.js";
-import { formatFlightLocationsText, formatFlightSearchText, resolveFlightLocation, searchFlights, type DuffelFlightSearchOptions } from "./lib/flights/duffel.js";
+import { formatFlightLocationsText, formatFlightSearchText, resolveFlightLocation, searchFlights, type FliFlightSearchOptions } from "./lib/flights/fli.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
 import { buildInstallPlan, executeInstallPlan, isOptionalInstallTarget, renderInstallPlan } from "./lib/install/optional.js";
 import { formatRewardsFlightSearchText, formatRewardsRoutesText, formatRewardsTripsText, getRewardFlightRoutes, getRewardFlightTrips, searchRewardFlights, type RewardsCabin, type RewardsFlightSearchOptions } from "./lib/rewards-flights/seats-aero.js";
@@ -80,7 +80,7 @@ function requireQuery(parts: string[], help: string, command: string[], asJson: 
   return query;
 }
 
-function parseFlightSearchOptions(flags: Map<string, FlagValue>): DuffelFlightSearchOptions {
+function parseFlightSearchOptions(flags: Map<string, FlagValue>): FliFlightSearchOptions {
   const cabin = getStringFlag(flags, "cabin");
   const sort = getStringFlag(flags, "sort");
   const returnDate = getStringFlag(flags, "return") ?? getStringFlag(flags, "return-date");
@@ -117,6 +117,8 @@ function parseRewardsFlightSearchOptions(originAirport: string, destinationAirpo
     skip: getNumberFlag(flags, "skip"),
     includeTrips: flags.has("include-trips"),
     includeFiltered: flags.has("include-filtered"),
+    includeZeroSeats: flags.has("include-zero-seats"),
+    minSeats: getNumberFlag(flags, "min-seats"),
     onlyDirectFlights: flags.has("direct"),
     orderBy: getStringFlag(flags, "order-by") === "lowest_mileage" ? "lowest_mileage" : "default"
   };

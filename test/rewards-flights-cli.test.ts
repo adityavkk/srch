@@ -43,8 +43,8 @@ function withTempHome(fn: (home: string) => void) {
   }
 }
 
-test("search rewards-flights default search uses Seats.aero cached search", () => {
-  const result = runCli(["rewards-flights", "JFK", "CDG", "--date", "2026-07-01", "--cabin", "business", "--source", "flyingblue", "--json"], {
+test("search rewards-flights default search filters zero-seat results when seat counts are known", () => {
+  const result = runCli(["rewards-flights", "JFK", "CDG", "--date", "2026-07-01", "--cabin", "business", "--json"], {
     SEATS_AERO_API_KEY: "pro_test_123"
   });
   assert.equal(result.status, 0, result.stderr);
@@ -53,10 +53,13 @@ test("search rewards-flights default search uses Seats.aero cached search", () =
   assert.equal(payload.ok, true);
   assert.deepEqual(payload.command, ["rewards-flights"]);
   assert.equal(payload.data?.provider, "seats-aero");
-  assert.equal(payload.data?.count, 2);
+  assert.equal(payload.data?.count, 1);
   assert.equal(payload.data?.nextCursor, 42);
   assert.equal(payload.data?.rateLimitRemaining, "997");
+  assert.equal(payload.data?.filteredOutBySeats, 1);
+  assert.equal(payload.data?.query.requestedSeats, 1);
   assert.match(payload.data?.summaries[0] ?? "", /50,000 pts/);
+  assert.match(payload.data?.summaries[0] ?? "", /2 seat\(s\)/);
 });
 
 test("search rewards-flights routes lists routes for a source", () => {
@@ -86,13 +89,39 @@ test("search rewards-flights trips fetches trip-level details", () => {
   assert.match(payload.data?.summaries[0] ?? "", /777-300ER/);
 });
 
-test("search rewards-flights text output includes award summary", () => {
-  const result = runCli(["rewards-flights", "JFK", "CDG", "--date", "2026-07-01"], {
+test("search rewards-flights text output includes requested seats and filtering summary", () => {
+  const result = runCli(["rewards-flights", "JFK", "CDG", "--date", "2026-07-01", "--cabin", "business"], {
     SEATS_AERO_API_KEY: "pro_test_123"
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /award results for JFK -> CDG/);
+  assert.match(result.stdout, /Requested seats: 1/);
+  assert.match(result.stdout, /Filtered out by seat count: 1/);
   assert.match(result.stdout, /flyingblue/);
+});
+
+test("search rewards-flights can include zero-seat results on demand", () => {
+  const result = runCli(["rewards-flights", "JFK", "CDG", "--date", "2026-07-01", "--cabin", "business", "--include-zero-seats", "--json"], {
+    SEATS_AERO_API_KEY: "pro_test_123"
+  });
+  assert.equal(result.status, 0, result.stderr);
+
+  const payload = parseJson(result.stdout);
+  assert.equal(payload.data?.count, 2);
+  assert.equal(payload.data?.query.requestedSeats, 0);
+  assert.match(payload.data?.summaries[1] ?? "", /0 seat\(s\)/);
+});
+
+test("search rewards-flights respects --min-seats", () => {
+  const result = runCli(["rewards-flights", "JFK", "CDG", "--date", "2026-07-01", "--cabin", "business", "--min-seats", "3", "--json"], {
+    SEATS_AERO_API_KEY: "pro_test_123"
+  });
+  assert.equal(result.status, 0, result.stderr);
+
+  const payload = parseJson(result.stdout);
+  assert.equal(payload.data?.count, 0);
+  assert.equal(payload.data?.query.requestedSeats, 3);
+  assert.equal(payload.data?.filteredOutBySeats, 2);
 });
 
 test("search rewards-flights fails cleanly when API key is missing", () => {

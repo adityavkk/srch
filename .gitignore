@@ -2,3 +2,8 @@ node_modules/
 dist/
 .tmp/
 .search/
+
+__pycache__/
+.venv-fli/
+.edreams_chrome_data/
+.skyscanner_chrome_data/

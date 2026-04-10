@@ -42,7 +42,12 @@ export function buildInstallPlan(target: OptionalInstallTarget, globalInstall = 
   const steps: InstallStep[] = [];
 
   if (target === "flights" || target === "all") {
-    // Duffel is built in. Flights only require API token setup now.
+    steps.push({
+      id: "fli-python-sdk",
+      title: "install Fli Python SDK",
+      command: process.env.SRCH_FLI_PYTHON?.trim() || "python3",
+      args: ["-m", "pip", "install", "flights"]
+    });
   }
 
   return {
@@ -57,9 +62,6 @@ export function buildInstallPlan(target: OptionalInstallTarget, globalInstall = 
 
 export function renderInstallPlan(plan: InstallPlan): string {
   const lines = [`Install target: ${plan.target}`];
-  if (plan.steps.length === 0 && plan.includes.flights) {
-    lines.push("- flights: no package install required; configure DUFFEL_ACCESS_TOKEN or search config set-secret-ref duffelAccessToken ...");
-  }
   for (const step of plan.steps) lines.push(`- ${step.title}: ${step.command} ${step.args.join(" ")}`);
   return lines.join("\n");
 }

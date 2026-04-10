@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SearchProvider } from "./types.js";
 
-export type SecretField = "exaApiKey" | "perplexityApiKey" | "geminiApiKey" | "braveApiKey" | "seatsAeroApiKey" | "duffelAccessToken";
+export type SecretField = "exaApiKey" | "perplexityApiKey" | "geminiApiKey" | "braveApiKey" | "seatsAeroApiKey";
 export type SecretSource = "fnox" | "op";
 
 export interface SecretRef {
@@ -18,7 +18,6 @@ export interface SearchConfig {
   geminiApiKey?: string;
   braveApiKey?: string;
   seatsAeroApiKey?: string;
-  duffelAccessToken?: string;
   secrets?: Partial<Record<SecretField, SecretRef>>;
 }
 

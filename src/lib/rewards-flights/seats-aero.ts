@@ -45,6 +45,8 @@ export interface RewardsFlightSearchOptions {
   skip?: number;
   includeTrips?: boolean;
   includeFiltered?: boolean;
+  includeZeroSeats?: boolean;
+  minSeats?: number;
   onlyDirectFlights?: boolean;
   orderBy?: RewardsOrderBy;
 }
@@ -60,12 +62,13 @@ export interface SeatsAeroInspectResult {
 
 export interface RewardsFlightSearchResult {
   provider: "seats-aero";
-  query: RewardsFlightSearchOptions;
+  query: RewardsFlightSearchOptions & { requestedSeats: number };
   count: number;
   items: unknown[];
   summaries: string[];
   nextCursor: number | null;
   rateLimitRemaining: string | null;
+  filteredOutBySeats: number;
   native: unknown;
 }
 
@@ -135,15 +138,18 @@ export async function searchRewardFlights(query: RewardsFlightSearchOptions): Pr
     const response = await callSeatsAero(url);
     const data = await response.json() as Record<string, unknown> | unknown[];
     const items = extractCollection(data);
+    const requestedSeats = query.includeZeroSeats ? 0 : Math.max(query.minSeats ?? 1, 1);
+    const filteredItems = items.filter((item) => matchesSeatRequirement(item, query.cabins, requestedSeats));
     activityMonitor.logComplete(activityId, response.status);
     return {
       provider: "seats-aero",
-      query,
-      count: items.length,
-      items,
-      summaries: items.slice(0, 20).map((item) => summarizeAvailability(item, query.cabins)),
+      query: { ...query, requestedSeats },
+      count: filteredItems.length,
+      items: filteredItems,
+      summaries: filteredItems.slice(0, 20).map((item) => summarizeAvailability(item, query.cabins)),
       nextCursor: parseCursor(data),
       rateLimitRemaining: response.headers.get("X-RateLimit-Remaining"),
+      filteredOutBySeats: items.length - filteredItems.length,
       native: data
     };
   } catch (error) {
@@ -233,6 +239,15 @@ function parseCursor(data: Record<string, unknown> | unknown[]): number | null {
   return typeof cursor === "number" ? cursor : null;
 }
 
+function matchesSeatRequirement(item: unknown, requestedCabins: RewardsCabin[] | undefined, minSeats: number): boolean {
+  if (minSeats <= 0) return true;
+  const record = asRecord(item);
+  const cabins = requestedCabins?.length ? requestedCabins : (["economy", "premium", "business", "first"] as RewardsCabin[]);
+  const seatCounts = cabins.map((cabin) => getCabinSeats(record, cabin)).filter((value) => value !== null);
+  if (seatCounts.length === 0) return true;
+  return seatCounts.some((value) => value !== null && value >= minSeats);
+}
+
 function summarizeAvailability(item: unknown, requestedCabins?: RewardsCabin[]): string {
   const record = asRecord(item);
   const id = readString(record, ["id", "ID"]) || "unknown";
@@ -269,7 +284,7 @@ function summarizeCabin(record: Record<string, unknown>, cabin: RewardsCabin): s
   const available = readBoolean(record, [`${prefix}Available`, `${cabin}Available`, `${cabin}_available`]);
   const miles = readNumber(record, [`${prefix}MileageCost`, `${cabin}MileageCost`, `${cabin}_mileage_cost`, `${cabin}Points`, `${cabin}_points`]);
   const taxes = readNumber(record, [`${prefix}TotalTaxes`, `${cabin}TotalTaxes`, `${cabin}_total_taxes`, `${cabin}Taxes`, `${cabin}_taxes`]);
-  const seats = readNumber(record, [`${prefix}RemainingSeats`, `${cabin}RemainingSeats`, `${cabin}_remaining_seats`, `${cabin}Seats`, `${cabin}_seats`]);
+  const seats = getCabinSeats(record, cabin);
   if (!available && miles === null && taxes === null && seats === null) return null;
   const parts: string[] = [cabin];
   if (available !== null) parts.push(available ? "avail" : "waitlist/none");
@@ -277,6 +292,11 @@ function summarizeCabin(record: Record<string, unknown>, cabin: RewardsCabin): s
   if (taxes !== null) parts.push(`fees ${taxes}`);
   if (seats !== null) parts.push(`${seats} seat(s)`);
   return parts.join(" ");
+}
+
+function getCabinSeats(record: Record<string, unknown>, cabin: RewardsCabin): number | null {
+  const prefix = cabin === "economy" ? "Y" : cabin === "premium" ? "W" : cabin === "business" ? "J" : "F";
+  return readNumber(record, [`${prefix}RemainingSeats`, `${cabin}RemainingSeats`, `${cabin}_remaining_seats`, `${cabin}Seats`, `${cabin}_seats`]);
 }
 
 function pickAirport(record: Record<string, unknown>, direction: "origin" | "destination"): string {
@@ -327,6 +347,8 @@ export function formatRewardsFlightSearchText(result: RewardsFlightSearchResult)
   const lines = [
     `${result.count} award results for ${result.query.originAirport} -> ${result.query.destinationAirport}`,
     `Provider: Seats.aero`,
+    `Requested seats: ${result.query.requestedSeats}`,
+    result.filteredOutBySeats > 0 ? `Filtered out by seat count: ${result.filteredOutBySeats}` : null,
     result.rateLimitRemaining ? `Remaining quota: ${result.rateLimitRemaining}` : null
   ].filter(Boolean) as string[];
   if (result.summaries.length > 0) {
