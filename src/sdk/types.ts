@@ -133,7 +133,9 @@ export type StaticStrategy<
   run: (req: TRequest, ctx: StrategyContext) => Promise<TResult>;
 };
 
-export type AnyStrategy = StaticStrategy<StrategyRequest, RunResult>;
+export type AnyStrategy =
+  | StaticStrategy<StrategyRequest, RunResult>
+  | import("./agent.js").AgenticStrategy<StrategyRequest, RunResult>;
 
 export type Domain = {
   name: string;

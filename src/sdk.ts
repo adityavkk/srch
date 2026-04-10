@@ -1,5 +1,14 @@
 export { createClient, type ClientSearch, type SrchClient } from "./sdk/client.js";
 export { loadConfig, findConfigPath, resolveConfig, type CreateClientOptions, type LoadConfigOptions } from "./sdk/config.js";
+export {
+  defineAgenticStrategy,
+  type AgentAdapter,
+  type AgentContext,
+  type AgenticStrategy,
+  type AgenticStrategyContext,
+  type AgentInvocation
+} from "./sdk/agent.js";
+export { piMonoAgentAdapter } from "./sdk/adapters/pi-mono.js";
 export { claudeHookAdapter } from "./sdk/hooks/claude.js";
 export { codexHookAdapter } from "./sdk/hooks/codex.js";
 export { defaultHookAdapters, inspectHooks, installHooks, uninstallHooks } from "./sdk/hooks/install.js";

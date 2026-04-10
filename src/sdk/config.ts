@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { tsImport } from "tsx/esm/api";
 import { resolveSecret } from "../lib/core/secrets.js";
 import { createTraceSink } from "../lib/trace.js";
+import type { AgentAdapter } from "./agent.js";
 import { coreModule } from "./modules/core.js";
 import type { AnySource, AnyStrategy, Domain, HttpClient, Module, SecretResolver, SourceContext, SrchConfig } from "./types.js";
 
@@ -15,6 +16,7 @@ export type CreateClientOptions = {
   strategies?: AnyStrategy[];
   domains?: Domain[];
   config?: SrchConfig;
+  agentAdapters?: AgentAdapter[];
 };
 
 export type LoadConfigOptions = {

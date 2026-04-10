@@ -1,3 +1,5 @@
+import { piMonoAgentAdapter } from "./adapters/pi-mono.js";
+import type { AgentAdapter, AgenticStrategyContext } from "./agent.js";
 import { resolveConfig, createSourceContext, type CreateClientOptions } from "./config.js";
 import { DomainRegistry } from "./domain.js";
 import { merge } from "./operators.js";
@@ -53,6 +55,7 @@ export function createClient(options: CreateClientOptions = {}): SrchClient {
   const sources = new SourceRegistry(resolved.sources);
   const strategies = new StrategyRegistry(resolved.strategies);
   const domains = new DomainRegistry(resolved.domains);
+  const agentAdapters = new Map<string, AgentAdapter>((options.agentAdapters ?? [piMonoAgentAdapter]).map((adapter) => [adapter.name, adapter]));
   validateDomainReferences(domains, strategies);
 
   const search = (async (sourceOrName: string | AnySource, req: SourceRequest) => {
@@ -99,7 +102,16 @@ export function createClient(options: CreateClientOptions = {}): SrchClient {
         merge
       };
 
-      const result = await strategy.run(req as never, strategyContext);
+      const result = strategy.kind === "agentic"
+        ? await (() => {
+            const agent = agentAdapters.get(strategy.adapter);
+            if (!agent) {
+              return Promise.resolve(makeError(req, "unknown_agent_adapter", `Unknown agent adapter: ${strategy.adapter}`));
+            }
+            const agenticContext: AgenticStrategyContext = { ...strategyContext, agent };
+            return strategy.run(req as never, agenticContext);
+          })()
+        : await strategy.run(req as never, strategyContext);
       return { ...result, trace: context.trace.snapshot() };
     },
     async status() {

@@ -14,7 +14,7 @@ Core thesis: domain-boundary artifacts (typed SDK with rich semantics) outperfor
 - [x] Slice 4 -- CLI as thin frontend + AXI ergonomics
 - [x] Slice 5 -- flights + rewards-flights domains
 - [x] Slice 6 -- session hooks (generic adapter system)
-- [ ] Slice 7 -- agent harness interface
+- [x] Slice 7 -- agent harness interface
 
 ## Domain Model
 
@@ -454,13 +454,13 @@ Verify: `search install hooks` detects available runtimes and registers. Claude/
 
 ### Slice 7: Agent harness interface
 
-Define the agent adapter boundary. Implement a default harness using pi-mono (or stub).
+Define the agent adapter boundary. Implement a default harness using pi-mono stub.
 
-Verify: an agentic strategy can be defined that delegates to an agent adapter. The agent can call srch SDK functions within the harness.
+Verify: an agentic strategy can be defined that delegates to an injected adapter. The agent can call srch SDK functions within the harness. If no adapter is provided, the default `pi-mono` stub fails loudly with an actionable error.
 
-- `src/sdk/agent.ts` -- AgentAdapter interface, AgentContext, harness registration
-- `src/sdk/adapters/pi-mono.ts` -- default adapter (stub or real depending on pi-mono availability)
-- `src/sdk/strategies/agentic.ts` -- defineAgenticStrategy helper
+- `src/sdk/agent.ts` -- AgentAdapter interface, AgentContext, AgenticStrategy, `defineAgenticStrategy()`
+- `src/sdk/adapters/pi-mono.ts` -- default stub adapter
+- `src/sdk/client.ts` -- injects adapters into agentic strategies at run time
 - `test/sdk/agent-harness.test.ts`
 
 ## Risks & Mitigations
