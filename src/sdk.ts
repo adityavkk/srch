@@ -11,6 +11,20 @@ export {
   type BraveEvidencePayload
 } from "./sdk/sources/brave.js";
 export {
+  context7Source,
+  type Context7EvidencePayload
+} from "./sdk/sources/context7.js";
+export {
+  deepwikiSource,
+  type DeepWikiEvidencePayload
+} from "./sdk/sources/deepwiki.js";
+export {
+  exaCodeSource,
+  type CodeTextEvidencePayload,
+  type ExaCodeEvidencePayload,
+  type ExaCodeSourceRequest
+} from "./sdk/sources/exa-code.js";
+export {
   exaSource,
   createExaSource,
   type ExaEvidencePayload,
@@ -26,8 +40,13 @@ export {
   perplexitySource,
   type PerplexityEvidencePayload
 } from "./sdk/sources/perplexity.js";
+export { codeDomain } from "./sdk/domains/code.js";
 export { webDomain } from "./sdk/domains/web.js";
 export { coreModule } from "./sdk/modules/core.js";
+export {
+  codeDefaultStrategy,
+  type CodeStrategyRequest
+} from "./sdk/strategies/code-default.js";
 export {
   webDefaultStrategy,
   createWebDefaultStrategy,

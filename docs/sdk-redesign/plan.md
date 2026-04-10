@@ -11,8 +11,8 @@ Core thesis: domain-boundary artifacts (typed SDK with rich semantics) outperfor
 - [x] Slice 1 -- core types + Source interface + exa tracer bullet
 - [x] Slice 2 -- strategy interface + web-default strategy + empty state handling
 - [ ] Slice 3 -- domain + module + config-is-code
-  - tracer bullet landed: DomainRegistry, Module, coreModule(web), `defineConfig()`, `loadConfig()` for `srch.config.ts`
-  - remaining: code/docs/fetch/social domain ports
+  - landed: DomainRegistry, Module, `defineConfig()`, `loadConfig()` for `srch.config.ts`, coreModule(web+code)
+  - remaining: docs/fetch/social domain ports
 - [ ] Slice 4 -- CLI as thin frontend + AXI ergonomics
 - [ ] Slice 5 -- flights + rewards-flights domains
 - [ ] Slice 6 -- session hooks (generic adapter system)
@@ -403,26 +403,23 @@ Verify: `createClient().run({ domain: "web", query: "bun sqlite" })` returns Run
 
 Register domains. Load modules. Support `srch.config.ts`.
 
-Tracer bullet verify: `defineConfig({ modules: [coreModule] })` registers the built-in web domain/sources/strategy. `loadConfig()` loads `srch.config.ts`. `createClient({ config }).run({ domain: "notes", query: "..." })` works for custom modules.
+Tracer bullet verify: `defineConfig({ modules: [coreModule] })` registers the built-in web+code domains/sources/strategies. `loadConfig()` loads `srch.config.ts`. `createClient({ config }).run({ domain: "notes", query: "..." })` works for custom modules. `createClient({ config }).run({ domain: "code", query: "..." })` works with Exa/context7/deepwiki.
 
-Follow-on verify for remaining ports: `createClient({ config }).run({ domain: "code", query: "..." })` works once code/docs/fetch/social domains are ported.
+Follow-on verify for remaining ports: docs/fetch/social domains.
 
-- `src/sdk/domain.ts` -- Domain type, DomainRegistry, defineDomain()
-- `src/sdk/module.ts` -- Module type, defineModule()
-- `src/sdk/config.ts` -- defineConfig(), config loading from srch.config.ts
 - `src/sdk/domain.ts` -- DomainRegistry
 - `src/sdk/module.ts` -- Module validation (`defineModule()` rejects empty modules)
 - `src/sdk/config.ts` -- `defineConfig()`, config resolution, additive module merge, `loadConfig()` for `srch.config.ts`
-- `src/sdk/modules/core.ts` -- current tracer bullet: built-in web domain + web sources + web/default strategy
-- `src/sdk/domains/web.ts` -- first concrete domain
-- `test/sdk/module-core.test.ts` -- verify object config, core module, and TS config-file loading
+- `src/sdk/modules/core.ts` -- current tracer bullet: built-in web+code domains and strategies
+- `src/sdk/domains/web.ts`, `src/sdk/domains/code.ts`
+- `src/sdk/sources/exa-code.ts`, `context7.ts`, `deepwiki.ts`
+- `src/sdk/strategies/code-default.ts`
+- `test/sdk/module-core.test.ts`, `test/sdk/strategy-code.test.ts`
 - remaining follow-on in this slice:
-  - `src/sdk/sources/context7.ts`, `deepwiki.ts`, `exa-mcp.ts`
   - `src/sdk/sources/bird.ts`
-  - `src/sdk/strategies/code-default.ts`
   - `src/sdk/strategies/fetch-default.ts`
   - `src/sdk/strategies/social-default.ts`
-  - `src/sdk/domains/code.ts`, `docs.ts`, `fetch.ts`, `social.ts`
+  - `src/sdk/domains/docs.ts`, `fetch.ts`, `social.ts`
 
 ### Slice 4: CLI as thin frontend + AXI ergonomics
 

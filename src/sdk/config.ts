@@ -74,14 +74,21 @@ export function resolveConfig(options: CreateClientOptions = {}): Required<Pick<
   const strategies = options.strategies ? [...options.strategies] : configStrategies;
   const domains = options.domains ? [...options.domains] : configDomains;
 
+  const sourceNames = new Set(sources.map((source) => source.name));
+  const strategyNames = new Set(strategies.map((strategy) => strategy.name));
+  const actionableDomains = domains.filter((domain) => (
+    strategyNames.has(domain.defaultStrategy)
+    && domain.sources.some((sourceName) => sourceNames.has(sourceName))
+  ));
+
   if (sources.length === 0) throw new Error("createClient requires at least one source");
   if (strategies.length === 0) throw new Error("createClient requires at least one strategy");
-  if (domains.length === 0) throw new Error("createClient requires at least one domain");
+  if (actionableDomains.length === 0) throw new Error("createClient requires at least one actionable domain");
 
   return {
     sources: [...sources],
     strategies: [...strategies],
-    domains: [...domains],
+    domains: actionableDomains,
     defaults: config?.defaults
   };
 }

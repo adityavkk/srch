@@ -7,6 +7,22 @@ import { callExaMcpRaw, exaMcpText } from "../upstream/exa-mcp.js";
 
 const EXA_CONTEXT_URL = "https://api.exa.ai/context";
 
+export interface CodePrimaryResult {
+  text: string;
+  native: {
+    provider: "exa-context-api" | "exa-mcp";
+    request: unknown;
+    response: unknown;
+  };
+}
+
+export interface CodeSecondaryResult {
+  source: "deepwiki" | "context7";
+  label: string;
+  text: string;
+  native: unknown;
+}
+
 export interface CodeSearchResult {
   query: string;
   maxTokens: number;
@@ -16,12 +32,7 @@ export interface CodeSearchResult {
     request: unknown;
     response: unknown;
   };
-  secondary?: Array<{
-    source: "deepwiki" | "context7";
-    label: string;
-    text: string;
-    native: unknown;
-  }>;
+  secondary?: CodeSecondaryResult[];
 }
 
 function appendSecondary(primary: string, sources: CodeSearchResult["secondary"]): string {
@@ -64,7 +75,7 @@ async function searchViaMcp(query: string, maxTokens: number, signal?: AbortSign
   return { text: exaMcpText(response), native: { provider: "exa-mcp", request, response } };
 }
 
-async function gatherSecondary(query: string, signal?: AbortSignal): Promise<CodeSearchResult["secondary"]> {
+export async function gatherCodeSecondary(query: string, signal?: AbortSignal): Promise<CodeSearchResult["secondary"]> {
   const sources: NonNullable<CodeSearchResult["secondary"]> = [];
   const [deepwiki, context7] = await Promise.allSettled([
     (async (): Promise<DeepWikiResult | null> => {
@@ -84,23 +95,28 @@ async function gatherSecondary(query: string, signal?: AbortSignal): Promise<Cod
   return sources.length > 0 ? sources : undefined;
 }
 
+export async function searchCodePrimary(query: string, maxTokens = 5000, signal?: AbortSignal): Promise<CodePrimaryResult | null> {
+  const normalized = query.trim();
+  if (!normalized) throw new Error("Missing query");
+
+  try {
+    return await searchViaContextApi(normalized, maxTokens, signal);
+  } catch {
+    try {
+      return await searchViaMcp(normalized, maxTokens, signal);
+    } catch {
+      return null;
+    }
+  }
+}
+
 export async function codeSearch(query: string, maxTokens = 5000, signal?: AbortSignal): Promise<CodeSearchResult> {
   const normalized = query.trim();
   if (!normalized) throw new Error("Missing query");
 
   const [primaryResult, secondary] = await Promise.all([
-    (async () => {
-      try {
-        return await searchViaContextApi(normalized, maxTokens, signal);
-      } catch {
-        try {
-          return await searchViaMcp(normalized, maxTokens, signal);
-        } catch (error) {
-          return null;
-        }
-      }
-    })(),
-    gatherSecondary(normalized, signal)
+    searchCodePrimary(normalized, maxTokens, signal),
+    gatherCodeSecondary(normalized, signal)
   ]);
 
   if (!primaryResult && !secondary?.length) {
