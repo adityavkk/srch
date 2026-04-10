@@ -13,7 +13,7 @@ Core thesis: domain-boundary artifacts (typed SDK with rich semantics) outperfor
 - [x] Slice 3 -- domain + module + config-is-code
 - [x] Slice 4 -- CLI as thin frontend + AXI ergonomics
 - [x] Slice 5 -- flights + rewards-flights domains
-- [ ] Slice 6 -- session hooks (generic adapter system)
+- [x] Slice 6 -- session hooks (generic adapter system)
 - [ ] Slice 7 -- agent harness interface
 
 ## Domain Model
@@ -440,17 +440,16 @@ Verify: `client.run({ domain: "flights", query: "JFK DEL 2026-05-15" })` works t
 
 ### Slice 6: Session hooks (generic adapter system)
 
-Implement HookAdapter interface with adapters for Claude Code, Codex, and pi-mono. Auto-detect available runtimes. Self-install on first run, self-heal on path changes.
+Implement HookAdapter interface with adapters for Claude Code, Codex, and pi-mono. Auto-detect available runtimes. Idempotent install/uninstall. Ambient context emitted via `search ambient-context`.
 
-Verify: `search install hooks` detects available runtimes and registers. Claude session starts with srch status. Pi session starts with srch status via extension.
+Verify: `search install hooks` detects available runtimes and registers. Claude/Codex JSON files are merged idempotently. Pi writes `~/.pi/agent/extensions/srch.ts`. `search ambient-context` prints the compact status dashboard used by hooks.
 
 - `src/sdk/hooks/types.ts` -- HookAdapter interface, HookInstallConfig
 - `src/sdk/hooks/claude.ts` -- Claude Code adapter (writes ~/.claude/settings.json SessionStart)
 - `src/sdk/hooks/codex.ts` -- Codex adapter (writes ~/.codex/hooks.json)
-- `src/sdk/hooks/pi.ts` -- pi-mono adapter (generates ~/.pi/agent/extensions/srch.ts that imports SDK, calls status() on session_start)
-- `src/sdk/hooks/install.ts` -- auto-detect + install all, self-heal logic, idempotent
-- `src/cli/commands/hooks.ts` -- `search install hooks`, `search uninstall hooks`
-- `src/cli/commands/ambient.ts` -- `search --ambient-context` (compact status output for shell-based hooks)
+- `src/sdk/hooks/pi.ts` -- pi adapter (writes `~/.pi/agent/extensions/srch.ts`)
+- `src/sdk/hooks/install.ts` -- detect/install/uninstall/status helpers, idempotent
+- `src/cli.ts` -- `search hooks install|uninstall|status`, `search install hooks`, `search ambient-context`
 - `test/sdk/hooks.test.ts` -- verify detect/install/uninstall/idempotent for each adapter
 
 ### Slice 7: Agent harness interface

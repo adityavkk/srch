@@ -1,5 +1,9 @@
 export { createClient, type ClientSearch, type SrchClient } from "./sdk/client.js";
 export { loadConfig, findConfigPath, resolveConfig, type CreateClientOptions, type LoadConfigOptions } from "./sdk/config.js";
+export { claudeHookAdapter } from "./sdk/hooks/claude.js";
+export { codexHookAdapter } from "./sdk/hooks/codex.js";
+export { defaultHookAdapters, inspectHooks, installHooks, uninstallHooks } from "./sdk/hooks/install.js";
+export { piHookAdapter } from "./sdk/hooks/pi.js";
 export { defineConfig, defineDomain, defineModule, defineSource, defineStrategy } from "./sdk/define.js";
 export { DomainRegistry } from "./sdk/domain.js";
 export { defineModule as createModule } from "./sdk/define.js";
@@ -129,6 +133,7 @@ export type {
   StrategyContext,
   StrategyRequest
 } from "./sdk/types.js";
+export type { HookAdapter, HookInstallConfig } from "./sdk/hooks/types.js";
 
 export {
   searchFlights,

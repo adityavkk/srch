@@ -17,6 +17,7 @@ import { twitterRead, twitterThread } from "./lib/upstream/bird.js";
 import { renderHome, runCodeCommand, runDocsCommand, runFetchCommand, runSocialCommand, runWebCommand } from "./lib/cli/sdk.js";
 import { createTraceSink } from "./lib/trace.js";
 import { inspectSecretSources } from "./lib/core/secrets.js";
+import { inspectHooks, installHooks, uninstallHooks } from "./sdk/hooks/install.js";
 
 type FlagValue = string | boolean | string[];
 
@@ -75,6 +76,13 @@ function requireQuery(parts: string[], help: string, command: string[], asJson: 
     process.exit(1);
   }
   return query;
+}
+
+function currentAmbientCommand(): string {
+  const script = process.argv[1] ?? "search";
+  if (script.endsWith(".ts")) return `\"${process.execPath}\" --import tsx \"${script}\" ambient-context`;
+  if (script.endsWith(".js")) return `\"${process.execPath}\" \"${script}\" ambient-context`;
+  return `\"${script}\" ambient-context`;
 }
 
 function parseFlightSearchOptions(flags: Map<string, FlagValue>): FliFlightSearchOptions {
@@ -163,6 +171,10 @@ async function main(): Promise<void> {
     console.log(ROOT_HELP);
     return;
   }
+  if (command === "ambient-context" || command === "--ambient-context") {
+    console.log(await renderHome());
+    return;
+  }
 
   const { flags, rest } = parseFlags(argv);
   const asJson = flags.has("json");
@@ -247,11 +259,30 @@ async function main(): Promise<void> {
       }, { asJson, outPath });
     }
 
+    if (command === "hooks") {
+      const sub = rest[0] ?? "status";
+      const marker = getStringFlag(flags, "marker") ?? "srch";
+      if (sub === "install") {
+        const result = installHooks({ marker, command: currentAmbientCommand(), timeoutSeconds: 15 });
+        return emitSuccess({ command: ["hooks", "install"], kind: "hooks", data: { ...result, trace: trace.snapshot() }, text: `installed: ${result.installed.join(", ") || "none"}` }, { asJson, outPath });
+      }
+      if (sub === "uninstall") {
+        const result = uninstallHooks(marker);
+        return emitSuccess({ command: ["hooks", "uninstall"], kind: "hooks", data: { ...result, trace: trace.snapshot() }, text: `removed: ${result.removed.join(", ") || "none"}` }, { asJson, outPath });
+      }
+      const result = inspectHooks(marker);
+      return emitSuccess({ command: ["hooks", "status"], kind: "hooks", data: { hooks: result, trace: trace.snapshot() }, text: result.map((item) => `${item.name}\tdetected=${item.detected}\tinstalled=${item.installed}`).join("\n") }, { asJson, outPath });
+    }
+
     if (command === "install") {
       if (flags.has("help")) return void console.log(INSTALL_HELP);
       const target = rest[0];
+      if (target === "hooks") {
+        const result = installHooks({ marker: getStringFlag(flags, "marker") ?? "srch", command: currentAmbientCommand(), timeoutSeconds: 15 });
+        return emitSuccess({ command: ["install", "hooks"], kind: "hooks", data: { ...result, trace: trace.snapshot() }, text: `installed: ${result.installed.join(", ") || "none"}` }, { asJson, outPath });
+      }
       if (!isOptionalInstallTarget(target)) {
-        if (asJson) exitJsonError(["install"], "Unknown install target. Use `flights` or `all`.");
+        if (asJson) exitJsonError(["install"], "Unknown install target. Use `flights`, `hooks`, or `all`.");
         console.error(INSTALL_HELP);
         process.exit(1);
       }
