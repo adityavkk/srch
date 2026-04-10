@@ -10,9 +10,7 @@ Core thesis: domain-boundary artifacts (typed SDK with rich semantics) outperfor
 
 - [x] Slice 1 -- core types + Source interface + exa tracer bullet
 - [x] Slice 2 -- strategy interface + web-default strategy + empty state handling
-- [ ] Slice 3 -- domain + module + config-is-code
-  - landed: DomainRegistry, Module, `defineConfig()`, `loadConfig()` for `srch.config.ts`, coreModule(web+code)
-  - remaining: docs/fetch/social domain ports
+- [x] Slice 3 -- domain + module + config-is-code
 - [ ] Slice 4 -- CLI as thin frontend + AXI ergonomics
 - [ ] Slice 5 -- flights + rewards-flights domains
 - [ ] Slice 6 -- session hooks (generic adapter system)
@@ -403,23 +401,16 @@ Verify: `createClient().run({ domain: "web", query: "bun sqlite" })` returns Run
 
 Register domains. Load modules. Support `srch.config.ts`.
 
-Tracer bullet verify: `defineConfig({ modules: [coreModule] })` registers the built-in web+code domains/sources/strategies. `loadConfig()` loads `srch.config.ts`. `createClient({ config }).run({ domain: "notes", query: "..." })` works for custom modules. `createClient({ config }).run({ domain: "code", query: "..." })` works with Exa/context7/deepwiki.
-
-Follow-on verify for remaining ports: docs/fetch/social domains.
+Verify: `defineConfig({ modules: [coreModule] })` registers built-in web/code/docs/fetch/social domains, sources, and strategies. `loadConfig()` loads `srch.config.ts`. `createClient({ config }).run({ domain: "notes", query: "..." })` works for custom modules. `createClient({ config }).run({ domain: "code", query: "..." })` works with Exa/context7/deepwiki.
 
 - `src/sdk/domain.ts` -- DomainRegistry
 - `src/sdk/module.ts` -- Module validation (`defineModule()` rejects empty modules)
 - `src/sdk/config.ts` -- `defineConfig()`, config resolution, additive module merge, `loadConfig()` for `srch.config.ts`
-- `src/sdk/modules/core.ts` -- current tracer bullet: built-in web+code domains and strategies
-- `src/sdk/domains/web.ts`, `src/sdk/domains/code.ts`
-- `src/sdk/sources/exa-code.ts`, `context7.ts`, `deepwiki.ts`
-- `src/sdk/strategies/code-default.ts`
+- `src/sdk/modules/core.ts` -- built-in web/code/docs/fetch/social domains and strategies
+- `src/sdk/domains/web.ts`, `code.ts`, `docs.ts`, `fetch.ts`, `social.ts`
+- `src/sdk/sources/exa-code.ts`, `context7.ts`, `deepwiki.ts`, `docs-qmd.ts`, `fetch-content.ts`, `bird.ts`
+- `src/sdk/strategies/code-default.ts`, `docs-default.ts`, `fetch-default.ts`, `social-default.ts`
 - `test/sdk/module-core.test.ts`, `test/sdk/strategy-code.test.ts`
-- remaining follow-on in this slice:
-  - `src/sdk/sources/bird.ts`
-  - `src/sdk/strategies/fetch-default.ts`
-  - `src/sdk/strategies/social-default.ts`
-  - `src/sdk/domains/docs.ts`, `fetch.ts`, `social.ts`
 
 ### Slice 4: CLI as thin frontend + AXI ergonomics
 
