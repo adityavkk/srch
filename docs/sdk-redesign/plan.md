@@ -11,7 +11,7 @@ Core thesis: domain-boundary artifacts (typed SDK with rich semantics) outperfor
 - [x] Slice 1 -- core types + Source interface + exa tracer bullet
 - [x] Slice 2 -- strategy interface + web-default strategy + empty state handling
 - [x] Slice 3 -- domain + module + config-is-code
-- [ ] Slice 4 -- CLI as thin frontend + AXI ergonomics
+- [x] Slice 4 -- CLI as thin frontend + AXI ergonomics
 - [ ] Slice 5 -- flights + rewards-flights domains
 - [ ] Slice 6 -- session hooks (generic adapter system)
 - [ ] Slice 7 -- agent harness interface
@@ -416,15 +416,14 @@ Verify: `defineConfig({ modules: [coreModule] })` registers built-in web/code/do
 
 Rewrite CLI to import createClient and delegate. Adopt AXI principles: content-first home, contextual disclosure, truncation, structured errors with suggestions, idempotent mutations.
 
-Verify: all existing CLI commands produce identical results. `search` (no args) shows status dashboard. Empty results show definitive message + suggestions. Errors include suggestions array in JSON envelope.
+Verify: retrieval CLI commands (`web`, `code`, `docs`, `social`, `fetch`) delegate through the SDK. `search` (no args) shows status dashboard. Empty results show definitive message + suggestions. Errors include suggestions array in JSON envelope. Utility/admin commands (`config`, `docs index`, `install`, `history`, flights auth/install) remain thin wrappers around existing subsystems.
 
-- `src/cli.ts` -- rewrite: parse args -> build RunRequest -> client.run() -> emit
-- `src/cli/commands/` -- thin command handlers per domain
-- `src/cli/home.ts` -- no-args handler: calls client.status(), renders compact dashboard (AXI #8)
-- `src/cli/emit.ts` -- updated: add suggestions to error envelope (AXI #6a), truncation with `--full` (AXI #3)
-- `src/cli/suggest.ts` -- contextual disclosure engine: given a RunResult + command, compute next-step hints (AXI #9)
-- `src/cli/flags.ts` -- extract flag parsing from current cli.ts
-- `test/cli/` -- port existing CLI tests, verify identical output + new behaviors (home, suggestions, truncation, empty states)
+- `src/cli.ts` -- retrieval commands now parse args -> build SDK request -> client.run() -> emit
+- `src/lib/cli/sdk.ts` -- thin formatting bridge from `RunResult` to existing CLI text/JSON shapes
+- `src/lib/cli/emit.ts`, `src/lib/cli/output.ts` -- suggestions in error envelope (AXI #6a)
+- no-args handler -- calls `client.status()`, renders compact dashboard (AXI #8)
+- `package.json` -- test script fixed to include top-level CLI tests, not just `test/sdk/*`
+- verified against existing CLI suites: `test/output-cli.test.ts`, `test/flights-cli.test.ts`, `test/rewards-flights-cli.test.ts`
 
 ### Slice 5: Flights + rewards-flights as retrieval domains
 

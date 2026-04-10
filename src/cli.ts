@@ -7,17 +7,14 @@ import { CODE_HELP, DOCS_HELP, FETCH_HELP, FLIGHTS_HELP, HISTORY_HELP, INSPECT_H
 import { TWITTER_HELP } from "./lib/cli/twitter-help.js";
 import { emitFailure, emitSuccess } from "./lib/cli/emit.js";
 import type { SearchProvider } from "./lib/core/types.js";
-import { summarizeBestChunk } from "./lib/docs/format.js";
-import { docsAddCollection, docsEmbed, docsListCollections, docsSearch, docsStatus, docsUpdate } from "./lib/docs/qmd.js";
-import { fetchContent } from "./lib/fetch/content.js";
+import { docsAddCollection, docsEmbed, docsListCollections, docsStatus, docsUpdate } from "./lib/docs/qmd.js";
 import { formatFlightLocationsText, formatFlightSearchText, resolveFlightLocation, searchFlights, type FliFlightSearchOptions } from "./lib/flights/fli.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
 import { buildInstallPlan, executeInstallPlan, isOptionalInstallTarget, renderInstallPlan } from "./lib/install/optional.js";
 import { formatRewardsFlightSearchText, formatRewardsRoutesText, formatRewardsTripsText, getRewardFlightRoutes, getRewardFlightTrips, searchRewardFlights, type RewardsCabin, type RewardsFlightSearchOptions } from "./lib/rewards-flights/seats-aero.js";
-import { codeSearch } from "./lib/search/code.js";
 import { repoSearch } from "./lib/search/repo.js";
-import { webSearch } from "./lib/search/web.js";
-import { twitterSearch, twitterRead, twitterThread } from "./lib/upstream/bird.js";
+import { twitterRead, twitterThread } from "./lib/upstream/bird.js";
+import { renderHome, runCodeCommand, runDocsCommand, runFetchCommand, runSocialCommand, runWebCommand } from "./lib/cli/sdk.js";
 import { createTraceSink } from "./lib/trace.js";
 import { inspectSecretSources } from "./lib/core/secrets.js";
 
@@ -158,7 +155,11 @@ async function getRewardsFlightsAuthStatus() {
 
 async function main(): Promise<void> {
   const [, , command, ...argv] = process.argv;
-  if (!command || command === "help" || command === "--help") {
+  if (!command) {
+    console.log(await renderHome());
+    return;
+  }
+  if (command === "help" || command === "--help") {
     console.log(ROOT_HELP);
     return;
   }
@@ -459,19 +460,14 @@ async function main(): Promise<void> {
       const provider = (flags.get("provider") as SearchProvider | undefined) ?? "auto";
       const hq = flags.has("hq");
       trace.step("web", "dispatch", { provider, hq, queryChars: query.length });
-      const result = await trace.span("web.search", hq ? "exa-paid" : provider, async () => webSearch(query, provider, { hq }));
-      trace.step("web.result", "provider selected", { requestedProvider: provider, hq, provider: result.provider, nativeProvider: typeof result.native === "object" && result.native && "provider" in result.native ? String((result.native as { provider?: unknown }).provider) : undefined, resultCount: result.results.length });
-      addHistory({ kind: "web", input: { query, provider }, output: result });
-      const webTextLines = [result.answer || "No summary."];
-      if (result.results.length > 0) {
-        webTextLines.push("", "Sources:");
-        for (const [index, item] of result.results.entries()) webTextLines.push(`${index + 1}. ${item.title}\n   ${item.url}`);
-      }
+      const rendered = await trace.span("web.search", hq ? "exa-paid" : provider, async () => runWebCommand(query, { provider, hq, trace: flags.has("verbose") }));
+      if (rendered.kind === "error") emitFailure(["web"], rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions);
+      addHistory({ kind: "web", input: { query, provider }, output: rendered.data });
       return emitSuccess({
         command: ["web"],
         kind: "web",
-        data: { query, requestedProvider: provider, ...result, trace: trace.snapshot() },
-        text: webTextLines.join("\n")
+        data: { ...rendered.data, trace: trace.snapshot() },
+        text: rendered.text
       }, { asJson, outPath });
     }
 
@@ -510,17 +506,14 @@ async function main(): Promise<void> {
       const query = requireQuery(rest, CODE_HELP, ["code"], asJson);
       const maxTokens = Number(flags.get("max-tokens") ?? 5000);
       trace.step("code", "dispatch", { maxTokens, queryChars: query.length });
-      const result = await trace.span("code.search", "exa-mcp", async () => codeSearch(query, maxTokens));
-      addHistory({ kind: "code", input: { query, maxTokens }, output: result });
-      const codeTextLines = [result.text];
-      if (result.secondary?.length) {
-        for (const src of result.secondary) codeTextLines.push(`\n[secondary: ${src.label}]`);
-      }
+      const rendered = await trace.span("code.search", "sdk", async () => runCodeCommand(query, { maxTokens, trace: flags.has("verbose") }));
+      if (rendered.kind === "error") emitFailure(["code"], rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions);
+      addHistory({ kind: "code", input: { query, maxTokens }, output: rendered.data });
       return emitSuccess({
         command: ["code"],
         kind: "code",
-        data: { ...result, trace: trace.snapshot() },
-        text: codeTextLines.join("\n")
+        data: { ...rendered.data, trace: trace.snapshot() },
+        text: rendered.text
       }, { asJson, outPath });
     }
 
@@ -589,29 +582,14 @@ async function main(): Promise<void> {
 
       const query = requireQuery(rest, DOCS_HELP, ["docs"], asJson);
       trace.step("docs", "dispatch", { queryChars: query.length });
-      const result = await trace.span("docs.search", "qmd-sdk", async () => docsSearch(query));
-      const rows = result.results.map((item) => ({
-        title: item.title,
-        file: item.file,
-        score: item.score,
-        docid: item.docid,
-        snippet: summarizeBestChunk(item.bestChunk)
-      }));
-      const data = { ...result, count: rows.length, results: rows };
-      addHistory({ kind: "docs", input: { query }, output: data });
-      const docsTextLines = rows.length === 0
-        ? ["No results."]
-        : rows.flatMap((item, index) => [
-            `${index + 1}. ${item.title}`,
-            `   ${item.file}`,
-            `   score=${item.score.toFixed(3)}`,
-            ...(item.snippet ? [`   ${item.snippet}`] : [])
-          ]);
+      const rendered = await trace.span("docs.search", "sdk", async () => runDocsCommand(query, { trace: flags.has("verbose") }));
+      if (rendered.kind === "error") emitFailure(["docs"], rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions);
+      addHistory({ kind: "docs", input: { query }, output: rendered.data });
       return emitSuccess({
         command: ["docs"],
         kind: "docs",
-        data: { ...data, trace: trace.snapshot() },
-        text: docsTextLines.join("\n")
+        data: { ...rendered.data, trace: trace.snapshot() },
+        text: rendered.text
       }, { asJson, outPath });
     }
 
@@ -645,16 +623,14 @@ async function main(): Promise<void> {
       const query = requireQuery(socialRest, TWITTER_HELP, invokedAs.split(" "), asJson);
       const count = Number(flags.get("count") ?? 10);
       trace.step("twitter.search", "dispatch", { query, count, alias: invokedAs });
-      const result = await trace.span("twitter.search", "bird", async () => twitterSearch(query, count));
-      addHistory({ kind: "web", input: { query, source: "twitter", alias: invokedAs }, output: result });
-      const socialSearchText = result.tweets.length === 0
-        ? "No tweets found."
-        : result.tweets.map((tweet, index) => `${index + 1}. @${tweet.author}${tweet.createdAt ? " " + tweet.createdAt : ""}\n   ${tweet.text.split("\n")[0]}\n   https://x.com/i/status/${tweet.id}`).join("\n");
+      const rendered = await trace.span("twitter.search", "sdk", async () => runSocialCommand(query, { count, trace: flags.has("verbose") }));
+      if (rendered.kind === "error") emitFailure(invokedAs.split(" "), rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions);
+      addHistory({ kind: "web", input: { query, source: "twitter", alias: invokedAs }, output: rendered.data });
       return emitSuccess({
         command: invokedAs.split(" "),
         kind: "social",
-        data: { ...result, trace: trace.snapshot() },
-        text: socialSearchText
+        data: { ...rendered.data, trace: trace.snapshot() },
+        text: rendered.text
       }, { asJson, outPath });
     }
 
@@ -686,16 +662,14 @@ async function main(): Promise<void> {
       const query = requireQuery(rest, TWITTER_HELP, [invokedAs], asJson);
       const count = Number(flags.get("count") ?? 10);
       trace.step("twitter.search", "dispatch", { query, count, alias: invokedAs });
-      const result = await trace.span("twitter.search", "bird", async () => twitterSearch(query, count));
-      addHistory({ kind: "web", input: { query, source: "twitter", alias: invokedAs }, output: result });
-      const twitterSearchText = result.tweets.length === 0
-        ? "No tweets found."
-        : result.tweets.map((tweet, index) => `${index + 1}. @${tweet.author}${tweet.createdAt ? " " + tweet.createdAt : ""}\n   ${tweet.text.split("\n")[0]}\n   https://x.com/i/status/${tweet.id}`).join("\n");
+      const rendered = await trace.span("twitter.search", "sdk", async () => runSocialCommand(query, { count, trace: flags.has("verbose") }));
+      if (rendered.kind === "error") emitFailure([invokedAs], rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions);
+      addHistory({ kind: "web", input: { query, source: "twitter", alias: invokedAs }, output: rendered.data });
       return emitSuccess({
         command: [invokedAs],
         kind: "social",
-        data: { ...result, trace: trace.snapshot() },
-        text: twitterSearchText
+        data: { ...rendered.data, trace: trace.snapshot() },
+        text: rendered.text
       }, { asJson, outPath });
     }
 
@@ -704,16 +678,14 @@ async function main(): Promise<void> {
       const invokedAs = command;
       const url = requireQuery(rest, FETCH_HELP, [invokedAs], asJson);
       trace.step("fetch", "dispatch", { url, alias: invokedAs });
-      const result = await trace.span("fetch.content", url, async () => fetchContent(url));
-      addHistory({ kind: "fetch", input: { url, alias: invokedAs }, output: result });
-      const fetchText = result.error
-        ? [`Error: ${result.error}`, ...(result.content ? ["", result.content] : [])].join("\n")
-        : `# ${result.title}\n\n${result.content}`;
+      const rendered = await trace.span("fetch.content", url, async () => runFetchCommand(url, { trace: flags.has("verbose") }));
+      if (rendered.kind === "error") emitFailure([invokedAs], rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions);
+      addHistory({ kind: "fetch", input: { url, alias: invokedAs }, output: rendered.data });
       return emitSuccess({
         command: [invokedAs],
         kind: "fetch",
-        data: { alias: invokedAs, canonicalCommand: "fetch-content", ...result, trace: trace.snapshot() },
-        text: fetchText
+        data: { ...rendered.data, trace: trace.snapshot() },
+        text: rendered.text
       }, { asJson, outPath });
     }
 

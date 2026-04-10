@@ -29,10 +29,10 @@ export function emitSuccess(result: CliSuccessResult, options: EmitOptions): voi
   if (options.outPath) writeOutputFile(options.outPath, payload);
 }
 
-export function emitFailure(command: string[], message: string, options: EmitOptions): never {
+export function emitFailure(command: string[], message: string, options: EmitOptions, suggestions?: string[]): never {
   const payload = options.asJson
-    ? ensureTrailingNewline(JSON.stringify(fail(command, message), null, 2))
-    : ensureTrailingNewline(message);
+    ? ensureTrailingNewline(JSON.stringify(fail(command, message, suggestions), null, 2))
+    : ensureTrailingNewline([message, ...(suggestions?.length ? ["", ...suggestions.map((item) => `help: ${item}`)] : [])].join("\n"));
   process.stderr.write(payload);
   process.exit(1);
 }
