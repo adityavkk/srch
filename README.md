@@ -37,7 +37,59 @@ python3 -m pip install flights
 
 ## What it does
 
-`search` is a single CLI that routes queries to the right backend and returns grounded, cited results. Designed for LLM agents and humans who want answers fast with minimal tokens.
+`srch` is a local-first programmable retrieval engine.
+
+Two frontends:
+- CLI for humans and shell automation
+- TypeScript SDK for codeact agents and apps
+
+The CLI is thin. The SDK owns the retrieval model: domains, sources, strategies, evidence, hooks.
+
+## SDK
+
+Install as a package:
+
+```bash
+npm install search-tool
+```
+
+Import from the package root:
+
+```ts
+import { createClient } from "search-tool";
+
+const client = createClient();
+const result = await client.run({
+  domain: "web",
+  query: "bun sqlite"
+});
+```
+
+Low-level source access:
+
+```ts
+import { createClient, exaSource } from "search-tool";
+
+const client = createClient();
+const evidence = await client.search(exaSource, {
+  query: "bun sqlite",
+  mode: "mcp"
+});
+```
+
+Config is code:
+
+```ts
+// srch.config.ts
+import { defineConfig, coreModule, flightsModule } from "search-tool";
+
+export default defineConfig({
+  modules: [coreModule, flightsModule],
+  defaults: {
+    domain: "web"
+  }
+});
+```
 
 ## Output and persistence
 
@@ -315,6 +367,33 @@ search web react compiler --out web.txt
 search web react compiler --json --out web.json
 ```
 
+## Hooks and ambient context
+
+Install session hooks for supported runtimes:
+
+```bash
+search hooks install
+search hooks status --json
+search hooks uninstall
+```
+
+Alias:
+
+```bash
+search install hooks
+```
+
+Emit the compact session-start dashboard directly:
+
+```bash
+search ambient-context
+```
+
+Current adapters:
+- Claude Code
+- Codex
+- pi
+
 ## Safe config
 
 Runtime secret resolution from 1Password or fnox. No plaintext writes needed.
@@ -328,6 +407,12 @@ search inspect tools --json
 ```
 
 Resolution order: env vars -> config refs -> fnox fallback.
+
+For SDK config loading, `srch` searches upward for:
+- `srch.config.ts`
+- `srch.config.mts`
+- `srch.config.js`
+- `srch.config.mjs`
 
 ## Progressive disclosure
 
