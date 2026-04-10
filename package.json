@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "./dist/sdk.js",
+  "exports": {
+    ".": "./dist/sdk.js"
+  },
   "bin": {
     "search": "./dist/cli.js"
   },
@@ -19,13 +23,13 @@
     "@steipete/bird": "^0.8.0",
     "@tobilu/qmd": "^2.1.0",
     "linkedom": "^0.18.12",
+    "tsx": "^4.20.5",
     "turndown": "^7.2.1",
     "unpdf": "^1.4.0"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
     "@types/turndown": "^5.0.6",
-    "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
 }
