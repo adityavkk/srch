@@ -1,7 +1,7 @@
 import { defineStrategy } from "../define.js";
 import { merge } from "../operators.js";
-import type { Evidence, ProviderAttempt, RunResult, StaticStrategy, StrategyRequest } from "../types.js";
 import type { ExaCodeSourceRequest } from "../sources/exa-code.js";
+import type { Evidence, ProviderAttempt, RunResult, SearchFn, SourceRequest, StaticStrategy, StrategyRequest } from "../types.js";
 
 export type CodeStrategyRequest = StrategyRequest & ExaCodeSourceRequest;
 
@@ -48,11 +48,11 @@ function emptyResult(req: CodeStrategyRequest, attempts: ProviderAttempt[], star
   };
 }
 
-async function trySource(
-  search: (sourceName: string, req: StrategyRequest) => Promise<Evidence[]>,
+async function trySource<TRequest extends SourceRequest>(
+  search: SearchFn,
   attempts: ProviderAttempt[],
   sourceName: string,
-  req: StrategyRequest,
+  req: TRequest,
   transport: string
 ): Promise<Evidence[]> {
   const startedAt = Date.now();
@@ -97,9 +97,9 @@ export const codeDefaultStrategy: StaticStrategy<CodeStrategyRequest> = defineSt
     const attempts: ProviderAttempt[] = [];
 
     const [primary, context7, deepwiki] = await Promise.all([
-      trySource(ctx.search as never, attempts, "exa-code", { query: req.query, signal: req.signal, maxTokens: req.maxTokens } as never, "exa-context-api|exa-mcp"),
-      trySource(ctx.search as never, attempts, "context7", { query: req.query, signal: req.signal } as never, "context7-mcp"),
-      trySource(ctx.search as never, attempts, "deepwiki", { query: req.query, signal: req.signal } as never, "deepwiki-mcp")
+      trySource(ctx.search, attempts, "exa-code", { query: req.query, signal: req.signal, maxTokens: req.maxTokens }, "exa-context-api|exa-mcp"),
+      trySource(ctx.search, attempts, "context7", { query: req.query, signal: req.signal }, "context7-mcp"),
+      trySource(ctx.search, attempts, "deepwiki", { query: req.query, signal: req.signal }, "deepwiki-mcp")
     ]);
 
     const evidence = merge(primary, context7, deepwiki);

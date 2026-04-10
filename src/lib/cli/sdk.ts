@@ -42,7 +42,7 @@ export async function renderHome(trace = false): Promise<string> {
 
 export async function runWebCommand(query: string, options: { provider?: "auto" | "exa" | "brave" | "gemini" | "perplexity"; hq?: boolean; trace?: boolean }): Promise<RenderedCommand> {
   const client = await createSdkClient(options.trace);
-  const result = await client.run({ domain: "web", query, provider: options.provider, hq: options.hq } as never);
+  const result = await client.run({ domain: "web", query, provider: options.provider, hq: options.hq });
   if (result.kind === "error") return { kind: "error", error: result };
 
   const answer = deriveWebAnswer(result);
@@ -82,7 +82,7 @@ export async function runFetchCommand(url: string, options: { trace?: boolean })
 
 export async function runCodeCommand(query: string, options: { maxTokens?: number; trace?: boolean }): Promise<RenderedCommand> {
   const client = await createSdkClient(options.trace);
-  const result = await client.run({ domain: "code", query, maxTokens: options.maxTokens } as never);
+  const result = await client.run({ domain: "code", query, maxTokens: options.maxTokens });
   if (result.kind === "error") return { kind: "error", error: result };
 
   const text = result.kind === "empty"
@@ -112,7 +112,7 @@ export async function runDocsCommand(query: string, options: { trace?: boolean }
 
 export async function runSocialCommand(query: string, options: { count?: number; trace?: boolean }): Promise<RenderedCommand> {
   const client = await createSdkClient(options.trace);
-  const result = await client.run({ domain: "social", query, count: options.count } as never);
+  const result = await client.run({ domain: "social", query, count: options.count });
   if (result.kind === "error") return { kind: "error", error: result };
 
   const tweets = result.kind !== "success"

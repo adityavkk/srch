@@ -21,7 +21,7 @@ export const docsDefaultStrategy: StaticStrategy<DocsStrategyRequest> = defineSt
       return { kind: "error", domain: "docs", strategy: "docs/default", error: { code: "invalid_query", message: "Query must not be empty" }, trace: [], suggestions: ["Run `search docs \"query\"`"] };
     }
 
-    const evidence = await ctx.search("docs-qmd", { query: req.query, signal: req.signal, limit: req.limit } as never);
+    const evidence = await ctx.search("docs-qmd", { query: req.query, signal: req.signal, limit: req.limit });
     const attempts: [ProviderAttempt] = [{ provider: "docs-qmd", status: "success", transport: "qmd-sdk", durationMs: Date.now() - startedAt, evidenceCount: evidence.length }];
 
     if (evidence.length === 0) {

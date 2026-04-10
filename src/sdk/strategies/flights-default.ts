@@ -23,7 +23,7 @@ export const flightsDefaultStrategy: StaticStrategy<FlightsStrategyRequest> = de
     }
 
     try {
-      const evidence = await ctx.search("fli", { query: req.query, origin, destination, dateFrom, options: req.options, signal: req.signal } as never);
+      const evidence = await ctx.search("fli", { query: req.query, origin, destination, dateFrom, options: req.options, signal: req.signal });
       const attempts: [ProviderAttempt] = [{ provider: "fli", status: "success", transport: "fli-sdk", durationMs: Date.now() - startedAt, evidenceCount: evidence.length }];
       if (evidence.length === 0) {
         return { kind: "empty", domain: "flights", strategy: "flights/default", summary: { totalEvidence: 0, sourceBreakdown: {}, attempts, durationMs: Date.now() - startedAt }, trace: [], suggestions: ["Try different dates", "Try nearby airports"] };

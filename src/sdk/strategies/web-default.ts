@@ -97,7 +97,9 @@ async function trySource<TRequest extends SourceRequest>(
 ): Promise<Evidence[] | null> {
   const startedAt = Date.now();
   try {
-    const evidence = await ctx.search(source as never, req as never);
+    const evidence = typeof source === "string"
+      ? await ctx.search(source, req)
+      : await ctx.search(source, req);
     attempts.push({
       provider: meta.provider,
       status: "success",

@@ -41,7 +41,7 @@ export const rewardsDefaultStrategy: StaticStrategy<RewardsStrategyRequest> = de
         onlyDirectFlights: req.onlyDirectFlights,
         orderBy: req.orderBy,
         signal: req.signal
-      } as never);
+      });
       const attempts: [ProviderAttempt] = [{ provider: "seats-aero", status: "success", transport: "seats-aero", durationMs: Date.now() - startedAt, evidenceCount: evidence.length }];
       if (evidence.length === 0) {
         return { kind: "empty", domain: "rewards-flights", strategy: "rewards-flights/default", summary: { totalEvidence: 0, sourceBreakdown: {}, attempts, durationMs: Date.now() - startedAt }, trace: [], suggestions: ["Try `--include-zero-seats`", "Broaden date range"] };

@@ -14,12 +14,29 @@ import type {
   SrchStatus,
   StrategyContext
 } from "./types.js";
+import type { CodeStrategyRequest } from "./strategies/code-default.js";
+import type { DocsStrategyRequest } from "./strategies/docs-default.js";
+import type { FlightsStrategyRequest } from "./strategies/flights-default.js";
+import type { RewardsStrategyRequest } from "./strategies/rewards-default.js";
+import type { SocialStrategyRequest } from "./strategies/social-default.js";
+import type { WebStrategyRequest } from "./strategies/web-default.js";
 
 export type ClientSearch = SearchFn;
 
+export type ClientRun = {
+  (req: { domain: "web" } & WebStrategyRequest): Promise<RunResult>;
+  (req: { domain: "code" } & CodeStrategyRequest): Promise<RunResult>;
+  (req: { domain: "docs" } & DocsStrategyRequest): Promise<RunResult>;
+  (req: { domain: "fetch" } & RunRequest): Promise<RunResult>;
+  (req: { domain: "social" } & SocialStrategyRequest): Promise<RunResult>;
+  (req: { domain: "flights" } & FlightsStrategyRequest): Promise<RunResult>;
+  (req: { domain: "rewards-flights" } & RewardsStrategyRequest): Promise<RunResult>;
+  <TRequest extends RunRequest>(req: TRequest): Promise<RunResult>;
+};
+
 export type SrchClient = {
   search: ClientSearch;
-  run: (req: RunRequest) => Promise<RunResult>;
+  run: ClientRun;
   status: () => Promise<SrchStatus>;
   registry: {
     sources: SourceRegistry;
@@ -66,9 +83,7 @@ export function createClient(options: CreateClientOptions = {}): SrchClient {
     return source.run(req as never, createSourceContext(options));
   }) as ClientSearch;
 
-  return {
-    search,
-    async run(req) {
+  const run = (async (req: RunRequest) => {
       let domain;
       try {
         domain = domains.get(req.domain);
@@ -113,7 +128,11 @@ export function createClient(options: CreateClientOptions = {}): SrchClient {
           })()
         : await strategy.run(req as never, strategyContext);
       return { ...result, trace: context.trace.snapshot() };
-    },
+    }) as ClientRun;
+
+  return {
+    search,
+    run,
     async status() {
       const sourceStatus = sources.list().map((source) => ({ name: source.name, status: "healthy" as const }));
       const domainNames = domains.list().map((domain) => domain.name).sort();

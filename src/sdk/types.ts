@@ -1,4 +1,17 @@
 import type { TraceEvent, TraceSink } from "../lib/trace.js";
+import type { BirdEvidencePayload, BirdSourceRequest } from "./sources/bird.js";
+import type { Context7EvidencePayload } from "./sources/context7.js";
+import type { DeepWikiEvidencePayload } from "./sources/deepwiki.js";
+import type { DocsEvidencePayload, DocsSourceRequest } from "./sources/docs-qmd.js";
+import type { ExaCodeEvidencePayload, ExaCodeSourceRequest } from "./sources/exa-code.js";
+import type { ExaEvidencePayload, ExaSourceRequest } from "./sources/exa.js";
+import type { FetchEvidencePayload } from "./sources/fetch-content.js";
+import type { FliEvidencePayload, FliSourceRequest } from "./sources/fli.js";
+import type { GeminiEvidencePayload, GeminiSourceRequest } from "./sources/gemini.js";
+import type { PerplexityEvidencePayload } from "./sources/perplexity.js";
+import type { SeatsAeroEvidencePayload, SeatsAeroSourceRequest } from "./sources/seats-aero.js";
+import type { AgenticStrategy } from "./agent.js";
+import type { BraveEvidencePayload } from "./sources/brave.js";
 
 export type NonEmptyArray<T> = [T, ...T[]];
 
@@ -107,6 +120,18 @@ export type SearchFn = {
     source: Source<TRequest, TPayload>,
     req: TRequest
   ): Promise<Evidence<TPayload>[]>;
+  (sourceName: "bird", req: BirdSourceRequest): Promise<Evidence<BirdEvidencePayload>[]>;
+  (sourceName: "brave", req: import("./sources/web-shared.js").WebSourceRequest): Promise<Evidence<BraveEvidencePayload>[]>;
+  (sourceName: "context7", req: SourceRequest): Promise<Evidence<Context7EvidencePayload>[]>;
+  (sourceName: "deepwiki", req: SourceRequest): Promise<Evidence<DeepWikiEvidencePayload>[]>;
+  (sourceName: "docs-qmd", req: DocsSourceRequest): Promise<Evidence<DocsEvidencePayload>[]>;
+  (sourceName: "exa", req: ExaSourceRequest): Promise<Evidence<ExaEvidencePayload>[]>;
+  (sourceName: "exa-code", req: ExaCodeSourceRequest): Promise<Evidence<ExaCodeEvidencePayload>[]>;
+  (sourceName: "fetch-content", req: SourceRequest): Promise<Evidence<FetchEvidencePayload>[]>;
+  (sourceName: "fli", req: FliSourceRequest): Promise<Evidence<FliEvidencePayload>[]>;
+  (sourceName: "gemini", req: GeminiSourceRequest): Promise<Evidence<GeminiEvidencePayload>[]>;
+  (sourceName: "perplexity", req: import("./sources/web-shared.js").WebSourceRequest): Promise<Evidence<PerplexityEvidencePayload>[]>;
+  (sourceName: "seats-aero", req: SeatsAeroSourceRequest): Promise<Evidence<SeatsAeroEvidencePayload>[]>;
   (sourceName: string, req: SourceRequest): Promise<Evidence[]>;
 };
 
@@ -135,7 +160,7 @@ export type StaticStrategy<
 
 export type AnyStrategy =
   | StaticStrategy<StrategyRequest, RunResult>
-  | import("./agent.js").AgenticStrategy<StrategyRequest, RunResult>;
+  | AgenticStrategy<StrategyRequest, RunResult>;
 
 export type Domain = {
   name: string;

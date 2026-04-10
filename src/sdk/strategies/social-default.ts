@@ -22,7 +22,7 @@ export const socialDefaultStrategy: StaticStrategy<SocialStrategyRequest> = defi
     }
 
     try {
-      const evidence = await ctx.search("bird", { query: req.query, signal: req.signal, count: req.count } as never);
+      const evidence = await ctx.search("bird", { query: req.query, signal: req.signal, count: req.count });
       const attempts: [ProviderAttempt] = [{ provider: "bird", status: "success", transport: "bird", durationMs: Date.now() - startedAt, evidenceCount: evidence.length }];
       if (evidence.length === 0) {
         return { kind: "empty", domain: "social", strategy: "social/default", summary: { totalEvidence: 0, sourceBreakdown: {}, attempts, durationMs: Date.now() - startedAt }, trace: [], suggestions: ["Try broader terms", "Increase `--count`"] };

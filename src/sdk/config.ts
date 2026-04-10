@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { tsImport } from "tsx/esm/api";
 import { resolveSecret } from "../lib/core/secrets.js";
+import type { SecretField } from "../lib/core/config.js";
 import { createTraceSink } from "../lib/trace.js";
 import type { AgentAdapter } from "./agent.js";
 import { coreModule } from "./modules/core.js";
@@ -31,9 +32,22 @@ const CONFIG_FILENAMES = [
   "srch.config.mjs"
 ] as const;
 
+const SECRET_FIELDS = new Set<SecretField>([
+  "exaApiKey",
+  "perplexityApiKey",
+  "geminiApiKey",
+  "braveApiKey",
+  "seatsAeroApiKey"
+]);
+
+function isSecretField(name: string): name is SecretField {
+  return SECRET_FIELDS.has(name as SecretField);
+}
+
 const defaultSecrets: SecretResolver = {
   resolve(name) {
-    return resolveSecret(name as never);
+    if (!isSecretField(name)) return Promise.resolve(null);
+    return resolveSecret(name);
   }
 };
 
