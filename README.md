@@ -19,20 +19,28 @@ Most agent tools treat search as a grab bag: one tool per provider, no shared ty
 One interface. Many backends. Typed results. No tool sprawl.
 
 ```ts
-import { createClient } from "srch";
+import { createClient, type RunResult, type WebEvidencePayload } from "srch";
 
 const client = createClient();
 
+// result: RunResult<WebEvidencePayload>  -- inferred from { domain: "web" }
 const result = await client.run({ domain: "web", query: "bun sqlite" });
 
 if (result.kind === "success") {
-  // payload is WebEvidencePayload -- no cast needed
+  // result:   RunSuccess<WebEvidencePayload>
+  // evidence: NonEmptyArray<Evidence<WebEvidencePayload>>
+  // payload:  WebEvidencePayload  -- no cast needed
   const hit = result.evidence[0].payload;
-  console.log(hit.title, hit.url, hit.snippet);
+  hit.title;   // string
+  hit.url;     // string
+  hit.snippet; // string
+  hit.content; // { kind: "inline"; text: string } | { kind: "none" }
 }
 
 if (result.kind === "empty") {
-  console.log(result.suggestions); // always present on empty
+  // result:      RunEmpty
+  // suggestions: NonEmptyArray<string>  -- always present
+  console.log(result.suggestions);
 }
 ```
 
@@ -51,37 +59,47 @@ import { createClient } from "srch";
 
 const client = createClient();
 
-// web -- payload is WebEvidencePayload (title, url, snippet, content)
+// web: RunResult<WebEvidencePayload>
 const web = await client.run({ domain: "web", query: "react server components" });
 if (web.kind === "success") {
-  for (const e of web.evidence) {
-    console.log(e.payload.title, e.payload.url);
-    if (e.payload.content.kind === "inline") console.log(e.payload.content.text);
-  }
+  const hit = web.evidence[0].payload;
+  hit.title;   // string
+  hit.url;     // string
+  hit.snippet; // string
+  hit.content; // { kind: "inline"; text: string } | { kind: "none" }
 }
 
-// code -- payload is CodeTextEvidencePayload (title, text)
+// code: RunResult<CodeTextEvidencePayload>
 const code = await client.run({ domain: "code", query: "drizzle orm migrations" });
 if (code.kind === "success") {
-  console.log(code.evidence[0].payload.title, code.evidence[0].payload.text.slice(0, 200));
+  const hit = code.evidence[0].payload;
+  hit.kind;  // "text"
+  hit.title; // string
+  hit.text;  // string -- full extracted text
 }
 
-// fetch -- payload is FetchEvidencePayload (url, title, content)
+// fetch: RunResult<FetchEvidencePayload>
 const page = await client.run({ domain: "fetch", query: "https://bun.sh/docs/runtime/sqlite" });
 if (page.kind === "success") {
-  console.log(page.evidence[0].payload.title, page.evidence[0].payload.content.slice(0, 500));
+  const hit = page.evidence[0].payload;
+  hit.kind;    // "document"
+  hit.url;     // string
+  hit.title;   // string
+  hit.content; // string -- extracted readable text
 }
 
-// social -- payload is BirdEvidencePayload (text, author, url)
+// social: RunResult<BirdEvidencePayload>
 const social = await client.run({ domain: "social", query: "bun 1.2 release" });
 if (social.kind === "success") {
-  for (const e of social.evidence) {
-    console.log(e.payload.text, e.payload.author);
-  }
+  const hit = social.evidence[0].payload;
+  hit.kind;   // "tweet"
+  hit.author; // string
+  hit.text;   // string
+  hit.url;    // string
 }
 ```
 
-Every `client.run()` call returns a `RunResult` typed to the domain. No casts. No `as`. The payload type flows from the domain string.
+Every `client.run()` call returns a `RunResult<T>` typed to the domain. No casts. No `as`. The payload type flows from the domain string.
 
 ### As a CLI
 
@@ -119,18 +137,23 @@ Retrieval is organized into **domains**: stable, typed retrieval spaces. Each do
 
 ### Web
 
-Automatic fallback chain, free-first. Evidence payload: `WebEvidencePayload`.
+Automatic fallback chain, free-first.
 
 ```ts
+// result: RunResult<WebEvidencePayload>
 const result = await client.run({ domain: "web", query: "bun sqlite wasm" });
 
 if (result.kind === "success") {
+  // result:   RunSuccess<WebEvidencePayload>
+  // evidence: NonEmptyArray<Evidence<WebEvidencePayload>>
   for (const e of result.evidence) {
-    console.log(e.payload.kind);    // "search-result"
-    console.log(e.payload.title);   // string
-    console.log(e.payload.url);     // string
-    console.log(e.payload.snippet); // string
-    console.log(e.payload.content); // { kind: "inline", text } | { kind: "none" }
+    e.payload.kind;    // "search-result"  (literal type)
+    e.payload.title;   // string
+    e.payload.url;     // string
+    e.payload.snippet; // string
+    e.payload.content; // { kind: "inline"; text: string } | { kind: "none" }
+    e.source;          // string  -- which backend produced this
+    e.provenance;      // Provenance  -- web | api | local | clone
   }
 }
 
@@ -145,15 +168,18 @@ search web "react compiler" --provider brave --json
 
 ### Code
 
-Library docs, public repos, local codebases. Evidence payload: `CodeTextEvidencePayload`.
+Library docs, public repos, local codebases.
 
 ```ts
+// result: RunResult<CodeTextEvidencePayload>
 const result = await client.run({ domain: "code", query: "react suspense cache" });
 
 if (result.kind === "success") {
-  console.log(result.evidence[0].payload.kind);  // "text"
-  console.log(result.evidence[0].payload.title); // string
-  console.log(result.evidence[0].payload.text);  // full extracted text
+  const hit = result.evidence[0].payload;
+  hit.kind;  // "text"  (literal type)
+  hit.title; // string
+  hit.text;  // string -- full extracted text
+  hit.native; // unknown -- raw provider response
 }
 ```
 
@@ -165,16 +191,18 @@ search code repo . "auth middleware"                    # local codebase
 
 ### Fetch
 
-Turn any URL into clean, readable content. Evidence payload: `FetchEvidencePayload`.
+Turn any URL into clean, readable content.
 
 ```ts
+// result: RunResult<FetchEvidencePayload>
 const result = await client.run({ domain: "fetch", query: "https://clig.dev" });
 
 if (result.kind === "success") {
-  console.log(result.evidence[0].payload.kind);    // "document"
-  console.log(result.evidence[0].payload.url);     // string
-  console.log(result.evidence[0].payload.title);   // string
-  console.log(result.evidence[0].payload.content); // extracted readable text
+  const hit = result.evidence[0].payload;
+  hit.kind;    // "document"  (literal type)
+  hit.url;     // string
+  hit.title;   // string
+  hit.content; // string -- extracted readable text
 }
 ```
 
@@ -197,6 +225,7 @@ import { createClient, defineConfig, flightsModule } from "srch";
 
 const client = createClient({ config: defineConfig({ modules: [flightsModule] }) });
 
+// result: RunResult<FliEvidencePayload>
 const result = await client.run({
   domain: "flights",
   query: "JFK HNL 2026-04-20",
@@ -204,12 +233,14 @@ const result = await client.run({
 });
 
 if (result.kind === "success") {
+  // result:   RunSuccess<FliEvidencePayload>
+  // evidence: NonEmptyArray<Evidence<FliEvidencePayload>>
   for (const e of result.evidence) {
-    console.log(e.payload.kind);              // "flight-offer"
-    console.log(e.payload.offer.price);       // number
-    console.log(e.payload.offer.currency);    // "USD"
-    console.log(e.payload.offer.outbound.segments); // typed segment array
-    console.log(e.payload.summary);           // human-readable one-liner
+    e.payload.kind;                   // "flight-offer"  (literal type)
+    e.payload.offer.price;            // number
+    e.payload.offer.currency;         // string
+    e.payload.offer.outbound.segments; // FlightSegment[]
+    e.payload.summary;                // string -- human-readable one-liner
   }
 }
 ```
