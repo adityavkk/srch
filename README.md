@@ -2,7 +2,7 @@
 
 A TypeScript SDK that gives agents structured access to search as a domain.
 
-CLI included as a thin frontend.
+The CLI binary is `search`. The SDK is `srch`.
 
 <p align="center">
   <img src="demo.gif" alt="srch demo" width="800">
@@ -19,7 +19,7 @@ Most agent tools treat search as a grab bag: one tool per provider, no shared ty
 One interface. Many backends. Typed results. No tool sprawl.
 
 ```ts
-import { createClient } from "search-tool";
+import { createClient } from "srch";
 
 const client = createClient();
 
@@ -35,11 +35,11 @@ const result = await client.run({ domain: "web", query: "bun sqlite" });
 ### As a TypeScript SDK
 
 ```bash
-npm install search-tool
+npm install srch
 ```
 
 ```ts
-import { createClient } from "search-tool";
+import { createClient } from "srch";
 
 const client = createClient();
 
@@ -72,7 +72,7 @@ search social "bun 1.2 release"
 search flights JFK HNL 2026-04-20 --cabin C --sort price --json
 ```
 
-The CLI is a thin frontend over the SDK. Same domains, same strategies, same output.
+The `search` CLI is a thin frontend over the `srch` SDK. Same domains, same strategies, same output.
 
 ---
 
@@ -144,7 +144,7 @@ search install flights
 ```
 
 ```ts
-import { createClient, defineConfig, flightsModule } from "search-tool";
+import { createClient, defineConfig, flightsModule } from "srch";
 
 const client = createClient({ config: defineConfig({ modules: [flightsModule] }) });
 
@@ -199,7 +199,7 @@ agent code / CLI args
 ### Custom source
 
 ```ts
-import { defineSource } from "search-tool";
+import { defineSource } from "srch";
 
 const mySource = defineSource({
   name: "my-api",
@@ -222,7 +222,7 @@ const mySource = defineSource({
 ### Custom strategy
 
 ```ts
-import { defineStrategy } from "search-tool";
+import { defineStrategy } from "srch";
 
 const myStrategy = defineStrategy({
   name: "web/parallel",
@@ -240,7 +240,7 @@ const myStrategy = defineStrategy({
 ### Custom module
 
 ```ts
-import { defineModule } from "search-tool";
+import { defineModule } from "srch";
 
 const myModule = defineModule({
   name: "my-module",
@@ -254,7 +254,7 @@ const myModule = defineModule({
 
 ```ts
 // srch.config.ts
-import { defineConfig, coreModule, flightsModule } from "search-tool";
+import { defineConfig, coreModule, flightsModule } from "srch";
 
 export default defineConfig({
   modules: [coreModule, flightsModule, myModule],
@@ -382,7 +382,7 @@ search inspect tools --json   # verify resolution
 
 ### How is this different from MCP?
 
-MCP gives you a flat list of tools. The agent has to pick the right one, handle failures, and parse untyped output. `srch` gives the agent a typed domain model: one interface for retrieval, automatic fallback across providers, discriminated union results, and grounded evidence with provenance. Fewer decisions for the agent, better results.
+MCP gives you a flat list of tools. The agent has to pick the right one, handle failures, and parse untyped output. `srch` gives the agent a typed domain model: one interface for retrieval, automatic fallback across providers, discriminated union results, and grounded evidence with provenance. Fewer decisions for the agent, better results. The `search` CLI exposes the same model for shell workflows.
 
 ### Why TypeScript?
 
@@ -406,7 +406,7 @@ Flights is an optional domain backed by a Python SDK (`fli`). Run `search instal
 
 ### Is it just for agents?
 
-No. The CLI works great for humans. But the SDK is designed agent-first: typed requests and results, explicit empty states, structured error suggestions, and session hooks for ambient context injection.
+No. The `search` CLI works great for humans and shell scripts. But the `srch` SDK is designed agent-first: typed requests and results, explicit empty states, structured error suggestions, and session hooks for ambient context injection.
 
 ### What agent runtimes are supported?
 
