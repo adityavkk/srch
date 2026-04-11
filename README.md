@@ -19,13 +19,21 @@ Most agent tools treat search as a grab bag: one tool per provider, no shared ty
 One interface. Many backends. Typed results. No tool sprawl.
 
 ```ts
-import { createClient } from "srch";
+import { createClient, type RunResult, type WebEvidencePayload } from "srch";
 
 const client = createClient();
 
 const result = await client.run({ domain: "web", query: "bun sqlite" });
-// result.kind === "success" | "empty" | "error"
-// result.evidence[0].payload.title, .url, .snippet, ...
+
+if (result.kind === "success") {
+  // evidence is typed: WebEvidencePayload for the web domain
+  const hit = result.evidence[0].payload as WebEvidencePayload;
+  console.log(hit.title, hit.url, hit.snippet);
+}
+
+if (result.kind === "empty") {
+  console.log(result.suggestions); // always present on empty
+}
 ```
 
 ---
@@ -39,21 +47,48 @@ npm install srch
 ```
 
 ```ts
-import { createClient } from "srch";
+import {
+  createClient,
+  type WebEvidencePayload,
+  type ExaCodeEvidencePayload,
+  type FetchEvidencePayload,
+  type BirdEvidencePayload
+} from "srch";
 
 const client = createClient();
 
-// web search with automatic fallback across providers
+// web search -- typed payload: title, url, snippet, content
 const web = await client.run({ domain: "web", query: "react server components" });
+if (web.kind === "success") {
+  for (const e of web.evidence) {
+    const p = e.payload as WebEvidencePayload;
+    console.log(p.title, p.url);
+    if (p.content.kind === "inline") console.log(p.content.text);
+  }
+}
 
-// code context for a library or API
+// code context -- typed payload: title, text, native
 const code = await client.run({ domain: "code", query: "drizzle orm migrations" });
+if (code.kind === "success") {
+  const p = code.evidence[0].payload as ExaCodeEvidencePayload;
+  console.log(p.title, p.text.slice(0, 200));
+}
 
-// extract readable content from a URL
+// fetch a URL -- typed payload: url, title, content
 const page = await client.run({ domain: "fetch", query: "https://bun.sh/docs/runtime/sqlite" });
+if (page.kind === "success") {
+  const p = page.evidence[0].payload as FetchEvidencePayload;
+  console.log(p.title, p.content.slice(0, 500));
+}
 
-// search tweets
+// social/twitter -- typed payload: tweet text, author, metrics
 const social = await client.run({ domain: "social", query: "bun 1.2 release" });
+if (social.kind === "success") {
+  for (const e of social.evidence) {
+    const p = e.payload as BirdEvidencePayload;
+    console.log(p.text, p.author);
+  }
+}
 ```
 
 ### As a CLI
@@ -92,13 +127,28 @@ Retrieval is organized into **domains**: stable, typed retrieval spaces. Each do
 
 ### Web
 
-Automatic fallback chain, free-first:
+Automatic fallback chain, free-first. Evidence payload: `WebEvidencePayload`.
 
 ```ts
-// uses Exa MCP -> Brave -> Gemini -> Perplexity (first that works)
-await client.run({ domain: "web", query: "bun sqlite wasm" });
+import { createClient, type WebEvidencePayload } from "srch";
 
-// pin a specific provider
+const client = createClient();
+
+// auto fallback: Exa MCP -> Brave -> Gemini -> Perplexity
+const result = await client.run({ domain: "web", query: "bun sqlite wasm" });
+
+if (result.kind === "success") {
+  for (const e of result.evidence) {
+    const p = e.payload as WebEvidencePayload;
+    console.log(p.kind);    // "search-result"
+    console.log(p.title);   // string
+    console.log(p.url);     // string
+    console.log(p.snippet); // string
+    console.log(p.content); // { kind: "inline", text } | { kind: "none" }
+  }
+}
+
+// pin a provider
 await client.run({ domain: "web", query: "bun sqlite", provider: "brave" });
 ```
 
@@ -109,10 +159,20 @@ search web "react compiler" --provider brave --json
 
 ### Code
 
-Library docs, public repos, local codebases:
+Library docs, public repos, local codebases. Evidence payload: `ExaCodeEvidencePayload`.
 
 ```ts
-await client.run({ domain: "code", query: "react suspense cache" });
+import { createClient, type ExaCodeEvidencePayload } from "srch";
+
+const client = createClient();
+const result = await client.run({ domain: "code", query: "react suspense cache" });
+
+if (result.kind === "success") {
+  const p = result.evidence[0].payload as ExaCodeEvidencePayload;
+  console.log(p.kind);  // "text"
+  console.log(p.title); // string
+  console.log(p.text);  // full extracted text
+}
 ```
 
 ```bash
@@ -123,10 +183,21 @@ search code repo . "auth middleware"                    # local codebase
 
 ### Fetch
 
-Turn any URL into clean, readable content:
+Turn any URL into clean, readable content. Evidence payload: `FetchEvidencePayload`.
 
 ```ts
-await client.run({ domain: "fetch", query: "https://clig.dev" });
+import { createClient, type FetchEvidencePayload } from "srch";
+
+const client = createClient();
+const result = await client.run({ domain: "fetch", query: "https://clig.dev" });
+
+if (result.kind === "success") {
+  const p = result.evidence[0].payload as FetchEvidencePayload;
+  console.log(p.kind);    // "document"
+  console.log(p.url);     // string
+  console.log(p.title);   // string
+  console.log(p.content); // extracted readable text
+}
 ```
 
 ```bash
@@ -137,14 +208,14 @@ search fetch https://arxiv.org/pdf/1706.03762.pdf
 
 ### Flights (optional)
 
-Powered by the Python `fli` SDK. Install separately:
+Powered by the Python `fli` SDK. Evidence payload: `FliEvidencePayload`.
 
 ```bash
 search install flights
 ```
 
 ```ts
-import { createClient, defineConfig, flightsModule } from "srch";
+import { createClient, defineConfig, flightsModule, type FliEvidencePayload } from "srch";
 
 const client = createClient({ config: defineConfig({ modules: [flightsModule] }) });
 
@@ -153,6 +224,17 @@ const result = await client.run({
   query: "JFK HNL 2026-04-20",
   options: { adults: 4, cabinClass: "C", maxStopovers: 0, sort: "price" }
 });
+
+if (result.kind === "success") {
+  for (const e of result.evidence) {
+    const p = e.payload as FliEvidencePayload;
+    console.log(p.kind);         // "flight-offer"
+    console.log(p.offer.price);  // number
+    console.log(p.offer.currency); // "USD"
+    console.log(p.offer.outbound.segments); // typed segment array
+    console.log(p.summary);      // human-readable one-liner
+  }
+}
 ```
 
 ```bash
@@ -188,9 +270,31 @@ agent code / CLI args
 
 **Domains** bind sources and strategies into a stable retrieval space with typed evidence payloads.
 
-**Evidence** is a grounded result pointer. Every piece of evidence carries a source name, provenance, and domain-specific payload. No hallucinated citations.
+**Evidence** is a grounded result pointer. Every piece of evidence carries a source name, provenance, and a domain-specific typed payload. No hallucinated citations.
 
-**RunResult** is a discriminated union. Your code always knows if retrieval succeeded, returned empty, or failed. No silent failures.
+Evidence payloads are typed per domain:
+
+| Domain | Payload type | Key fields |
+|--------|-------------|------------|
+| `web` | `WebEvidencePayload` | `title`, `url`, `snippet`, `content` |
+| `code` | `ExaCodeEvidencePayload` | `title`, `text`, `native` |
+| `docs` | `DocsEvidencePayload` | `title`, `content`, `collection` |
+| `fetch` | `FetchEvidencePayload` | `url`, `title`, `content` |
+| `social` | `BirdEvidencePayload` | `text`, `author`, `metrics` |
+| `flights` | `FliEvidencePayload` | `offer.price`, `offer.outbound`, `summary` |
+| `rewards-flights` | `SeatsAeroEvidencePayload` | `route`, `source`, `availability` |
+
+**RunResult** is a discriminated union. Your code always knows if retrieval succeeded, returned empty, or failed:
+
+```ts
+type RunResult<T> = RunSuccess<T> | RunEmpty | RunError;
+
+// RunSuccess.evidence is NonEmptyArray<Evidence<T>> -- always at least one
+// RunEmpty.suggestions is NonEmptyArray<string> -- always actionable
+// RunError.suggestions is NonEmptyArray<string> -- always actionable
+```
+
+No silent failures. No `if (result.data && result.data.length > 0)` guards.
 
 ---
 
