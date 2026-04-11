@@ -20,17 +20,24 @@ import type { FlightsStrategyRequest } from "./strategies/flights-default.js";
 import type { RewardsStrategyRequest } from "./strategies/rewards-default.js";
 import type { SocialStrategyRequest } from "./strategies/social-default.js";
 import type { WebStrategyRequest } from "./strategies/web-default.js";
+import type { WebEvidencePayload } from "./sources/web-shared.js";
+import type { CodeTextEvidencePayload } from "./sources/exa-code.js";
+import type { DocsEvidencePayload } from "./sources/docs-qmd.js";
+import type { FetchEvidencePayload } from "./sources/fetch-content.js";
+import type { BirdEvidencePayload } from "./sources/bird.js";
+import type { FliEvidencePayload } from "./sources/fli.js";
+import type { SeatsAeroEvidencePayload } from "./sources/seats-aero.js";
 
 export type ClientSearch = SearchFn;
 
 export type ClientRun = {
-  (req: { domain: "web" } & WebStrategyRequest): Promise<RunResult>;
-  (req: { domain: "code" } & CodeStrategyRequest): Promise<RunResult>;
-  (req: { domain: "docs" } & DocsStrategyRequest): Promise<RunResult>;
-  (req: { domain: "fetch" } & RunRequest): Promise<RunResult>;
-  (req: { domain: "social" } & SocialStrategyRequest): Promise<RunResult>;
-  (req: { domain: "flights" } & FlightsStrategyRequest): Promise<RunResult>;
-  (req: { domain: "rewards-flights" } & RewardsStrategyRequest): Promise<RunResult>;
+  (req: { domain: "web" } & WebStrategyRequest): Promise<RunResult<WebEvidencePayload>>;
+  (req: { domain: "code" } & CodeStrategyRequest): Promise<RunResult<CodeTextEvidencePayload>>;
+  (req: { domain: "docs" } & DocsStrategyRequest): Promise<RunResult<DocsEvidencePayload>>;
+  (req: { domain: "fetch" } & RunRequest): Promise<RunResult<FetchEvidencePayload>>;
+  (req: { domain: "social" } & SocialStrategyRequest): Promise<RunResult<BirdEvidencePayload>>;
+  (req: { domain: "flights" } & FlightsStrategyRequest): Promise<RunResult<FliEvidencePayload>>;
+  (req: { domain: "rewards-flights" } & RewardsStrategyRequest): Promise<RunResult<SeatsAeroEvidencePayload>>;
   <TRequest extends RunRequest>(req: TRequest): Promise<RunResult>;
 };
 
