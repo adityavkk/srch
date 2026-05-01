@@ -54,97 +54,63 @@ if (result.kind === "empty") {
 npm install srch
 ```
 
-Agent scratchpad pattern: Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or bash parsing.
+Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or bash parsing.
 
-```bash
-bun - <<'TS'
-import { createClient } from "srch";
-const c = createClient();
-const q = "bun sqlite wasm";
+### User journey: conference travel brief
 
-const [web, code, docs] = await Promise.all([
-  c.run({ domain: "web", query: q, numResults: 5 }),
-  c.run({ domain: "code", query: q, maxTokens: 3000 }),
-  c.run({ domain: "docs", query: q, limit: 5 })
-]);
+A manager asks:
 
-const results = ([
-  ["web", web],
-  ["code", code],
-  ["docs", docs]
-] as const).map(([domain, r]) => r.kind === "success" ? {
-  domain,
-  kind: r.kind,
-  count: r.evidence.length,
-  sources: r.summary.sourceBreakdown,
-  top: r.evidence.slice(0, 3).map(e => ({
-    source: e.source,
-    title: "title" in e.payload ? e.payload.title : undefined,
-    url: "url" in e.payload ? e.payload.url : undefined,
-    file: "file" in e.payload ? e.payload.file : undefined,
-    text: "text" in e.payload ? e.payload.text.slice(0, 160) :
-      "snippet" in e.payload ? e.payload.snippet.slice(0, 160) : undefined
-  }))
-} : { domain, kind: r.kind, detail: r.kind === "empty" ? r.suggestions : r.error });
+> Can I send someone from SFO to AWS re:Invent 2026? Verify the official dates, find a reasonable flight, and give me a go/no-go recommendation.
 
-console.log(JSON.stringify({ query: q, results }, null, 2));
-TS
-```
+With a bag of separate tools, the agent has to juggle web search, browser extraction, flight search, provider-specific schemas, shell glue, and error states. With `srch`, this becomes one typed data flow:
 
-Example output shape:
+| Step | Domain | What happens |
+|---|---|---|
+| 1 | `web` | Find the official event page |
+| 2 | `fetch` | Read the page and extract the event facts |
+| 3 | `flights` | Price route/date options |
+| 4 | TypeScript | Rank fares, build a decision brief |
 
-```json
-{
-  "query": "bun sqlite wasm",
-  "results": [
-    { "domain": "web", "kind": "success", "count": 5, "sources": { "exa": 5 } },
-    { "domain": "code", "kind": "success", "count": 2, "sources": { "exa-code": 1, "context7": 1 } },
-    { "domain": "docs", "kind": "empty", "detail": ["Run `search docs index status` to inspect the local index"] }
-  ]
-}
-```
-
-### Composed use case: conference travel brief
-
-One TS program can discover official event context, fetch the source page, price flights, check local travel policy, and score options. With separate tools this becomes prompt/tool sprawl; with `srch` it is just typed data flow.
-
-Requires optional flights backend:
+Install the optional flight backend once:
 
 ```bash
 search install flights
 ```
+
+Then run the whole journey as a Bun scratchpad:
 
 ```bash
 bun - <<'TS'
 import { createClient, coreModule, defineConfig, flightsModule } from "srch";
 
 const c = createClient({ config: defineConfig({ modules: [coreModule, flightsModule] }) });
-const event = "AWS re:Invent 2026";
-const origin = "SFO";
-const destination = "LAS";
-const depart = "2026-11-29";
-const ret = "2026-12-04";
+const trip = {
+  event: "AWS re:Invent 2026",
+  origin: "SFO",
+  destination: "LAS",
+  depart: "2026-11-29",
+  return: "2026-12-04"
+};
 
 const web = await c.run({
   domain: "web",
-  query: `${event} official dates venue nearest airport`,
+  query: `${trip.event} official dates venue airport`,
   numResults: 5
 });
+if (web.kind !== "success") throw new Error(web.kind === "error" ? web.error.message : web.suggestions[0]);
 
-const officialUrl = web.kind === "success"
-  ? web.evidence.find(e => /aws|amazon|reinvent/i.test(e.payload.url))?.payload.url
-  : undefined;
+const official = web.evidence.find(e => /aws|amazon|reinvent/i.test(e.payload.url)) ?? web.evidence[0];
 
-const [eventPage, flights, policy] = await Promise.all([
-  officialUrl ? c.run({ domain: "fetch", query: officialUrl }) : Promise.resolve(null),
+const [eventPage, flights] = await Promise.all([
+  c.run({ domain: "fetch", query: official.payload.url }),
   c.run({
     domain: "flights",
-    query: `${origin} ${destination} ${depart}`,
-    options: { returnDate: ret, adults: 1, cabinClass: "M", maxStopovers: 1, sort: "price", limit: 5 }
-  }),
-  c.run({ domain: "docs", query: "travel policy airfare hotel per diem approval", limit: 5 })
+    query: `${trip.origin} ${trip.destination} ${trip.depart}`,
+    options: { returnDate: trip.return, adults: 1, cabinClass: "M", maxStopovers: 1, sort: "price", limit: 5 }
+  })
 ]);
 
+const page = eventPage.kind === "success" ? eventPage.evidence[0].payload : null;
 const fares = flights.kind === "success"
   ? flights.evidence.map(e => ({
       price: e.payload.offer.price,
@@ -153,29 +119,50 @@ const fares = flights.kind === "success"
       score: e.payload.offer.price + e.payload.offer.outbound.stopovers * 150
     })).sort((a, b) => a.score - b.score)
   : [];
+const best = fares[0] ?? null;
 
 console.log(JSON.stringify({
-  useCase: "conference travel decision brief",
-  event,
-  trip: { origin, destination, depart, return: ret },
-  sources: web.kind === "success" ? web.evidence.slice(0, 3).map(e => ({ title: e.payload.title, url: e.payload.url })) : [],
-  eventBrief: eventPage?.kind === "success" ? {
-    title: eventPage.evidence[0].payload.title,
-    excerpt: eventPage.evidence[0].payload.content.slice(0, 800)
-  } : null,
-  bestFlight: fares[0] ?? null,
-  alternatives: fares.slice(1, 3),
-  policyNotes: policy.kind === "success" ? policy.evidence.slice(0, 3).map(e => ({
-    title: e.payload.title,
-    file: e.payload.file,
-    snippet: e.payload.snippet.slice(0, 240)
-  })) : [],
-  decision: fares[0]
-    ? `Book ${fares[0].summary}; verify against policy notes before purchase.`
-    : "No flight offer found; try nearby airports or dates."
+  ask: `Can I attend ${trip.event} from ${trip.origin}?`,
+  verifiedEvent: {
+    title: page?.title ?? official.payload.title,
+    source: page?.url ?? official.payload.url,
+    excerpt: page?.content.slice(0, 400) ?? official.payload.snippet
+  },
+  trip,
+  flightShortlist: fares.slice(0, 3),
+  recommendation: best
+    ? `Go: official event found, route priced, best option is ${best.summary}.`
+    : "Wait: event found, but no flight offer returned. Try nearby dates or airports."
 }, null, 2));
 TS
 ```
+
+Result, trimmed:
+
+```json
+{
+  "ask": "Can I attend AWS re:Invent 2026 from SFO?",
+  "verifiedEvent": {
+    "title": "AWS re:Invent 2026  | Nov 30-Dec 4, 2026",
+    "source": "https://aws.amazon.com/reinvent/",
+    "excerpt": "Save the date\n\nNovember 30 - December 4, 2026 | Las Vegas, NV..."
+  },
+  "trip": {
+    "event": "AWS re:Invent 2026",
+    "origin": "SFO",
+    "destination": "LAS",
+    "depart": "2026-11-29",
+    "return": "2026-12-04"
+  },
+  "flightShortlist": [
+    { "price": 499, "summary": "USD 499.00 | AI | SFO -> LAS | economy | 9h00m | 0 stop(s)", "score": 499 },
+    { "price": 650, "summary": "USD 650.00 | UA | SFO -> LAS | economy | 10h30m | 0 stop(s)", "score": 650 }
+  ],
+  "recommendation": "Go: official event found, route priced, best option is USD 499.00 | AI | SFO -> LAS | economy | 9h00m | 0 stop(s)."
+}
+```
+
+That is the SDK's core value: retrieval, extraction, flight pricing, ranking, and decision output in one typed program. No tool sprawl. No `jq`. No stringly-typed handoff.
 
 Longer scripts can live in `.tmp/search.ts` and run with `bun .tmp/search.ts`.
 
