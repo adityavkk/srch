@@ -54,6 +54,58 @@ if (result.kind === "empty") {
 npm install srch
 ```
 
+Agent scratchpad pattern: Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or bash parsing.
+
+```bash
+bun - <<'TS'
+import { createClient } from "srch";
+const c = createClient();
+const q = "bun sqlite wasm";
+
+const [web, code, docs] = await Promise.all([
+  c.run({ domain: "web", query: q, numResults: 5 }),
+  c.run({ domain: "code", query: q, maxTokens: 3000 }),
+  c.run({ domain: "docs", query: q, limit: 5 })
+]);
+
+const results = ([
+  ["web", web],
+  ["code", code],
+  ["docs", docs]
+] as const).map(([domain, r]) => r.kind === "success" ? {
+  domain,
+  kind: r.kind,
+  count: r.evidence.length,
+  sources: r.summary.sourceBreakdown,
+  top: r.evidence.slice(0, 3).map(e => ({
+    source: e.source,
+    title: "title" in e.payload ? e.payload.title : undefined,
+    url: "url" in e.payload ? e.payload.url : undefined,
+    file: "file" in e.payload ? e.payload.file : undefined,
+    text: "text" in e.payload ? e.payload.text.slice(0, 160) :
+      "snippet" in e.payload ? e.payload.snippet.slice(0, 160) : undefined
+  }))
+} : { domain, kind: r.kind, detail: r.kind === "empty" ? r.suggestions : r.error });
+
+console.log(JSON.stringify({ query: q, results }, null, 2));
+TS
+```
+
+Example output shape:
+
+```json
+{
+  "query": "bun sqlite wasm",
+  "results": [
+    { "domain": "web", "kind": "success", "count": 5, "sources": { "exa": 5 } },
+    { "domain": "code", "kind": "success", "count": 2, "sources": { "exa-code": 1, "context7": 1 } },
+    { "domain": "docs", "kind": "empty", "detail": ["Run `search docs index status` to inspect the local index"] }
+  ]
+}
+```
+
+Longer scripts can live in `.tmp/search.ts` and run with `bun .tmp/search.ts`.
+
 ```ts
 import { createClient } from "srch";
 
