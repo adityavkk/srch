@@ -104,6 +104,79 @@ Example output shape:
 }
 ```
 
+### Composed use case: conference travel brief
+
+One TS program can discover official event context, fetch the source page, price flights, check local travel policy, and score options. With separate tools this becomes prompt/tool sprawl; with `srch` it is just typed data flow.
+
+Requires optional flights backend:
+
+```bash
+search install flights
+```
+
+```bash
+bun - <<'TS'
+import { createClient, coreModule, defineConfig, flightsModule } from "srch";
+
+const c = createClient({ config: defineConfig({ modules: [coreModule, flightsModule] }) });
+const event = "AWS re:Invent 2026";
+const origin = "SFO";
+const destination = "LAS";
+const depart = "2026-11-29";
+const ret = "2026-12-04";
+
+const web = await c.run({
+  domain: "web",
+  query: `${event} official dates venue nearest airport`,
+  numResults: 5
+});
+
+const officialUrl = web.kind === "success"
+  ? web.evidence.find(e => /aws|amazon|reinvent/i.test(e.payload.url))?.payload.url
+  : undefined;
+
+const [eventPage, flights, policy] = await Promise.all([
+  officialUrl ? c.run({ domain: "fetch", query: officialUrl }) : Promise.resolve(null),
+  c.run({
+    domain: "flights",
+    query: `${origin} ${destination} ${depart}`,
+    options: { returnDate: ret, adults: 1, cabinClass: "M", maxStopovers: 1, sort: "price", limit: 5 }
+  }),
+  c.run({ domain: "docs", query: "travel policy airfare hotel per diem approval", limit: 5 })
+]);
+
+const fares = flights.kind === "success"
+  ? flights.evidence.map(e => ({
+      price: e.payload.offer.price,
+      summary: e.payload.summary,
+      bookingUrl: e.payload.offer.booking_url,
+      score: e.payload.offer.price + e.payload.offer.outbound.stopovers * 150
+    })).sort((a, b) => a.score - b.score)
+  : [];
+
+console.log(JSON.stringify({
+  useCase: "conference travel decision brief",
+  event,
+  trip: { origin, destination, depart, return: ret },
+  sources: web.kind === "success" ? web.evidence.slice(0, 3).map(e => ({ title: e.payload.title, url: e.payload.url })) : [],
+  eventBrief: eventPage?.kind === "success" ? {
+    title: eventPage.evidence[0].payload.title,
+    excerpt: eventPage.evidence[0].payload.content.slice(0, 800)
+  } : null,
+  bestFlight: fares[0] ?? null,
+  alternatives: fares.slice(1, 3),
+  policyNotes: policy.kind === "success" ? policy.evidence.slice(0, 3).map(e => ({
+    title: e.payload.title,
+    file: e.payload.file,
+    snippet: e.payload.snippet.slice(0, 240)
+  })) : [],
+  decision: fares[0]
+    ? `Book ${fares[0].summary}; verify against policy notes before purchase.`
+    : "No flight offer found; try nearby airports or dates."
+}, null, 2));
+TS
+```
+
 Longer scripts can live in `.tmp/search.ts` and run with `bun .tmp/search.ts`.
 
 ```ts
