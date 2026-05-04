@@ -1,6 +1,6 @@
 ---
 name: search
-description: "SDK-first local research tool. Prefer typed TypeScript via Bun; use CLI only for quick checks/fallback."
+description: "SDK-first local research tool. Prefer typed TypeScript via Bun; compose domains in one TS flow; CLI only for quick checks/fallback."
 ---
 
 # search
@@ -9,9 +9,9 @@ Local-first research SDK + CLI.
 
 ## Default: TypeScript SDK via Bun
 
-Primary path: run TypeScript, not bash pipelines. `createClient()` returns native typed objects, so agents can use `Promise.all`, branches, maps/filters, joins, ranking, and JSON emission without parsing CLI text.
+Primary path: run TypeScript, not bash pipelines. `createClient()` returns native typed objects, so agents can use `Promise.all`, branching, maps/filters, joins, ranking, and JSON output without parsing CLI text.
 
-Shortest run forms:
+Shortest run form:
 
 ```bash
 bun - <<'TS'
@@ -22,95 +22,86 @@ console.log(JSON.stringify(r.kind === "success" ? r.evidence.map(e => e.payload.
 TS
 ```
 
+No `bunx`, `tsx`, flags, or `jq` needed. Bun runs TS directly. Use `.tmp/search.ts` + `bun .tmp/search.ts` for longer scripts.
+
+Use CLI only for quick checks, diagnostics, or shell consumers.
+
+## Sellable pattern: one user journey, many domains
+
+Do not present `search` as a bag of tools. Show it as a typed workflow engine for retrieval-heavy decisions.
+
+Example ask:
+
+> Can I send someone from SFO to AWS re:Invent 2026? Verify official dates, price flights, and make a go/no-go recommendation.
+
+Journey:
+
+| Step | Domain | Result |
+|---|---|---|
+| 1 | `web` | find official event page |
+| 2 | `fetch` | extract event facts from source page |
+| 3 | `flights` | price route/date options |
+| 4 | TypeScript | rank fares, emit decision brief |
+
+Why this is compelling: separate tools require prompt glue, shell parsing, provider-specific schemas, and manual error handling. `srch` keeps everything as typed objects in one program.
+
+Requires optional flights backend:
+
 ```bash
-# longer/reused scripts
-mkdir -p .tmp
-bun .tmp/search.ts
+search install flights
 ```
 
-No `bunx`, `tsx`, or flags needed. Bun runs TS directly. Use inline `bun - <<'TS'` for small scratch searches; `.tmp/search.ts` for >~15 lines or reusable flows.
+Concise Bun sketch:
 
-Use CLI only for quick checks, diagnostics, or shell consumers. Avoid `search ... --json | jq ...` when TS can keep native types.
+```bash
+bun - <<'TS'
+import { createClient, coreModule, defineConfig, flightsModule } from "srch";
+const c = createClient({ config: defineConfig({ modules: [coreModule, flightsModule] }) });
+const trip = { event: "AWS re:Invent 2026", origin: "SFO", destination: "LAS", depart: "2026-11-29", return: "2026-12-04" };
 
-## Powerful SDK patterns
-
-### Search, fetch top pages, emit evidence bundle
-
-```ts
-import { createClient } from "srch";
-const c = createClient();
-const q = "react compiler memoization best practices";
-
-const web = await c.run({ domain: "web", query: q, numResults: 6 });
+const web = await c.run({ domain: "web", query: `${trip.event} official dates venue airport`, numResults: 5 });
 if (web.kind !== "success") throw new Error(web.kind === "error" ? web.error.message : web.suggestions[0]);
+const official = web.evidence.find(e => /aws|amazon|reinvent/i.test(e.payload.url)) ?? web.evidence[0];
 
-const pages = await Promise.all(web.evidence.slice(0, 3).map(e =>
-  c.run({ domain: "fetch", query: e.payload.url })
-));
+const [eventPage, flights] = await Promise.all([
+  c.run({ domain: "fetch", query: official.payload.url }),
+  c.run({ domain: "flights", query: `${trip.origin} ${trip.destination} ${trip.depart}`,
+    options: { returnDate: trip.return, adults: 1, cabinClass: "M", maxStopovers: 1, sort: "price", limit: 5 } })
+]);
+
+const page = eventPage.kind === "success" ? eventPage.evidence[0].payload : null;
+const fares = flights.kind === "success" ? flights.evidence.map(e => ({
+  price: e.payload.offer.price,
+  summary: e.payload.summary,
+  bookingUrl: e.payload.offer.booking_url,
+  score: e.payload.offer.price + e.payload.offer.outbound.stopovers * 150
+})).sort((a, b) => a.score - b.score) : [];
+const best = fares[0] ?? null;
 
 console.log(JSON.stringify({
-  query: q,
-  docs: pages.flatMap(p => p.kind === "success" ? p.evidence.map(e => ({
-    title: e.payload.title,
-    url: e.payload.url,
-    excerpt: e.payload.content.slice(0, 1200)
-  })) : [])
+  ask: `Can I attend ${trip.event} from ${trip.origin}?`,
+  verifiedEvent: { title: page?.title ?? official.payload.title, source: page?.url ?? official.payload.url, excerpt: page?.content.slice(0, 400) ?? official.payload.snippet },
+  trip,
+  flightShortlist: fares.slice(0, 3),
+  recommendation: best ? `Go: official event found, route priced, best option is ${best.summary}.` : "Wait: no flight offer returned."
 }, null, 2));
+TS
 ```
 
-### Search multiple domains, rank in TypeScript
+Result shape to show users:
 
-```ts
-import { createClient } from "srch";
-const c = createClient();
-const q = "next.js middleware auth redirect";
-
-const [code, docs] = await Promise.all([
-  c.run({ domain: "code", query: q, maxTokens: 6000 }),
-  c.run({ domain: "docs", query: q, limit: 8 })
-]);
-
-const hits = [
-  ...(code.kind === "success" ? code.evidence.map(e => ({ type: "code", title: e.payload.title, text: e.payload.text })) : []),
-  ...(docs.kind === "success" ? docs.evidence.map(e => ({ type: "docs", title: e.payload.title, file: e.payload.file, score: e.payload.score, text: e.payload.snippet })) : [])
-]
-  .filter(e => e.text.toLowerCase().includes("middleware"))
-  .sort((a, b) => b.text.length - a.text.length);
-
-console.log(JSON.stringify(hits.slice(0, 5), null, 2));
-```
-
-### Direct provider/source control
-
-```ts
-import { createClient } from "srch";
-const c = createClient();
-const query = "sqlite vector search wasm";
-
-const [exa, brave] = await Promise.all([
-  c.search("exa", { query, mode: "api", numResults: 5, includeContent: true }).catch(() => []),
-  c.search("brave", { query, numResults: 5 }).catch(() => [])
-]);
-
-const unique = [...new Map([...exa, ...brave].map(e => [e.payload.url, e])).values()];
-console.log(unique.map(e => ({ source: e.source, title: e.payload.title, url: e.payload.url })));
-```
-
-### Timeout + typed success/empty/error handling
-
-```ts
-import { createClient } from "srch";
-const c = createClient();
-const ac = new AbortController();
-const t = setTimeout(() => ac.abort(), 12_000);
-
-try {
-  const r = await c.run({ domain: "web", query: "latest bun release notes", hq: true, signal: ac.signal });
-  if (r.kind === "success") console.log(r.evidence.map(e => e.payload.url));
-  else if (r.kind === "empty") console.log({ empty: true, suggestions: r.suggestions });
-  else console.error({ code: r.error.code, message: r.error.message });
-} finally {
-  clearTimeout(t);
+```json
+{
+  "ask": "Can I attend AWS re:Invent 2026 from SFO?",
+  "verifiedEvent": {
+    "title": "AWS re:Invent 2026  | Nov 30-Dec 4, 2026",
+    "source": "https://aws.amazon.com/reinvent/",
+    "excerpt": "Save the date\n\nNovember 30 - December 4, 2026 | Las Vegas, NV..."
+  },
+  "flightShortlist": [
+    { "price": 499, "summary": "USD 499.00 | SFO -> LAS | economy | 9h00m | 0 stop(s)", "score": 499 }
+  ],
+  "recommendation": "Go: official event found, route priced..."
 }
 ```
 
@@ -123,6 +114,7 @@ try {
 | Code/API/repo context | `c.run({ domain: "code", query })` | `search code "next.js middleware" --json` |
 | Local docs | `c.run({ domain: "docs", query })` | `search docs "auth flow" --json` |
 | Fetch URL content | `c.run({ domain: "fetch", query: url })` | `search fetch https://clig.dev --json` |
+| Flights | `c.run({ domain: "flights", query: "SFO LAS 2026-11-29" })` | `search flights SFO LAS 2026-11-29 --json` |
 | X/Twitter | `c.run({ domain: "social", query })` | `search twitter "bun runtime" --json` |
 | Provider exactness | `c.search("exa", { query })` | `search web "q" --provider exa --json` |
 | Diagnostics | CLI | `search inspect tools --json` |
@@ -130,16 +122,10 @@ try {
 ## Agent rules
 
 - Default to SDK + Bun for multi-step research.
+- Lead with a user journey, not a wall of code.
 - Use `bun - <<'TS'` for concise scratch scripts.
 - Use `.tmp/search.ts` + `bun .tmp/search.ts` for longer scripts.
 - Fetch first, summarize second. Do not invent sources.
 - Keep stdout structured JSON if another step will consume it.
 - Use CLI only for quick checks, diagnostics, or non-TS consumers.
-- Secrets: use runtime secret refs, never plaintext.
-
-```bash
-search config set-secret-ref exaApiKey op 'op://agent-dev/exa/API Key'
-search config set-secret-ref braveApiKey op 'op://agent-dev/Brave Search/api key'
-search config set-secret-ref geminiApiKey op 'op://agent-dev/Gemini API Key/password'
-search inspect tools --json
-```
+- Secrets: runtime secret refs only, never plaintext.
