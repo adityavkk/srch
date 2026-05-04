@@ -1,19 +1,21 @@
 ---
 name: search
-description: "SDK-first local research tool. Prefer typed TypeScript via Bun; compose domains in one TS flow; CLI only for quick checks/fallback."
+description: "SDK-first research tool. Default to typed TypeScript via Bun; compose domains in one control-flow graph. CLI only for quick checks/diagnostics."
 ---
 
 # search
 
-Local-first research SDK + CLI.
+Use `srch` as a TypeScript SDK first. Treat the CLI as a fallback.
 
-## Default: TypeScript SDK via Bun
+## Decision rule
 
-Primary path: run TypeScript, not bash pipelines. `createClient()` returns native typed objects, so agents can use `Promise.all`, branching, maps/filters, joins, ranking, and JSON output without parsing CLI text.
+- Multi-step research, ranking, branching, joins, retries, or reusable output: **SDK**.
+- One-off human check, diagnostics, or shell-only consumer: CLI.
+- Avoid CLI/MCP sprawl: no `search ... --json | jq ...` when TS can keep typed objects.
 
-### Required SDK bootstrap
+## SDK bootstrap
 
-The `search` CLI being on `$PATH` does **not** mean the `srch` SDK is importable from the current project. Before the first SDK run in a repo, install the local SDK package, then import it:
+`search` on `$PATH` does not mean `import "srch"` works. Per repo, verify/install local SDK:
 
 ```bash
 bun - <<'TS' >/dev/null 2>&1 || bun add srch@file:/Users/auk000v/dev/search-tool
@@ -21,11 +23,11 @@ await import("srch");
 TS
 ```
 
-Do this once per project. This intentionally mutates `package.json`/lockfile. If the target repo should not be mutated, create an isolated scratch project under `.tmp/`, install `srch` there, and run the script from that scratch project while setting `process.chdir()` back to the target cwd before calling `createClient()`.
+If package mutation is not OK, create `.tmp/srch-run/`, install there, and `process.chdir(targetRepo)` before `createClient()`.
 
-Do **not** use `npm install srch` on this machine unless the package has been published/verified; the public npm package name may resolve to an unrelated package.
+## Run pattern
 
-Shortest run form after bootstrap:
+Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or `jq`.
 
 ```bash
 bun - <<'TS'
@@ -36,111 +38,94 @@ console.log(JSON.stringify(r.kind === "success" ? r.evidence.map(e => e.payload.
 TS
 ```
 
-No `bunx`, `tsx`, flags, or `jq` needed. Bun runs TS directly. Use `.tmp/search.ts` + `bun .tmp/search.ts` for longer scripts.
+Longer flow: `.tmp/search.ts` then `bun .tmp/search.ts`.
 
-Use CLI only for quick checks, diagnostics, or shell consumers.
+## High-value SDK shape
 
-## Sellable pattern: one user journey, many domains
+Use real user journeys, not a bag of tools.
 
-Do not present `search` as a bag of tools. Show it as a typed workflow engine for retrieval-heavy decisions.
+```
+sequential discovery -> control flow -> parallel retrieval -> typed scoring -> JSON decision
+```
 
-Example ask:
+Why SDK beats CLI/MCP for these: payloads stay typed, source provenance stays attached, later queries can depend on earlier results, and normal TS handles branching/errors.
 
-> Can I send someone from SFO to AWS re:Invent 2026? Verify official dates, price flights, and make a go/no-go recommendation.
+## Example journeys
 
-Journey:
+### Travel decision brief
 
-| Step | Domain | Result |
+Ask: "Can I send someone from SFO to AWS re:Invent? Verify dates, price flights, recommend go/no-go."
+
+Flow:
+
+| Step | Domain | Use |
 |---|---|---|
 | 1 | `web` | find official event page |
-| 2 | `fetch` | extract event facts from source page |
+| 2 | `fetch` | extract dates/location |
 | 3 | `flights` | price route/date options |
-| 4 | TypeScript | rank fares, emit decision brief |
+| 4 | TS | score fare = price + stop penalty |
 
-Why this is compelling: separate tools require prompt glue, shell parsing, provider-specific schemas, and manual error handling. `srch` keeps everything as typed objects in one program.
-
-Requires the SDK bootstrap above plus optional flights backend:
+Requires flights backend:
 
 ```bash
 search install flights
 ```
 
-Concise Bun sketch after bootstrap:
-
-```bash
-bun - <<'TS'
-import { createClient, coreModule, defineConfig, flightsModule } from "srch";
-const c = createClient({ config: defineConfig({ modules: [coreModule, flightsModule] }) });
-const trip = { event: "AWS re:Invent 2026", origin: "SFO", destination: "LAS", depart: "2026-11-29", return: "2026-12-04" };
-
-const web = await c.run({ domain: "web", query: `${trip.event} official dates venue airport`, numResults: 5 });
-if (web.kind !== "success") throw new Error(web.kind === "error" ? web.error.message : web.suggestions[0]);
-const official = web.evidence.find(e => /aws|amazon|reinvent/i.test(e.payload.url)) ?? web.evidence[0];
-
-const [eventPage, flights] = await Promise.all([
-  c.run({ domain: "fetch", query: official.payload.url }),
-  c.run({ domain: "flights", query: `${trip.origin} ${trip.destination} ${trip.depart}`,
-    options: { returnDate: trip.return, adults: 1, cabinClass: "M", maxStopovers: 1, sort: "price", limit: 5 } })
-]);
-
-const page = eventPage.kind === "success" ? eventPage.evidence[0].payload : null;
-const fares = flights.kind === "success" ? flights.evidence.map(e => ({
-  price: e.payload.offer.price,
-  summary: e.payload.summary,
-  bookingUrl: e.payload.offer.booking_url,
-  score: e.payload.offer.price + e.payload.offer.outbound.stopovers * 150
-})).sort((a, b) => a.score - b.score) : [];
-const best = fares[0] ?? null;
-
-console.log(JSON.stringify({
-  ask: `Can I attend ${trip.event} from ${trip.origin}?`,
-  verifiedEvent: { title: page?.title ?? official.payload.title, source: page?.url ?? official.payload.url, excerpt: page?.content.slice(0, 400) ?? official.payload.snippet },
-  trip,
-  flightShortlist: fares.slice(0, 3),
-  recommendation: best ? `Go: official event found, route priced, best option is ${best.summary}.` : "Wait: no flight offer returned."
-}, null, 2));
-TS
-```
-
-Result shape to show users:
+Result shape to show:
 
 ```json
 {
-  "ask": "Can I attend AWS re:Invent 2026 from SFO?",
-  "verifiedEvent": {
-    "title": "AWS re:Invent 2026  | Nov 30-Dec 4, 2026",
-    "source": "https://aws.amazon.com/reinvent/",
-    "excerpt": "Save the date\n\nNovember 30 - December 4, 2026 | Las Vegas, NV..."
-  },
-  "flightShortlist": [
-    { "price": 499, "summary": "USD 499.00 | SFO -> LAS | economy | 9h00m | 0 stop(s)", "score": 499 }
-  ],
-  "recommendation": "Go: official event found, route priced..."
+  "verifiedEvent": { "title": "AWS re:Invent 2026", "source": "https://aws.amazon.com/reinvent/" },
+  "flightShortlist": [{ "price": 499, "summary": "SFO -> LAS | economy | 0 stops", "score": 499 }],
+  "recommendation": "Go: official event found, route priced."
 }
 ```
 
-## Domains / CLI fallback
+### CVE triage brief
 
-| Need | SDK | CLI quick check |
+Ask: "A CVE dropped for lodash. Are we affected and should we patch today?"
+
+Flow:
+
+| Step | Domain/TS | Use |
 |---|---|---|
-| Web | `c.run({ domain: "web", query })` | `search web "react compiler" --json` |
-| High-quality web | `c.run({ domain: "web", query, hq: true })` | `search web "react compiler" --hq --json` |
-| Code/API/repo context | `c.run({ domain: "code", query })` | `search code "next.js middleware" --json` |
-| Local docs | `c.run({ domain: "docs", query })` | `search docs "auth flow" --json` |
-| Fetch URL content | `c.run({ domain: "fetch", query: url })` | `search fetch https://clig.dev --json` |
+| 1 | `web` | find authoritative advisory |
+| 2 | `fetch` | extract affected/fixed versions |
+| 3 | TS/local files or `code` | search lockfiles/imports for affected version |
+| 4 | TS | branch: patch/no-op/escalate |
+
+Result shape to show:
+
+```json
+{
+  "package": "lodash",
+  "installedVersion": "4.17.20",
+  "advisory": { "url": "https://github.com/advisories/..." },
+  "repoEvidence": [{ "file": "package-lock.json", "currentVersionFound": true }],
+  "decision": "patch today",
+  "nextSteps": ["bump dependency", "regenerate lockfile", "run tests", "ship patch"]
+}
+```
+
+## Domain map
+
+| Need | SDK | CLI fallback |
+|---|---|---|
+| Web | `c.run({ domain: "web", query })` | `search web "q" --json` |
+| HQ web | `c.run({ domain: "web", query, hq: true })` | `search web "q" --hq --json` |
+| Code/API/repo | `c.run({ domain: "code", query })` | `search code "q" --json` |
+| Local docs | `c.run({ domain: "docs", query })` | `search docs "q" --json` |
+| Fetch URL | `c.run({ domain: "fetch", query: url })` | `search fetch <url> --json` |
 | Flights | `c.run({ domain: "flights", query: "SFO LAS 2026-11-29" })` | `search flights SFO LAS 2026-11-29 --json` |
-| X/Twitter | `c.run({ domain: "social", query })` | `search twitter "bun runtime" --json` |
+| Social/X | `c.run({ domain: "social", query })` | `search twitter "q" --json` |
 | Provider exactness | `c.search("exa", { query })` | `search web "q" --provider exa --json` |
 | Diagnostics | CLI | `search inspect tools --json` |
 
 ## Agent rules
 
-- Default to SDK + Bun for multi-step research.
-- Before `import "srch"`, verify the SDK is installed in the current project; if not, install with `bun add srch@file:/Users/auk000v/dev/search-tool` or use a `.tmp/` scratch project when mutation is not OK.
-- Lead with a user journey, not a wall of code.
-- Use `bun - <<'TS'` for concise scratch scripts after bootstrap.
-- Use `.tmp/search.ts` + `bun .tmp/search.ts` for longer scripts after bootstrap.
-- Fetch first, summarize second. Do not invent sources.
-- Keep stdout structured JSON if another step will consume it.
-- Use CLI only for quick checks, diagnostics, or non-TS consumers.
-- Secrets: runtime secret refs only, never plaintext.
+- SDK is default interface for agent work.
+- Lead with the user journey and desired decision object.
+- Compose domains in TypeScript, not bash.
+- Fetch first, summarize second. Never invent sources.
+- Emit structured JSON for downstream steps.
+- Secrets: runtime refs only, never plaintext.
