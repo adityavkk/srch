@@ -50,11 +50,26 @@ if (result.kind === "empty") {
 
 ### As a TypeScript SDK
 
+Install the SDK in the project before importing it:
+
 ```bash
-npm install srch
+bun add srch@file:/Users/auk000v/dev/search-tool
+```
+
+Then use the SDK from Bun/TypeScript:
+
+```bash
+bun - <<'TS'
+import { createClient } from "srch";
+const c = createClient();
+const r = await c.run({ domain: "web", query: "bun sqlite", numResults: 3 });
+console.log(JSON.stringify(r, null, 2));
+TS
 ```
 
 Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or bash parsing.
+
+> Note: avoid `npm install srch` until the package name is published/verified. The public npm package name may resolve to an unrelated package.
 
 ### User journey 1: conference travel brief
 

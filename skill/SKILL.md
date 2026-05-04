@@ -11,7 +11,21 @@ Local-first research SDK + CLI.
 
 Primary path: run TypeScript, not bash pipelines. `createClient()` returns native typed objects, so agents can use `Promise.all`, branching, maps/filters, joins, ranking, and JSON output without parsing CLI text.
 
-Shortest run form:
+### Required SDK bootstrap
+
+The `search` CLI being on `$PATH` does **not** mean the `srch` SDK is importable from the current project. Before the first SDK run in a repo, install the local SDK package, then import it:
+
+```bash
+bun - <<'TS' >/dev/null 2>&1 || bun add srch@file:/Users/auk000v/dev/search-tool
+await import("srch");
+TS
+```
+
+Do this once per project. This intentionally mutates `package.json`/lockfile. If the target repo should not be mutated, create an isolated scratch project under `.tmp/`, install `srch` there, and run the script from that scratch project while setting `process.chdir()` back to the target cwd before calling `createClient()`.
+
+Do **not** use `npm install srch` on this machine unless the package has been published/verified; the public npm package name may resolve to an unrelated package.
+
+Shortest run form after bootstrap:
 
 ```bash
 bun - <<'TS'
@@ -45,13 +59,13 @@ Journey:
 
 Why this is compelling: separate tools require prompt glue, shell parsing, provider-specific schemas, and manual error handling. `srch` keeps everything as typed objects in one program.
 
-Requires optional flights backend:
+Requires the SDK bootstrap above plus optional flights backend:
 
 ```bash
 search install flights
 ```
 
-Concise Bun sketch:
+Concise Bun sketch after bootstrap:
 
 ```bash
 bun - <<'TS'
@@ -122,9 +136,10 @@ Result shape to show users:
 ## Agent rules
 
 - Default to SDK + Bun for multi-step research.
+- Before `import "srch"`, verify the SDK is installed in the current project; if not, install with `bun add srch@file:/Users/auk000v/dev/search-tool` or use a `.tmp/` scratch project when mutation is not OK.
 - Lead with a user journey, not a wall of code.
-- Use `bun - <<'TS'` for concise scratch scripts.
-- Use `.tmp/search.ts` + `bun .tmp/search.ts` for longer scripts.
+- Use `bun - <<'TS'` for concise scratch scripts after bootstrap.
+- Use `.tmp/search.ts` + `bun .tmp/search.ts` for longer scripts after bootstrap.
 - Fetch first, summarize second. Do not invent sources.
 - Keep stdout structured JSON if another step will consume it.
 - Use CLI only for quick checks, diagnostics, or non-TS consumers.
