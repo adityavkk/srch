@@ -56,20 +56,19 @@ npm install srch
 
 Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or bash parsing.
 
-### User journey: conference travel brief
+### User journey 1: conference travel brief
 
 A manager asks:
 
 > Can I send someone from SFO to AWS re:Invent 2026? Verify the official dates, find a reasonable flight, and give me a go/no-go recommendation.
 
-With a bag of separate tools, the agent has to juggle web search, browser extraction, flight search, provider-specific schemas, shell glue, and error states. With `srch`, this becomes one typed data flow:
+This is awkward with CLI or MCP tool sprawl because each step returns a separate blob and the agent has to copy state between calls.
 
-| Step | Domain | What happens |
-|---|---|---|
-| 1 | `web` | Find the official event page |
-| 2 | `fetch` | Read the page and extract the event facts |
-| 3 | `flights` | Price route/date options |
-| 4 | TypeScript | Rank fares, build a decision brief |
+| CLI / MCP shape | SDK shape |
+|---|---|
+| `search web ... --json` -> parse URL -> `search fetch ...` -> `search flights ...` -> separate ranking script | one typed program: discover -> fetch -> price -> score -> recommend |
+| provider schemas leak into prompts | payload types stay in TypeScript |
+| errors are string handling | `RunResult` forces success/empty/error handling |
 
 Install the optional flight backend once:
 
@@ -77,13 +76,14 @@ Install the optional flight backend once:
 search install flights
 ```
 
-Then run the whole journey as a Bun scratchpad:
+Then run the journey:
 
 ```bash
 bun - <<'TS'
-import { createClient, coreModule, defineConfig, flightsModule } from "srch";
+import { createClient, coreModule, defineConfig, flightsModule, type RunResult } from "srch";
 
 const c = createClient({ config: defineConfig({ modules: [coreModule, flightsModule] }) });
+
 const trip = {
   event: "AWS re:Invent 2026",
   origin: "SFO",
@@ -92,16 +92,34 @@ const trip = {
   return: "2026-12-04"
 };
 
-const web = await c.run({
+function evidence<T>(result: RunResult<T>, label: string) {
+  if (result.kind === "success") return result.evidence;
+  const detail = result.kind === "error" ? result.error.message : result.suggestions[0];
+  throw new Error(`${label}: ${detail}`);
+}
+
+function bestOfficial<T extends { url: string }>(items: Array<{ payload: T }>, pattern: RegExp) {
+  return items.find(e => pattern.test(e.payload.url)) ?? items[0];
+}
+
+function fareScore(e: { payload: { offer: { price: number; outbound: { stopovers: number }; booking_url: string }; summary: string } }) {
+  return {
+    price: e.payload.offer.price,
+    summary: e.payload.summary,
+    bookingUrl: e.payload.offer.booking_url,
+    score: e.payload.offer.price + e.payload.offer.outbound.stopovers * 150
+  };
+}
+
+const eventHits = evidence(await c.run({
   domain: "web",
   query: `${trip.event} official dates venue airport`,
   numResults: 5
-});
-if (web.kind !== "success") throw new Error(web.kind === "error" ? web.error.message : web.suggestions[0]);
+}), "event search");
 
-const official = web.evidence.find(e => /aws|amazon|reinvent/i.test(e.payload.url)) ?? web.evidence[0];
+const official = bestOfficial(eventHits, /aws|amazon|reinvent/i);
 
-const [eventPage, flights] = await Promise.all([
+const [eventPage, flightSearch] = await Promise.all([
   c.run({ domain: "fetch", query: official.payload.url }),
   c.run({
     domain: "flights",
@@ -110,29 +128,15 @@ const [eventPage, flights] = await Promise.all([
   })
 ]);
 
-const page = eventPage.kind === "success" ? eventPage.evidence[0].payload : null;
-const fares = flights.kind === "success"
-  ? flights.evidence.map(e => ({
-      price: e.payload.offer.price,
-      summary: e.payload.summary,
-      bookingUrl: e.payload.offer.booking_url,
-      score: e.payload.offer.price + e.payload.offer.outbound.stopovers * 150
-    })).sort((a, b) => a.score - b.score)
-  : [];
-const best = fares[0] ?? null;
+const page = evidence(eventPage, "event page")[0].payload;
+const fares = evidence(flightSearch, "flight search").map(fareScore).sort((a, b) => a.score - b.score);
+const best = fares[0];
 
 console.log(JSON.stringify({
   ask: `Can I attend ${trip.event} from ${trip.origin}?`,
-  verifiedEvent: {
-    title: page?.title ?? official.payload.title,
-    source: page?.url ?? official.payload.url,
-    excerpt: page?.content.slice(0, 400) ?? official.payload.snippet
-  },
-  trip,
+  verifiedEvent: { title: page.title, source: page.url, excerpt: page.content.slice(0, 220) },
   flightShortlist: fares.slice(0, 3),
-  recommendation: best
-    ? `Go: official event found, route priced, best option is ${best.summary}.`
-    : "Wait: event found, but no flight offer returned. Try nearby dates or airports."
+  recommendation: `Go: official event found, route priced, best option is ${best.summary}.`
 }, null, 2));
 TS
 ```
@@ -147,13 +151,6 @@ Result, trimmed:
     "source": "https://aws.amazon.com/reinvent/",
     "excerpt": "Save the date\n\nNovember 30 - December 4, 2026 | Las Vegas, NV..."
   },
-  "trip": {
-    "event": "AWS re:Invent 2026",
-    "origin": "SFO",
-    "destination": "LAS",
-    "depart": "2026-11-29",
-    "return": "2026-12-04"
-  },
   "flightShortlist": [
     { "price": 499, "summary": "USD 499.00 | AI | SFO -> LAS | economy | 9h00m | 0 stop(s)", "score": 499 },
     { "price": 650, "summary": "USD 650.00 | UA | SFO -> LAS | economy | 10h30m | 0 stop(s)", "score": 650 }
@@ -162,7 +159,102 @@ Result, trimmed:
 }
 ```
 
-That is the SDK's core value: retrieval, extraction, flight pricing, ranking, and decision output in one typed program. No tool sprawl. No `jq`. No stringly-typed handoff.
+### User journey 2: CVE triage brief
+
+An engineering lead asks:
+
+> A CVE dropped for lodash. Are we affected, where is it used, and should we patch today?
+
+This is where SDK composition beats a tool list: the advisory text determines what the repo scan should look for, and the repo findings determine the decision.
+
+| CLI / MCP shape | SDK shape |
+|---|---|
+| web tool -> fetch tool -> grep tool -> hand-merge evidence in prompt | advisory -> derived searches -> local scan -> decision object |
+| easy to lose provenance | advisory URL and file hits stay attached |
+| hard to branch | normal `if` statements decide patch/no-op/escalate |
+
+```bash
+bun - <<'TS'
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { createClient, type RunResult } from "srch";
+
+const c = createClient();
+const dep = { name: "lodash", current: "4.17.20", root: "." };
+
+function evidence<T>(result: RunResult<T>, label: string) {
+  if (result.kind === "success") return result.evidence;
+  const detail = result.kind === "error" ? result.error.message : result.suggestions[0];
+  throw new Error(`${label}: ${detail}`);
+}
+
+async function projectFiles(dir: string): Promise<Array<{ path: string; text: string }>> {
+  const ignored = new Set([".git", "node_modules", "dist", ".tmp"]);
+  const out: Array<{ path: string; text: string }> = [];
+
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory() && !ignored.has(entry.name)) out.push(...await projectFiles(path));
+    if (entry.isFile() && /(?:package.*\.json|lock|\.[cm]?[jt]sx?)$/.test(entry.name)) {
+      const text = await readFile(path, "utf8").catch(() => "");
+      if (text.includes(dep.name)) out.push({ path, text });
+    }
+  }
+  return out;
+}
+
+function summarizeUsage(files: Array<{ path: string; text: string }>) {
+  return files.map(f => ({
+    file: f.path,
+    currentVersionFound: f.text.includes(dep.current),
+    importCount: (f.text.match(new RegExp(dep.name, "g")) ?? []).length
+  }));
+}
+
+const advisoryHits = evidence(await c.run({
+  domain: "web",
+  query: `${dep.name} CVE advisory affected versions fixed version`,
+  numResults: 5
+}), "advisory search");
+
+const advisoryUrl = advisoryHits.find(e => /github\.com\/advisories|nvd\.nist|snyk|osv/i.test(e.payload.url))?.payload.url
+  ?? advisoryHits[0].payload.url;
+
+const [advisory, files] = await Promise.all([
+  c.run({ domain: "fetch", query: advisoryUrl }),
+  projectFiles(dep.root)
+]);
+
+const page = evidence(advisory, "advisory page")[0].payload;
+const usage = summarizeUsage(files);
+const affected = usage.some(u => u.currentVersionFound) || page.content.includes(dep.current);
+
+console.log(JSON.stringify({
+  package: dep.name,
+  installedVersion: dep.current,
+  advisory: { title: page.title, url: page.url },
+  repoEvidence: usage.slice(0, 10),
+  decision: affected ? "patch today" : "no affected version found",
+  nextSteps: affected ? ["bump dependency", "regenerate lockfile", "run tests", "ship patch"] : ["record advisory as not affected"]
+}, null, 2));
+TS
+```
+
+Result shape:
+
+```json
+{
+  "package": "lodash",
+  "installedVersion": "4.17.20",
+  "advisory": { "title": "Security advisory", "url": "https://github.com/advisories/..." },
+  "repoEvidence": [
+    { "file": "package-lock.json", "currentVersionFound": true, "importCount": 3 },
+    { "file": "src/reporting.ts", "currentVersionFound": false, "importCount": 1 }
+  ],
+  "decision": "patch today",
+  "nextSteps": ["bump dependency", "regenerate lockfile", "run tests", "ship patch"]
+}
+```
 
 Longer scripts can live in `.tmp/search.ts` and run with `bun .tmp/search.ts`.
 
