@@ -1,6 +1,6 @@
 # srch
 
-A TypeScript SDK that gives agents structured access to search as a domain.
+Typed retrieval workflows for agents, without tool sprawl.
 
 The CLI binary is `search`. The SDK is `srch`.
 
