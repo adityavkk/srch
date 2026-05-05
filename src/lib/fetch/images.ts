@@ -82,7 +82,7 @@ async function describeImage(image: ExtractedImage, bytes: Uint8Array, mime: str
 }
 
 export function collectImagesFromHtml(html: string, pageUrl: string): ExtractedImage[] {
-  const { document } = parseHTML(`<body>${html}</body>`);
+  const { document } = parseHTML(`<html><body>${html}</body></html>`);
   return mergeImages([...document.querySelectorAll("img")].flatMap((img) => {
     const raw = img.getAttribute("src") || img.getAttribute("data-src") || img.getAttribute("data-original");
     if (!raw) return [];
