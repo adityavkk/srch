@@ -116,6 +116,7 @@ Result shape to show:
 | Code/API/repo | `c.run({ domain: "code", query })` | `search code "q" --json` |
 | Local docs | `c.run({ domain: "docs", query })` | `search docs "q" --json` |
 | Fetch URL | `c.run({ domain: "fetch", query: url })` | `search fetch <url> --json` |
+| Fetch + images | `c.run({ domain: "fetch", query: url, downloadImagesDir: ".tmp/img", describeImages: true })` | `search fetch <url> --download-images .tmp/img --describe-images --json` |
 | Flights | `c.run({ domain: "flights", query: "SFO LAS 2026-11-29" })` | `search flights SFO LAS 2026-11-29 --json` |
 | Social/X | `c.run({ domain: "social", query })` | `search twitter "q" --json` |
 | Provider exactness | `c.search("exa", { query })` | `search web "q" --provider exa --json` |
@@ -127,5 +128,6 @@ Result shape to show:
 - Lead with the user journey and desired decision object.
 - Compose domains in TypeScript, not bash.
 - Fetch first, summarize second. Never invent sources.
+- Fetch preserves GFM tables and `images[]`; use `downloadImagesDir` for durable image links and `describeImages` for diagrams.
 - Emit structured JSON for downstream steps.
 - Secrets: runtime refs only, never plaintext.
