@@ -92,6 +92,16 @@ test("search fetch preserves GFM tables and image metadata", () => {
   assert.equal(payload.data?.images?.[0]?.alt, "execution ladder");
 });
 
+test("search fetch can describe images and rewrite alt text", () => {
+  const result = runCli(["fetch", "https://mock.local/rich", "--describe-images", "--json"], { GEMINI_API_KEY: "test-key" });
+  assert.equal(result.status, 0, result.stderr);
+  const payload = parseJson(result.stdout);
+  const image = payload.data?.images?.[0];
+  assert.equal(payload.ok, true);
+  assert.equal(image?.generatedAlt, "Diagram showing the execution ladder from request intake to durable work.");
+  assert.match(String(payload.data?.content), /!\[Diagram showing the execution ladder from request intake to durable work\.\]/);
+});
+
 test("search fetch can download images and rewrite markdown links", () => {
   const dir = mkdtempSync(join(tmpdir(), "srch-images-"));
   try {

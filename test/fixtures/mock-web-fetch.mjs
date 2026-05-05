@@ -10,6 +10,12 @@ function jsonResponse(data, init = {}) {
 globalThis.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
+  if (url.startsWith("https://generativelanguage.googleapis.com/")) {
+    return jsonResponse({
+      candidates: [{ content: { parts: [{ text: "Diagram showing the execution ladder from request intake to durable work." }] } }]
+    });
+  }
+
   if (url === "https://api.exa.ai/answer") {
     return jsonResponse({
       answer: "Mock Exa answer",
