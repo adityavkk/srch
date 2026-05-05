@@ -4,11 +4,27 @@ export interface SearchResult {
   snippet: string;
 }
 
+export interface ExtractedImage {
+  src: string;
+  alt: string;
+  localPath?: string;
+  generatedAlt?: string;
+  bytes?: number;
+  mime?: string;
+  error?: string;
+}
+
 export interface ExtractedContent {
   url: string;
   title: string;
   content: string;
   error: string | null;
+  images?: ExtractedImage[];
+}
+
+export interface FetchContentOptions {
+  downloadImagesDir?: string;
+  describeImages?: boolean;
 }
 
 export interface SearchResponse {

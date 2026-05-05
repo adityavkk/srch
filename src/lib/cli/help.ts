@@ -257,11 +257,16 @@ export const FETCH_HELP = `search fetch — readable page fetch
 
 What it does:
   fetches a URL and extracts readable content
+  preserves GFM tables and image metadata
   handles GitHub repos and PDFs specially
 
 Usage:
-  search fetch <url> [--json] [--verbose] [--out <path>]
-  search fetch-content <url> [--json] [--verbose] [--out <path>]
+  search fetch <url> [--download-images <dir>] [--describe-images] [--json] [--verbose] [--out <path>]
+  search fetch-content <url> [--download-images <dir>] [--describe-images] [--json] [--verbose] [--out <path>]
+
+Flags:
+  --download-images <dir>  save markdown images locally and rewrite links
+  --describe-images       generate concise image descriptions with Gemini
 
 Examples:
   search fetch https://clig.dev
@@ -271,12 +276,16 @@ Examples:
 
 Notes:
   - prefer search fetch
+  - tables are emitted as GFM markdown tables
+  - use --download-images for durable/offline notes
+  - use --describe-images for diagram-heavy pages
   - search fetch-content remains the canonical command name for skills/docs references
 
 JSON:
   - url
   - title
   - content
+  - images[]: src, alt, localPath?, generatedAlt?, bytes?, mime?, error?
   - error
 `;
 

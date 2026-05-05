@@ -16,6 +16,7 @@ import type {
 } from "./types.js";
 import type { CodeStrategyRequest } from "./strategies/code-default.js";
 import type { DocsStrategyRequest } from "./strategies/docs-default.js";
+import type { FetchStrategyRequest } from "./strategies/fetch-default.js";
 import type { FlightsStrategyRequest } from "./strategies/flights-default.js";
 import type { RewardsStrategyRequest } from "./strategies/rewards-default.js";
 import type { SocialStrategyRequest } from "./strategies/social-default.js";
@@ -34,7 +35,7 @@ export type ClientRun = {
   (req: { domain: "web" } & WebStrategyRequest): Promise<RunResult<WebEvidencePayload>>;
   (req: { domain: "code" } & CodeStrategyRequest): Promise<RunResult<CodeTextEvidencePayload>>;
   (req: { domain: "docs" } & DocsStrategyRequest): Promise<RunResult<DocsEvidencePayload>>;
-  (req: { domain: "fetch" } & RunRequest): Promise<RunResult<FetchEvidencePayload>>;
+  (req: { domain: "fetch" } & FetchStrategyRequest): Promise<RunResult<FetchEvidencePayload>>;
   (req: { domain: "social" } & SocialStrategyRequest): Promise<RunResult<BirdEvidencePayload>>;
   (req: { domain: "flights" } & FlightsStrategyRequest): Promise<RunResult<FliEvidencePayload>>;
   (req: { domain: "rewards-flights" } & RewardsStrategyRequest): Promise<RunResult<SeatsAeroEvidencePayload>>;
