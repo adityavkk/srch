@@ -708,8 +708,10 @@ async function main(): Promise<void> {
       if (flags.has("help")) return void console.log(FETCH_HELP);
       const invokedAs = command;
       const url = requireQuery(rest, FETCH_HELP, [invokedAs], asJson);
-      trace.step("fetch", "dispatch", { url, alias: invokedAs });
-      const rendered = await trace.span("fetch.content", url, async () => runFetchCommand(url, { trace: flags.has("verbose") }));
+      const downloadImagesDir = getStringFlag(flags, "download-images");
+      const describeImages = flags.has("describe-images");
+      trace.step("fetch", "dispatch", { url, alias: invokedAs, downloadImages: Boolean(downloadImagesDir), describeImages });
+      const rendered = await trace.span("fetch.content", url, async () => runFetchCommand(url, { trace: flags.has("verbose"), downloadImagesDir, describeImages }));
       if (rendered.kind === "error") emitFailure([invokedAs], rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions);
       addHistory({ kind: "fetch", input: { url, alias: invokedAs }, output: rendered.data });
       return emitSuccess({

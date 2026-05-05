@@ -1,15 +1,29 @@
 import { fetchContent } from "../../lib/fetch/content.js";
 import { defineSource } from "../define.js";
+import type { FetchContentOptions } from "../../lib/core/types.js";
 import type { Source, SourceRequest } from "../types.js";
+
+export type FetchImagePayload = {
+  src: string;
+  alt: string;
+  localPath?: string;
+  generatedAlt?: string;
+  bytes?: number;
+  mime?: string;
+  error?: string;
+};
 
 export type FetchEvidencePayload = {
   kind: "document";
   url: string;
   title: string;
   content: string;
+  images: FetchImagePayload[];
 };
 
-export const fetchContentSource: Source<SourceRequest, FetchEvidencePayload> = defineSource({
+export type FetchSourceRequest = SourceRequest & FetchContentOptions;
+
+export const fetchContentSource: Source<FetchSourceRequest, FetchEvidencePayload> = defineSource({
   name: "fetch-content",
   domain: "fetch",
   capabilities: ["fetch", "extract"],
@@ -17,7 +31,10 @@ export const fetchContentSource: Source<SourceRequest, FetchEvidencePayload> = d
   transports: ["http|jina|gemini|github"],
   async run(req, ctx) {
     ctx.trace.step("source.fetch-content", req.query);
-    const result = await fetchContent(req.query, req.signal);
+    const result = await fetchContent(req.query, req.signal, {
+      downloadImagesDir: req.downloadImagesDir,
+      describeImages: req.describeImages
+    });
     if (result.error && !result.content.trim()) {
       throw new Error(result.error);
     }
@@ -37,7 +54,8 @@ export const fetchContentSource: Source<SourceRequest, FetchEvidencePayload> = d
         kind: "document",
         url: result.url,
         title: result.title,
-        content: result.content
+        content: result.content,
+        images: result.images ?? []
       }
     }];
   }

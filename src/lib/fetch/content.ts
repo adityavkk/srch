@@ -1,9 +1,11 @@
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
+import { tables, strikethrough } from "turndown-plugin-gfm";
 import { activityMonitor } from "../core/activity.js";
 import { errorMessage, isAbortError, withTimeout } from "../core/http.js";
-import type { ExtractedContent } from "../core/types.js";
+import type { ExtractedContent, FetchContentOptions } from "../core/types.js";
+import { collectImagesFromHtml, enhanceMarkdownImages } from "./images.js";
 import { extractWithUrlContext } from "./gemini-url-context.js";
 import { extractGitHub } from "./github.js";
 import { extractWithJinaReader } from "./jina.js";
@@ -11,6 +13,7 @@ import { isPdf, extractPdfToMarkdown } from "./pdf.js";
 import { extractRscContent } from "./rsc.js";
 
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+turndown.use([tables, strikethrough]);
 const NON_RECOVERABLE_ERRORS = ["Unsupported content type", "Response too large"];
 
 function isLikelyJsRendered(html: string): boolean {
@@ -26,7 +29,13 @@ function isLikelyJsRendered(html: string): boolean {
   return text.length < 500 && scriptCount > 3;
 }
 
-async function extractViaHttp(url: string, signal?: AbortSignal): Promise<ExtractedContent> {
+async function withImageOptions(result: ExtractedContent, options: FetchContentOptions, signal?: AbortSignal): Promise<ExtractedContent> {
+  if (result.error && !result.content.trim()) return result;
+  const enhanced = await enhanceMarkdownImages(result.content, result.url, result.images, options, signal);
+  return { ...result, content: enhanced.content, images: enhanced.images };
+}
+
+async function extractViaHttp(url: string, options: FetchContentOptions = {}, signal?: AbortSignal): Promise<ExtractedContent> {
   const activityId = activityMonitor.logStart({ type: "fetch", url });
 
   try {
@@ -82,6 +91,7 @@ async function extractViaHttp(url: string, signal?: AbortSignal): Promise<Extrac
     }
 
     const markdown = turndown.turndown(article.content);
+    const images = collectImagesFromHtml(article.content, url);
     if (markdown.length < 200) {
       const rsc = extractRscContent(text);
       if (rsc) return { url, title: rsc.title, content: rsc.content, error: null };
@@ -89,16 +99,18 @@ async function extractViaHttp(url: string, signal?: AbortSignal): Promise<Extrac
         url,
         title: article.title || new URL(url).hostname,
         content: markdown,
-        error: isLikelyJsRendered(text) ? "Page appears JavaScript-rendered" : "Extracted content appears incomplete"
+        error: isLikelyJsRendered(text) ? "Page appears JavaScript-rendered" : "Extracted content appears incomplete",
+        images
       };
     }
 
-    return {
+    return withImageOptions({
       url,
       title: article.title || new URL(url).hostname,
       content: markdown,
-      error: null
-    };
+      error: null,
+      images
+    }, options, signal);
   } catch (error) {
     if (isAbortError(error)) {
       activityMonitor.logComplete(activityId, 0);
@@ -109,19 +121,19 @@ async function extractViaHttp(url: string, signal?: AbortSignal): Promise<Extrac
   }
 }
 
-export async function fetchContent(url: string, signal?: AbortSignal): Promise<ExtractedContent> {
+export async function fetchContent(url: string, signal?: AbortSignal, options: FetchContentOptions = {}): Promise<ExtractedContent> {
   const githubResult = await extractGitHub(url, signal);
-  if (githubResult) return githubResult;
+  if (githubResult) return withImageOptions(githubResult, options, signal);
 
-  const httpResult = await extractViaHttp(url, signal);
+  const httpResult = await extractViaHttp(url, options, signal);
   if (!httpResult.error) return httpResult;
   if (NON_RECOVERABLE_ERRORS.some((prefix) => httpResult.error?.startsWith(prefix))) return httpResult;
 
   const jinaResult = await extractWithJinaReader(url, signal);
-  if (jinaResult) return jinaResult;
+  if (jinaResult) return withImageOptions(jinaResult, options, signal);
 
   const geminiResult = await extractWithUrlContext(url, signal);
-  if (geminiResult) return geminiResult;
+  if (geminiResult) return withImageOptions(geminiResult, options, signal);
 
   return httpResult;
 }
