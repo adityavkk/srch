@@ -16,6 +16,23 @@ const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fen
 turndown.use([tables, strikethrough]);
 const NON_RECOVERABLE_ERRORS = ["Unsupported content type", "Response too large"];
 
+function normalizeTableCells(html: string): string {
+  const { document } = parseHTML(`<html><body>${html}</body></html>`);
+  for (const cell of document.querySelectorAll("th,td")) {
+    cell.replaceChildren(document.createTextNode(cell.textContent.replace(/\s+/g, " ").trim()));
+  }
+  for (const table of document.querySelectorAll("table")) {
+    const firstRow = table.querySelector("tr");
+    if (!firstRow || firstRow.querySelector("th")) continue;
+    for (const cell of [...firstRow.querySelectorAll("td")]) {
+      const th = document.createElement("th");
+      th.textContent = cell.textContent;
+      cell.replaceWith(th);
+    }
+  }
+  return document.body.innerHTML;
+}
+
 function isLikelyJsRendered(html: string): boolean {
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
   if (!bodyMatch) return false;
@@ -90,7 +107,8 @@ async function extractViaHttp(url: string, options: FetchContentOptions = {}, si
       };
     }
 
-    const markdown = turndown.turndown(article.content);
+    const normalizedContent = normalizeTableCells(article.content);
+    const markdown = turndown.turndown(normalizedContent);
     const images = collectImagesFromHtml(article.content, url);
     if (markdown.length < 200) {
       const rsc = extractRscContent(text);

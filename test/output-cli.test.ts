@@ -86,6 +86,8 @@ test("search fetch preserves GFM tables and image metadata", () => {
   const content = String(payload.data?.content);
   assert.match(content, /\| Option \| Cost \| Best for \|/);
   assert.match(content, /\| VM \| Always on \| steady workloads \|/);
+  assert.match(content, /\| Override \| Purpose \|/);
+  assert.match(content, /\| getModel\(\) \| Return the language model \|/);
   assert.equal(payload.data?.images?.[0]?.src, "https://mock.local/diagram.png");
   assert.equal(payload.data?.images?.[0]?.alt, "execution ladder");
 });
