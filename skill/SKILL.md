@@ -5,12 +5,14 @@ description: "SDK-first research tool. Default to typed TypeScript via Bun; comp
 
 # search
 
-Use `srch` as a TypeScript SDK first. Treat the CLI as a fallback.
+Use `srch` as a TypeScript SDK first. For any non-trivial query, the SDK is the primary interface. Treat the CLI as a quick-check/diagnostic fallback only.
 
 ## Decision rule
 
-- Multi-step research, ranking, branching, joins, retries, or reusable output: **SDK**.
-- One-off human check, diagnostics, or shell-only consumer: CLI.
+Default to the SDK for agent work. Use the CLI only when the query is truly trivial or diagnostic.
+
+- Non-trivial research, ranking, branching, joins, retries, source comparison, reusable output, or anything feeding a later step: **SDK**.
+- One-off human check, install/health diagnostics, or shell-only consumer: CLI.
 - Avoid CLI/MCP sprawl: no `search ... --json | jq ...` when TS can keep typed objects.
 
 ## SDK bootstrap
@@ -124,7 +126,7 @@ Result shape to show:
 
 ## Agent rules
 
-- SDK is default interface for agent work.
+- SDK is the primary interface for all non-trivial agent work.
 - Lead with the user journey and desired decision object.
 - Compose domains in TypeScript, not bash.
 - Fetch first, summarize second. Never invent sources.
