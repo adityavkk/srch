@@ -1,0 +1,51 @@
+name: CI
+
+# Run the gate on every pull request (open + each push to the PR branch) and
+# again after merge to main, so the default branch badge stays honest.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs for the same ref to avoid wasting runner minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: CI only needs to read the repository contents.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  test:
+    name: Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      # The flights/rewards-flights suites shell out to `python3` via the Fli
+      # bridge, so the runner needs a Python the bridge syntax supports (3.10+).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: npm ci
+      - run: npm test
