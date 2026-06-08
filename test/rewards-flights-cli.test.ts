@@ -112,6 +112,21 @@ test("search rewards-flights can include zero-seat results on demand", () => {
   assert.match(payload.data?.summaries[1] ?? "", /0 seat\(s\)/);
 });
 
+test("search rewards-flights accepts flags before the airport positionals", () => {
+  // Issue #4: boolean and value flags placed before the <origin> <destination>
+  // positionals must parse identically to the trailing-flag form.
+  const flagsFirst = runCli(["rewards-flights", "--json", "--include-zero-seats", "--cabin", "business", "JFK", "CDG", "--date", "2026-07-01"], {
+    SEATS_AERO_API_KEY: "pro_test_123"
+  });
+  assert.equal(flagsFirst.status, 0, flagsFirst.stderr);
+
+  const payload = parseJson(flagsFirst.stdout);
+  assert.equal(payload.ok, true);
+  assert.deepEqual(payload.command, ["rewards-flights"]);
+  assert.equal(payload.data?.count, 2);
+  assert.equal(payload.data?.query.requestedSeats, 0);
+});
+
 test("search rewards-flights respects --min-seats", () => {
   const result = runCli(["rewards-flights", "JFK", "CDG", "--date", "2026-07-01", "--cabin", "business", "--min-seats", "3", "--json"], {
     SEATS_AERO_API_KEY: "pro_test_123"
