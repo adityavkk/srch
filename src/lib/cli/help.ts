@@ -36,6 +36,11 @@ Output:
   --verbose       trace view on stderr
   --out <path>    persist final output to a file
 
+Flag order:
+  Common flags may appear before or after the query, and global flags
+  (--json, --verbose, --out, --help) may also appear before the command.
+  Examples: search web --json "query"  ==  search web "query" --json
+
 Next help:
   search web --help
   search code --help
@@ -191,6 +196,7 @@ Examples:
   search web ai evals --provider brave
   search web react compiler --hq --json
   search web sqlite wasm --provider gemini --json
+  search web --json "react compiler"   # flags may precede the query
 
 JSON:
   - answer
