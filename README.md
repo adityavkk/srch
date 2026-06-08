@@ -639,6 +639,7 @@ Human-readable text by default. Stable JSON envelope with `--json`.
 search web "react compiler"                          # human text
 search web "react compiler" --json                   # JSON envelope
 search web "react compiler" --json --out results.json # save to file
+search web --json "react compiler"                   # flags may precede the query
 ```
 
 ```json
