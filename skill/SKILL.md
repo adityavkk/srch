@@ -1,6 +1,17 @@
 ---
 name: search
-description: "SDK-first research tool. Default to typed TypeScript via Bun; compose domains in one control-flow graph. CLI only for quick checks/diagnostics."
+description: >-
+  Runs SDK-first research with the `srch` TypeScript SDK across web, fetch,
+  code, docs, social, flights, and provider-specific search. Use when the user
+  asks for external research, source-backed answers, multi-step lookup,
+  source comparison, or typed retrieval feeding later decisions. SDK is primary
+  for non-trivial queries; CLI is only for quick checks and diagnostics.
+sample-prompts:
+  - "research this with sources"
+  - "compare official docs and recent web results"
+  - "fetch these pages and summarize the evidence"
+  - "price flights for this event and recommend go/no-go"
+  - "triage whether this CVE affects our repo"
 ---
 
 # search
