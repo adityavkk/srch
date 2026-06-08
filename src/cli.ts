@@ -18,51 +18,8 @@ import { renderHome, runCodeCommand, runDocsCommand, runFetchCommand, runSocialC
 import { createTraceSink } from "./lib/trace.js";
 import { inspectSecretSources } from "./lib/core/secrets.js";
 import { inspectHooks, installHooks, uninstallHooks } from "./sdk/hooks/install.js";
-
-type FlagValue = string | boolean | string[];
-
-function parseFlags(args: string[]): { flags: Map<string, FlagValue>; rest: string[] } {
-  const flags = new Map<string, FlagValue>();
-  const rest: string[] = [];
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (!arg.startsWith("--")) {
-      rest.push(arg);
-      continue;
-    }
-    const key = arg.slice(2);
-    const next = args[i + 1];
-    if (next && !next.startsWith("--")) {
-      const existing = flags.get(key);
-      if (Array.isArray(existing)) existing.push(next);
-      else if (typeof existing === "string") flags.set(key, [existing, next]);
-      else flags.set(key, next);
-      i++;
-    } else {
-      flags.set(key, true);
-    }
-  }
-  return { flags, rest };
-}
-
-function getStringFlag(flags: Map<string, FlagValue>, key: string): string | undefined {
-  const value = flags.get(key);
-  if (Array.isArray(value)) return value.at(-1);
-  return typeof value === "string" ? value : undefined;
-}
-
-function getStringFlags(flags: Map<string, FlagValue>, key: string): string[] {
-  const value = flags.get(key);
-  if (Array.isArray(value)) return value;
-  return typeof value === "string" ? [value] : [];
-}
-
-function getNumberFlag(flags: Map<string, FlagValue>, key: string): number | undefined {
-  const value = getStringFlag(flags, key);
-  if (!value) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
+import { getNumberFlag, getStringFlag, getStringFlags, parseFlagArgs, type FlagValue } from "./lib/cli/flags.js";
+import { schemaForCommand, splitCommand } from "./lib/cli/flag-specs.js";
 
 function exitJsonError(command: string[], message: string): never {
   emitFailure(command, message, { asJson: true });
@@ -162,8 +119,18 @@ async function getRewardsFlightsAuthStatus() {
 }
 
 async function main(): Promise<void> {
-  const [, , command, ...argv] = process.argv;
+  const args = process.argv.slice(2);
+  // Resolve the command first so global flags (`--json`, `--verbose`, `--out`,
+  // `--help`) may appear before it: `search --json web "query"`.
+  const { command, rest: commandArgs } = splitCommand(args);
+
   if (!command) {
+    // Only flags (or nothing) were supplied. `--help` shows the root reference;
+    // anything else falls back to the ambient home/status view.
+    if (commandArgs.includes("--help")) {
+      console.log(ROOT_HELP);
+      return;
+    }
     console.log(await renderHome());
     return;
   }
@@ -176,9 +143,21 @@ async function main(): Promise<void> {
     return;
   }
 
-  const { flags, rest } = parseFlags(argv);
+  // Parse the remaining args against this command's schema. Boolean vs value
+  // flags are disambiguated by the schema, so flags and the positional query may
+  // appear in any order and unknown/incomplete flags become explicit errors.
+  const parsed = parseFlagArgs(commandArgs, schemaForCommand(command));
+  const flags = parsed.flags;
+  const rest = parsed.positionals;
   const asJson = flags.has("json");
   const outPath = getStringFlag(flags, "out");
+
+  if (parsed.errors.length > 0) {
+    emitFailure([command], parsed.errors.join("; "), { asJson, outPath }, [
+      `Run \`search ${command} --help\` for usage`
+    ]);
+  }
+
   const trace = createTraceSink(flags.has("verbose"));
   trace.step("cli", `${command} start`, { asJson, cwd: process.cwd() });
 
