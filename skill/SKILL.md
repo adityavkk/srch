@@ -18,7 +18,7 @@ Use `srch` as a TypeScript SDK first. Treat the CLI as a fallback.
 `search` on `$PATH` does not mean `import "srch"` works. Per repo, verify/install local SDK:
 
 ```bash
-bun - <<'TS' >/dev/null 2>&1 || bun add srch@file:/Users/auk000v/dev/search-tool
+bun - <<'TS' >/dev/null 2>&1 || bun add github:adityavkk/srch
 await import("srch");
 TS
 ```

@@ -1,8 +1,16 @@
 {
-  "name": "search-tool",
+  "name": "srch",
   "version": "0.1.0",
   "license": "MIT",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adityavkk/srch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/adityavkk/srch/issues"
+  },
+  "homepage": "https://github.com/adityavkk/srch#readme",
   "type": "module",
   "main": "./dist/sdk.js",
   "types": "./dist/sdk.d.ts",
@@ -15,6 +23,11 @@
   "bin": {
     "search": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build",

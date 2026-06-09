@@ -35,3 +35,15 @@ workflow used in this repository.
 - `srch` is the SDK; `search` is the CLI binary. The CLI is a thin frontend over
   the SDK, so most changes belong in `src/`.
 - TypeScript must stay strict: no `any`, no `@ts-ignore`, and no skipped tests.
+
+## Packaging
+
+The published tarball is scoped by the `"files"` allowlist in `package.json` to
+`dist/`, `LICENSE`, and `README.md` (plus `package.json`, always included). Source,
+tests, docs, demos, and CI config are intentionally left out — verify with
+`npm pack --dry-run`.
+
+Declaration maps (`*.d.ts.map`) and source maps are kept in `dist/` on purpose: they
+add little weight and let consumers "go to definition" into the original `src/`.
+Drop them from the build (`tsconfig.json` `declarationMap`/`sourceMap`) if tarball
+size ever becomes a concern.
