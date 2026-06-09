@@ -18,6 +18,8 @@ Most agent tools treat search as a grab bag: one tool per provider, no shared ty
 
 One interface. Many backends. Typed results. No tool sprawl.
 
+> Install `srch` in your project before importing it — see [Quick start](#as-a-typescript-sdk). Then:
+
 ```ts
 import { createClient, type RunResult, type WebEvidencePayload } from "srch";
 
@@ -44,18 +46,23 @@ if (result.kind === "empty") {
 }
 ```
 
-> New here? Importing `srch` requires installing it in your project first — see [Quick start](#as-a-typescript-sdk) before running this example.
-
 ---
 
 ## Quick start
 
 ### As a TypeScript SDK
 
-Install the SDK in the project before importing it:
+Install the SDK in the project before importing it. `srch` lives on GitHub, so install it from there — the package builds itself on install:
 
 ```bash
-bun add srch@file:/Users/auk000v/dev/search-tool
+bun add github:adityavkk/srch
+```
+
+Working from a local checkout instead? Point `file:` at your clone (any path, no global location assumed):
+
+```bash
+git clone https://github.com/adityavkk/srch.git
+bun add srch@file:./srch   # adjust ./srch to wherever you cloned it
 ```
 
 Verify the install resolves from this project — run from the same directory and expect `function`:
@@ -80,7 +87,7 @@ TS
 
 Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or bash parsing.
 
-> Note: avoid `npm install srch` until the package name is published/verified. The public npm package name may resolve to an unrelated package.
+> Note: `srch` is not on npm yet, so `npm install srch` / `bun add srch` (no source prefix) will resolve to an unrelated package. Install from GitHub (`github:adityavkk/srch`) or a local `file:` path as shown above until it is published.
 
 ### User journey 1: conference travel brief
 
