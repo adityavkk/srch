@@ -44,6 +44,8 @@ if (result.kind === "empty") {
 }
 ```
 
+> New here? Importing `srch` requires installing it in your project first — see [Quick start](#as-a-typescript-sdk) before running this example.
+
 ---
 
 ## Quick start
@@ -54,6 +56,15 @@ Install the SDK in the project before importing it:
 
 ```bash
 bun add srch@file:/Users/auk000v/dev/search-tool
+```
+
+Verify the install resolves from this project — run from the same directory and expect `function`:
+
+```bash
+bun - <<'TS'
+import { createClient } from "srch";
+console.log(typeof createClient); // function
+TS
 ```
 
 Then use the SDK from Bun/TypeScript:

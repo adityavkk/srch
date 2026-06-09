@@ -27,7 +27,7 @@ If package mutation is not OK, create `.tmp/srch-run/`, install there, and `proc
 
 ## Run pattern
 
-Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or `jq`.
+Run the SDK bootstrap above first; `import "srch"` only resolves after the local SDK is installed in the cwd. Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or `jq`.
 
 ```bash
 bun - <<'TS'
