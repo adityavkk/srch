@@ -69,6 +69,12 @@ export {
   type ExaSourceRequest
 } from "./sdk/sources/exa.js";
 export {
+  mapSearchResponseEvidence,
+  type WebEvidenceContent,
+  type WebEvidencePayload,
+  type WebSourceRequest
+} from "./sdk/sources/web-shared.js";
+export {
   geminiSource,
   type GeminiEvidencePayload,
   type GeminiSourceRequest

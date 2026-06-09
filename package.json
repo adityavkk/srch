@@ -5,14 +5,19 @@
   "private": true,
   "type": "module",
   "main": "./dist/sdk.js",
+  "types": "./dist/sdk.d.ts",
   "exports": {
-    ".": "./dist/sdk.js"
+    ".": {
+      "types": "./dist/sdk.d.ts",
+      "default": "./dist/sdk.js"
+    }
   },
   "bin": {
     "search": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
     "dev": "tsx src/cli.ts",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts test/sdk/*.test.ts",
