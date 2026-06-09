@@ -428,7 +428,7 @@ search code repo . "auth middleware"                    # local codebase
 
 ### Fetch
 
-Turn any URL into clean, readable content.
+Turn any URL into clean, readable content. GFM tables are preserved; image metadata is exposed as `images[]`.
 
 ```ts
 // result: RunResult<FetchEvidencePayload>
@@ -439,12 +439,15 @@ if (result.kind === "success") {
   hit.kind;    // "document"  (literal type)
   hit.url;     // string
   hit.title;   // string
-  hit.content; // string -- extracted readable text
+  hit.content; // string -- extracted readable markdown, including GFM tables
+  hit.images;  // image metadata; may include localPath/generatedAlt
 }
 ```
 
 ```bash
 search fetch https://clig.dev
+search fetch https://clig.dev --download-images .tmp/images --json
+search fetch https://clig.dev --describe-images --json
 search fetch https://github.com/tobi/qmd --json
 search fetch https://arxiv.org/pdf/1706.03762.pdf
 ```
