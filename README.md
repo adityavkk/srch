@@ -759,4 +759,4 @@ Session hooks work with Claude Code, Codex, and pi today. The hook adapter model
 
 ## License
 
-MIT
+Released under the [MIT License](LICENSE).
