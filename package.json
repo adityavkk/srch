@@ -40,11 +40,11 @@
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
     "@steipete/bird": "^0.8.0",
-    "@tobilu/qmd": "^2.1.0",
+    "@tobilu/qmd": "^2.5.3",
     "linkedom": "^0.18.12",
-    "tsx": "^4.20.5",
+    "tsx": "^4.22.4",
     "turndown": "^7.2.1",
-    "unpdf": "^1.4.0"
+    "unpdf": "^1.6.2"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
