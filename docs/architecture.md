@@ -12,6 +12,8 @@ Design center:
 
 This document consolidates the current architecture, CLI taxonomy, and SDK/manifest proposal.
 
+> **Planned vs. implemented:** This document includes forward-looking design. In particular, the **`ask` cross-domain domain is planned and not yet implemented** — `search ask ...` is not a working command today. Every `ask` manifest, strategy, and worked example below describes the target design, not current behavior.
+
 ## Product thesis
 
 `srch` should evolve from a local-first retrieval CLI into a programmable retrieval engine:
@@ -38,7 +40,7 @@ search code "query"
 search code repo owner/repo "query"
 search docs "query"
 search fetch https://example.com
-search ask "compare bun vs node for cli tooling"
+search ask "compare bun vs node for cli tooling"   # planned, not yet implemented
 ```
 
 ### Domain-first grammar
@@ -63,10 +65,10 @@ search flights LHR BCN 2026-06-15
 search rewards-flights JFK CDG --date 2026-07-01 --cabin business
 search social reddit "react compiler"
 search social x thread https://x.com/.../status/123
-search ask compare "best state management for a docs-heavy react app"
+search ask compare "best state management for a docs-heavy react app"   # planned, not yet implemented
 ```
 
-`ask` is not a special-case mode. It is a cross-domain retrieval domain.
+`ask` (planned, not yet implemented) is not a special-case mode. It is a cross-domain retrieval domain.
 
 ### Declarative first
 
@@ -152,7 +154,7 @@ Examples:
 - `rewards-flights`
 - `social`
 - `fetch`
-- `ask`
+- `ask` (planned, not yet implemented)
 
 `flights` is a provider-backed domain powered by the optional Fli Python SDK.
 
@@ -208,7 +210,7 @@ Examples:
 search web research "best auth for next.js"
 search code repo facebook/react "useEffect cleanup"
 search social x thread https://x.com/.../status/123
-search ask compare "best state management for a docs-heavy react app"
+search ask compare "best state management for a docs-heavy react app"   # planned, not yet implemented
 ```
 
 ## Static and agentic strategies
@@ -346,6 +348,8 @@ capabilities:
 ```
 
 ### Ask domain manifest
+
+> **Planned (not yet implemented).** The `ask` domain and all of its strategies (`ask-default`, `ask-compare`, `ask-research`, `ask-verify`) describe target design. `search ask ...` does not work today.
 
 ```yaml
 kind: srch.domain
@@ -982,6 +986,8 @@ Value:
 - still inspectable
 
 ### Agentic retrieval
+
+> Planned (not yet implemented): the `ask` domain below is target design, not a working command.
 
 ```bash
 search ask compare "best state management approach for a docs-heavy react app"
