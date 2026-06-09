@@ -700,7 +700,6 @@ search fetch <url>                     readable page extraction
 search social <query>                  social/Twitter search
 search flights <origin> <dest> <date>  flight fares (optional)
 search rewards-flights <o> <d>         award flights (optional)
-search ask <task>                      cross-domain retrieval
 search hooks install|uninstall|status  agent session hooks
 search install <target>                install optional domains
 search config                          config management

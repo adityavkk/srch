@@ -711,6 +711,16 @@ async function main(): Promise<void> {
       }, { asJson, outPath });
     }
 
+    if (command === "ask") {
+      // `ask` is a planned cross-domain domain that is not implemented yet.
+      // Return a friendly, typed envelope (not the generic `Unknown command`)
+      // so callers learn the command is planned rather than mistyped.
+      emitFailure(["ask"], "`search ask` is planned but not yet implemented.", { asJson, outPath }, [
+        "Use a specific domain for now: `search web`, `search code`, `search docs`, or `search fetch`",
+        "Track progress at https://github.com/adityavkk/srch/issues/6"
+      ]);
+    }
+
     if (asJson) exitJsonError([command], "Unknown command");
     console.error(ROOT_HELP);
     process.exit(1);

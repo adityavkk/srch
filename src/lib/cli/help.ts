@@ -11,7 +11,6 @@ Domains:
   rewards-flights award travel search via Seats.aero
   social         social retrieval spaces
   fetch          readable URL fetch
-  ask            cross-domain retrieval
   twitter        legacy X/Twitter command
   x.com          alias for twitter
   install        install optional domain dependencies
@@ -27,7 +26,6 @@ Examples:
   search rewards-flights JFK CDG --date 2026-07-01 --cabin business
   search install flights
   search social x "bun runtime"
-  search ask compare "best state management for a docs-heavy react app"
   search fetch https://clig.dev
   search inspect tools --json
 
