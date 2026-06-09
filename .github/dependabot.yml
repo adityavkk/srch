@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Bundle the low-risk minor+patch bumps into a single PR per run so the
+    # queue stays small; majors stay separate so each breaking change gets its
+    # own reviewable PR. CI (.github/workflows/ci.yml) validates every bump.
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+    open-pull-requests-limit: 10
