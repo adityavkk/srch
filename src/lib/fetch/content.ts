@@ -70,7 +70,9 @@ async function extractViaHttp(url: string, signal?: AbortSignal): Promise<Extrac
 
     const { document } = parseHTML(text);
     const article = new Readability(document as unknown as Document).parse();
-    if (!article) {
+    // Readability 0.6 may return an article whose fields are individually
+    // null/undefined, so treat a missing `content` the same as a null parse.
+    if (!article || !article.content) {
       const rsc = extractRscContent(text);
       if (rsc) return { url, title: rsc.title, content: rsc.content, error: null };
       return {
