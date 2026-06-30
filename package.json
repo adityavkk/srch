@@ -18,8 +18,7 @@
     ".": {
       "types": "./dist/sdk.d.ts",
       "default": "./dist/sdk.js"
-    },
-    "./helpers": "./dist/sdk/helpers.js"
+    }
   },
   "bin": {
     "search": "./dist/cli.js"

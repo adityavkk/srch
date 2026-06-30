@@ -89,7 +89,7 @@ Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or bash parsing.
 
 #### Fetch extraction
 
-Fetch document text is canonically `payload.content`, a string. Use `documentText` as the supported accessor. It also handles a legacy `text` field.
+Fetch document text is canonically `payload.content`, a string. Use `documentText` as the supported accessor. It defensively falls back to a top-level `text` string for hand-built or foreign payloads, but `text` is not a historical fetch shape. It does not read web payloads' nested `content.text`.
 
 ```ts
 import { createClient, documentText } from "srch";
