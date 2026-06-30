@@ -56,6 +56,7 @@ export {
   fetchContentSource,
   type FetchEvidencePayload
 } from "./sdk/sources/fetch-content.js";
+export { documentText } from "./sdk/helpers.js";
 export {
   seatsAeroSource,
   type SeatsAeroEvidencePayload,
