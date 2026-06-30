@@ -87,6 +87,18 @@ TS
 
 Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or bash parsing.
 
+#### Fetch extraction
+
+Fetch document text is canonically `payload.content`, a string. Use `documentText` as the supported accessor. It also handles a legacy `text` field.
+
+```ts
+import { createClient, documentText } from "srch";
+
+const c = createClient();
+const r = await c.run({ domain: "fetch", query: url });
+const text = r.kind === "success" ? documentText(r.evidence[0].payload) : "";
+```
+
 > Note: `srch` is not on npm yet, so `npm install srch` / `bun add srch` (no source prefix) will resolve to an unrelated package. Install from GitHub (`github:adityavkk/srch`) or a local `file:` path as shown above until it is published.
 
 ### User journey 1: conference travel brief
