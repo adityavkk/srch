@@ -38,6 +38,33 @@ TS
 
 If package mutation is not OK, create `.tmp/srch-run/`, install there, and `process.chdir(targetRepo)` before `createClient()`.
 
+Use a subshell for temp SDK setup. Do not `cd .tmp/srch-run` and then write later files with relative paths like `.tmp/srch-run/foo.ts`; that resolves under the changed cwd.
+
+```bash
+mkdir -p .tmp/srch-run
+(
+  cd .tmp/srch-run || exit 1
+  bun - <<'TS' >/dev/null 2>&1 || bun add srch@file:/Users/auk000v/dev/search-tool
+await import("srch");
+TS
+)
+```
+
+After that, write scripts from the repo root and run them in a subshell:
+
+```bash
+cat > .tmp/srch-run/research.ts <<'TS'
+import { createClient } from "srch";
+
+process.chdir("../..");
+const c = createClient();
+const r = await c.run({ domain: "web", query: "bun sqlite wasm", numResults: 5 });
+console.log(JSON.stringify(r, null, 2));
+TS
+
+(cd .tmp/srch-run && bun research.ts)
+```
+
 ## Run pattern
 
 Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or `jq`.
@@ -52,6 +79,24 @@ TS
 ```
 
 Longer flow: `.tmp/search.ts` then `bun .tmp/search.ts`.
+
+## Fetch extraction
+
+For fetched documents, prefer `payload.content`; some payloads may expose `payload.text`. Do not assume `text` is the only field. Avoid `any`; use `unknown` plus a small extractor, or inspect one raw result before writing downstream logic.
+
+```ts
+function documentText(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+  const p = payload as Partial<Record<"content" | "text", unknown>>;
+  if (typeof p.content === "string") return p.content;
+  if (typeof p.text === "string") return p.text;
+  return "";
+}
+
+const r = await c.run({ domain: "fetch", query: url });
+const doc = r.kind === "success" ? r.evidence[0]?.payload : undefined;
+const text = documentText(doc);
+```
 
 ## High-value SDK shape
 
