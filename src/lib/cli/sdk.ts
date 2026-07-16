@@ -64,9 +64,14 @@ export async function runWebCommand(query: string, options: { provider?: "auto" 
   };
 }
 
-export async function runFetchCommand(url: string, options: { trace?: boolean }): Promise<RenderedCommand> {
+export async function runFetchCommand(url: string, options: { trace?: boolean; downloadImagesDir?: string; describeImages?: boolean }): Promise<RenderedCommand> {
   const client = await createSdkClient(options.trace);
-  const result = await client.run({ domain: "fetch", query: url });
+  const result = await client.run({
+    domain: "fetch",
+    query: url,
+    downloadImagesDir: options.downloadImagesDir,
+    describeImages: options.describeImages
+  });
   if (result.kind === "error") return { kind: "error", error: result };
   if (result.kind !== "success") {
     return { kind: "error", error: { ...result, kind: "error", error: { code: "fetch_empty", message: `No content for ${url}` } } };
@@ -75,7 +80,7 @@ export async function runFetchCommand(url: string, options: { trace?: boolean })
   const payload = firstPayload<FetchEvidencePayload>(result)!;
   return {
     kind: "ok",
-    data: { alias: "fetch", canonicalCommand: "fetch-content", url: payload.url, title: payload.title, content: payload.content, trace: result.trace },
+    data: { alias: "fetch", canonicalCommand: "fetch-content", url: payload.url, title: payload.title, content: payload.content, images: payload.images, trace: result.trace },
     text: `# ${payload.title}\n\n${payload.content}`
   };
 }

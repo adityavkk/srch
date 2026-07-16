@@ -10,6 +10,12 @@ function jsonResponse(data, init = {}) {
 globalThis.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
+  if (url.startsWith("https://generativelanguage.googleapis.com/")) {
+    return jsonResponse({
+      candidates: [{ content: { parts: [{ text: "Diagram showing the execution ladder from request intake to durable work." }] } }]
+    });
+  }
+
   if (url === "https://api.exa.ai/answer") {
     return jsonResponse({
       answer: "Mock Exa answer",
@@ -23,6 +29,20 @@ globalThis.fetch = async (input, init) => {
     return new Response(`<!doctype html><html><head><title>Mock Article</title></head><body><main><h1>Mock Article</h1><p>First paragraph with enough text to be extracted cleanly for testing persisted fetch output behavior in the CLI.</p><p>Second paragraph for readability extraction.</p></main></body></html>`, {
       status: 200,
       headers: { "content-type": "text/html; charset=utf-8" }
+    });
+  }
+
+  if (url === "https://mock.local/rich") {
+    return new Response(`<!doctype html><html><head><title>Rich Article</title></head><body><main><article><h1>Rich Article</h1><p>This article includes a comparison table and diagram image so agents can verify structured extraction without depending on live websites.</p><table><thead><tr><th>Option</th><th>Cost</th><th>Best for</th></tr></thead><tbody><tr><td>VM</td><td>Always on</td><td>steady workloads</td></tr><tr><td>Durable Object</td><td>Idle free</td><td>per-agent workloads</td></tr></tbody></table><p>The prose after the table is long enough for Readability to keep the article body and exercise the markdown conversion path in tests.</p><table><tr><td>Override</td><td>Purpose</td></tr><tr><td>getModel()</td><td>Return the language model</td></tr></table><img src="/diagram.png" alt="execution ladder"><p>Final paragraph with additional context about the execution ladder image and the comparison table above.</p></article></main></body></html>`, {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" }
+    });
+  }
+
+  if (url === "https://mock.local/diagram.png") {
+    return new Response(new Uint8Array([137, 80, 78, 71]), {
+      status: 200,
+      headers: { "content-type": "image/png" }
     });
   }
 

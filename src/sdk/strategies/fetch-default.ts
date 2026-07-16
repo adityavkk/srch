@@ -1,7 +1,10 @@
 import { defineStrategy } from "../define.js";
+import type { FetchContentOptions } from "../../lib/core/types.js";
 import type { ProviderAttempt, RunResult, StaticStrategy, StrategyRequest } from "../types.js";
 
-export const fetchDefaultStrategy: StaticStrategy<StrategyRequest> = defineStrategy({
+export type FetchStrategyRequest = StrategyRequest & FetchContentOptions;
+
+export const fetchDefaultStrategy: StaticStrategy<FetchStrategyRequest> = defineStrategy({
   kind: "static",
   name: "fetch/default",
   domain: "fetch",
@@ -12,7 +15,12 @@ export const fetchDefaultStrategy: StaticStrategy<StrategyRequest> = defineStrat
     }
 
     try {
-      const evidence = await ctx.search("fetch-content", { query: req.query, signal: req.signal });
+      const evidence = await ctx.search("fetch-content", {
+        query: req.query,
+        signal: req.signal,
+        downloadImagesDir: req.downloadImagesDir,
+        describeImages: req.describeImages
+      });
       const attempts: [ProviderAttempt] = [{ provider: "fetch-content", status: "success", transport: "http|jina|gemini|github", durationMs: Date.now() - startedAt, evidenceCount: evidence.length }];
       return {
         kind: "success",
