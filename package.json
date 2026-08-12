@@ -47,7 +47,7 @@
     "unpdf": "^1.4.0"
   },
   "devDependencies": {
-    "@types/node": "^24.5.2",
+    "@types/node": "^25.9.2",
     "@types/turndown": "^5.0.6",
     "typescript": "^5.9.2"
   },
