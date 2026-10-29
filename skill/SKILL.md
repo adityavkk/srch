@@ -31,12 +31,15 @@ Default to the SDK for agent work. Use the CLI only when the query is truly triv
 `search` on `$PATH` does not mean `import "srch"` works. Per repo, verify/install local SDK:
 
 ```bash
-bun - <<'TS' >/dev/null 2>&1 || bun add srch@file:/Users/auk000v/dev/search-tool
-await import("srch");
+bun --no-install - <<'TS' >/dev/null 2>&1 || bun add srch@file:/Users/auk000v/dev/search-tool
+const { createClient } = await import("srch");
+if (typeof createClient !== "function") throw new Error("not the local srch SDK");
 TS
 ```
 
-If package mutation is not OK, create `.tmp/srch-run/`, install there, and `process.chdir(targetRepo)` before `createClient()`.
+Trap: without `--no-install`, Bun auto-installs the unrelated npm package `srch` in a folder with no `node_modules`, so a bare import passes while the local SDK is missing.
+
+If package mutation is not OK, install in `.tmp/srch-run/` and `process.chdir(targetRepo)` before `createClient()`. Give that folder its own `package.json` first; otherwise `bun add` walks up and edits the repo's `package.json`.
 
 Use a subshell for temp SDK setup. Do not `cd .tmp/srch-run` and then write later files with relative paths like `.tmp/srch-run/foo.ts`; that resolves under the changed cwd.
 
@@ -44,8 +47,10 @@ Use a subshell for temp SDK setup. Do not `cd .tmp/srch-run` and then write late
 mkdir -p .tmp/srch-run
 (
   cd .tmp/srch-run || exit 1
-  bun - <<'TS' >/dev/null 2>&1 || bun add srch@file:/Users/auk000v/dev/search-tool
-await import("srch");
+  [ -f package.json ] || echo '{ "private": true }' > package.json
+  bun --no-install - <<'TS' >/dev/null 2>&1 || bun add srch@file:/Users/auk000v/dev/search-tool
+const { createClient } = await import("srch");
+if (typeof createClient !== "function") throw new Error("not the local srch SDK");
 TS
 )
 ```
@@ -62,15 +67,15 @@ const r = await c.run({ domain: "web", query: "bun sqlite wasm", numResults: 5 }
 console.log(JSON.stringify(r, null, 2));
 TS
 
-(cd .tmp/srch-run && bun research.ts)
+(cd .tmp/srch-run && bun --no-install research.ts)
 ```
 
 ## Run pattern
 
-Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or `jq`.
+Bun runs TypeScript directly. Always pass `--no-install` (same trap as above). No `bunx`, `tsx`, or `jq`.
 
 ```bash
-bun - <<'TS'
+bun --no-install - <<'TS'
 import { createClient } from "srch";
 const c = createClient();
 const r = await c.run({ domain: "web", query: "bun sqlite wasm", numResults: 5 });
@@ -78,7 +83,7 @@ console.log(JSON.stringify(r.kind === "success" ? r.evidence.map(e => e.payload.
 TS
 ```
 
-Longer flow: `.tmp/search.ts` then `bun .tmp/search.ts`.
+Longer flow: `.tmp/search.ts` then `bun --no-install .tmp/search.ts`.
 
 ## Fetch extraction
 
@@ -171,6 +176,7 @@ Result shape to show:
 |---|---|---|
 | Web | `c.run({ domain: "web", query })` | `search web "q" --json` |
 | HQ web | `c.run({ domain: "web", query, hq: true })` | `search web "q" --hq --json` |
+| Steer Exa | `c.run({ domain: "web", query, objective: "facts to pull out" })` | `search web "q" --objective "..." --json` |
 | Code/API/repo | `c.run({ domain: "code", query })` | `search code "q" --json` |
 | Local docs | `c.run({ domain: "docs", query })` | `search docs "q" --json` |
 | Fetch URL | `c.run({ domain: "fetch", query: url })` | `search fetch <url> --json` |
@@ -178,7 +184,7 @@ Result shape to show:
 | Flights | `c.run({ domain: "flights", query: "SFO LAS 2026-11-29" })` | `search flights SFO LAS 2026-11-29 --json` |
 | Social/X | `c.run({ domain: "social", query })` | `search twitter "q" --json` |
 | Provider exactness | `c.search("exa", { query })` | `search web "q" --provider exa --json` |
-| Diagnostics | CLI | `search inspect tools --json` |
+| Diagnostics | CLI | `search inspect tools --json`, `search inspect exa` |
 
 ## Agent rules
 
@@ -187,5 +193,6 @@ Result shape to show:
 - Compose domains in TypeScript, not bash.
 - Fetch first, summarize second. Never invent sources.
 - Fetch preserves GFM tables and `images[]`; use `downloadImagesDir` for durable image links and `describeImages` for diagrams.
+- Web hits carry a `snippet` and inline `content` (Exa highlights). Fetch retries through Exa when a page blocks plain HTTP; `source` is then `exa-fetch`.
 - Emit structured JSON for downstream steps.
 - Secrets: runtime refs only, never plaintext.
