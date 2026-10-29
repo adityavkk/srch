@@ -1,0 +1,19 @@
+# Widgetry guide: cache settings
+URL: https://docs.example.com/widgetry/cache
+Published: 2025-01-20
+Author: Ada Example
+
+Widgetry guide: cache settings
+
+# Cache settings
+
+Widgetry keeps rendered widgets in memory for five minutes.
+
+![Cache flow diagram](/img/cache-flow.png)
+
+# (no title)
+URL: https://example.net/notes/plain.txt
+
+Plain notes about Widgetry caching.
+
+Error fetching https://broken.example.invalid/page: CRAWL_UNKNOWN_ERROR

@@ -1,0 +1,10 @@
+Title: Widgetry guide: cache settings
+URL: https://docs.example.com/widgetry/cache
+Published Date: 2025-01-20
+Author: Ada Example
+Text: Widgetry keeps rendered widgets in memory for five minutes.
+Set `cache.ttl` to change the lifetime.
+---
+Title: Widgetry release notes
+URL: https://docs.example.com/widgetry/releases
+Text: Version 2 adds named widgets.

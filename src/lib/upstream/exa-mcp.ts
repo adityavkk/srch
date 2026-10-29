@@ -1,4 +1,7 @@
+import { isRecord } from "../core/guards.js";
 import { withTimeout } from "../core/http.js";
+
+const EXA_MCP_URL = "https://mcp.exa.ai/mcp";
 
 export interface ExaMcpResponse {
   result?: {
@@ -11,19 +14,39 @@ export interface ExaMcpResponse {
   };
 }
 
-export async function callExaMcpRaw(toolName: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ExaMcpResponse> {
-  const response = await fetch("https://mcp.exa.ai/mcp", {
+function isOptional(value: unknown, type: "string" | "number" | "boolean"): boolean {
+  return value === undefined || typeof value === type;
+}
+
+function isExaMcpResponse(value: unknown): value is ExaMcpResponse {
+  if (!isRecord(value)) return false;
+  const { result, error } = value;
+  if (error !== undefined) {
+    return isRecord(error) && isOptional(error.code, "number") && isOptional(error.message, "string");
+  }
+  return isRecord(result)
+    && isOptional(result.isError, "boolean")
+    && (result.content === undefined || (Array.isArray(result.content)
+      && result.content.every((item: unknown) => isRecord(item) && isOptional(item.type, "string") && isOptional(item.text, "string"))));
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+// The endpoint answers with server-sent events or plain JSON. Return every JSON-RPC message found.
+async function postExaMcp(method: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<unknown[]> {
+  const response = await fetch(EXA_MCP_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream"
     },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
-      params: { name: toolName, arguments: args }
-    }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     signal: withTimeout(signal, 60_000)
   });
 
@@ -32,24 +55,15 @@ export async function callExaMcpRaw(toolName: string, args: Record<string, unkno
   }
 
   const body = await response.text();
-  const dataLines = body.split("\n").filter((line) => line.startsWith("data:"));
-  for (const line of dataLines) {
-    const payload = line.slice(5).trim();
-    if (!payload) continue;
-    try {
-      const parsed = JSON.parse(payload) as ExaMcpResponse;
-      if (parsed.result || parsed.error) return parsed;
-    } catch {
-    }
-  }
+  const events = body.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).filter(Boolean);
+  return [...events, body].map(parseJson).filter((message) => message !== undefined);
+}
 
-  try {
-    const parsed = JSON.parse(body) as ExaMcpResponse;
-    if (parsed.result || parsed.error) return parsed;
-  } catch {
-  }
-
-  throw new Error("Exa MCP returned empty content");
+export async function callExaMcpRaw(toolName: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ExaMcpResponse> {
+  const messages = await postExaMcp("tools/call", { name: toolName, arguments: args }, signal);
+  const response = messages.find(isExaMcpResponse);
+  if (!response) throw new Error("Exa MCP returned empty content");
+  return response;
 }
 
 export function exaMcpText(response: ExaMcpResponse): string {

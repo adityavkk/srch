@@ -2,6 +2,8 @@ export interface SearchResult {
   title: string;
   url: string;
   snippet: string;
+  publishedDate?: string;
+  author?: string;
 }
 
 export interface ExtractedImage {
@@ -40,5 +42,7 @@ export interface SearchOptions {
   recencyFilter?: "day" | "week" | "month" | "year";
   domainFilter?: string[];
   includeContent?: boolean;
+  // Exa MCP: what the search should rank first and pull out. Defaults to the query.
+  objective?: string;
   signal?: AbortSignal;
 }

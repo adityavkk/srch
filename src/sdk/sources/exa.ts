@@ -51,6 +51,7 @@ export function createExaSource(deps: ExaSourceDeps = defaultDeps): Source<ExaSo
         includeContent: req.includeContent,
         recencyFilter: req.recencyFilter,
         domainFilter: req.domainFilter,
+        objective: req.objective,
         signal: req.signal
       };
 

@@ -1,0 +1,32 @@
+Title: Widgetry guide: cache settings
+URL: https://docs.example.com/widgetry/cache
+Published: N/A
+Author: N/A
+Highlights:
+## Cache settings
+
+Widgetry keeps rendered widgets in memory for five minutes. Set `cache.ttl` to change the lifetime, or set it to `0` to turn caching off.
+
+```ts
+createWidgetry({ cache: { ttl: 30_000 } });
+```
+
+Note: the cache is per process, so each worker warms its own copy.
+
+---
+
+Title: Five small Widgetry tips
+URL: https://blog.example.org/posts/widgetry-tips
+Published: 2025-03-14T00:00:00.000Z
+Author: Ada Example
+Highlights:
+Tip one: name every widget. Named widgets show up in the [debug panel](https://docs.example.com/widgetry/debug) and in error messages.
+Title: this line is tip text, not a new hit.
+
+---
+
+Title: Widgetry forum thread without an excerpt
+URL: https://forum.example.net/t/42
+Published: 2024-11-02
+Author: N/A
+Highlights:

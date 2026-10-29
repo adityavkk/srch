@@ -6,6 +6,7 @@ export type WebSourceRequest = SourceRequest & {
   includeContent?: boolean;
   recencyFilter?: SearchOptions["recencyFilter"];
   domainFilter?: string[];
+  objective?: SearchOptions["objective"];
 };
 
 export type WebEvidenceContent =
@@ -17,6 +18,8 @@ export type WebEvidencePayload<TNative = unknown> = {
   title: string;
   url: string;
   snippet: string;
+  publishedDate?: string;
+  author?: string;
   content: WebEvidenceContent;
   native: TNative;
 };
@@ -47,6 +50,8 @@ export function mapSearchResponseEvidence<TNative>(
         title: result.title,
         url: result.url,
         snippet: result.snippet,
+        ...(result.publishedDate ? { publishedDate: result.publishedDate } : {}),
+        ...(result.author ? { author: result.author } : {}),
         content: content ? { kind: "inline", text: content } : { kind: "none" },
         native: response.native
       }

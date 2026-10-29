@@ -8,7 +8,7 @@ const deps: ExaSourceDeps = {
     return {
       answer: "",
       results: [{ title: "Example", url: "https://example.com", snippet: "Example snippet" }],
-      inlineContent: options.includeContent
+      inlineContent: options?.includeContent
         ? [{ url: "https://example.com", title: "Example", content: "Full content", error: null }]
         : undefined,
       native: {
@@ -68,4 +68,29 @@ test("createClient status() reports registered sources and domains", async () =>
   assert.equal(status.summary.total, 1);
   assert.deepEqual(status.sources, [{ name: "exa", status: "healthy" }]);
   assert.deepEqual(status.recentRuns, []);
+});
+
+test("exa source forwards objective and keeps published date, author and inline text", async () => {
+  const objectives: Array<string | undefined> = [];
+  const source = createExaSource({
+    async searchMcp(query, options) {
+      objectives.push(options?.objective);
+      return {
+        answer: "",
+        results: [{ title: "Widgetry guide", url: "https://docs.example.com/widgetry/cache", snippet: "Widgetry keeps rendered widgets in memory.", publishedDate: "2025-01-20", author: "Ada Example" }],
+        inlineContent: [{ url: "https://docs.example.com/widgetry/cache", title: "Widgetry guide", content: "Widgetry keeps rendered widgets in memory for five minutes.", error: null }],
+        native: { provider: "exa-mcp", mode: "mcp", request: { query }, response: { ok: true } }
+      };
+    },
+    searchApi: deps.searchApi
+  });
+  const client = createClient({ sources: [source] });
+
+  const evidence = await client.search(source, { query: "widgetry cache", objective: "the cache TTL default" });
+
+  assert.deepEqual(objectives, ["the cache TTL default"]);
+  assert.equal(evidence[0]?.payload.snippet, "Widgetry keeps rendered widgets in memory.");
+  assert.equal(evidence[0]?.payload.publishedDate, "2025-01-20");
+  assert.equal(evidence[0]?.payload.author, "Ada Example");
+  assert.deepEqual(evidence[0]?.payload.content, { kind: "inline", text: "Widgetry keeps rendered widgets in memory for five minutes." });
 });

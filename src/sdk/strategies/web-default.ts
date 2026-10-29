@@ -30,7 +30,8 @@ function requestFor(req: WebStrategyRequest): WebSourceRequest {
     numResults: req.numResults,
     includeContent: req.includeContent,
     recencyFilter: req.recencyFilter,
-    domainFilter: req.domainFilter
+    domainFilter: req.domainFilter,
+    objective: req.objective
   };
 }
 

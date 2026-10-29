@@ -40,9 +40,9 @@ export async function renderHome(trace = false): Promise<string> {
   return [domainLine, domains, recent, "help: search <domain> <query> | search --help for full reference"].filter(Boolean).join("\n");
 }
 
-export async function runWebCommand(query: string, options: { provider?: "auto" | "exa" | "brave" | "gemini" | "perplexity"; hq?: boolean; trace?: boolean }): Promise<RenderedCommand> {
+export async function runWebCommand(query: string, options: { provider?: "auto" | "exa" | "brave" | "gemini" | "perplexity"; hq?: boolean; objective?: string; trace?: boolean }): Promise<RenderedCommand> {
   const client = await createSdkClient(options.trace);
-  const result = await client.run({ domain: "web", query, provider: options.provider, hq: options.hq });
+  const result = await client.run({ domain: "web", query, provider: options.provider, hq: options.hq, objective: options.objective });
   if (result.kind === "error") return { kind: "error", error: result };
 
   const answer = deriveWebAnswer(result);
@@ -50,7 +50,13 @@ export async function runWebCommand(query: string, options: { provider?: "auto" 
     ? []
     : result.evidence.map((item) => {
         const payload = item.payload as WebEvidencePayload;
-        return { title: payload.title, url: payload.url, snippet: payload.snippet };
+        return {
+          title: payload.title,
+          url: payload.url,
+          snippet: payload.snippet,
+          ...(payload.publishedDate ? { publishedDate: payload.publishedDate } : {}),
+          ...(payload.author ? { author: payload.author } : {})
+        };
       });
   const provider = result.kind === "success" ? result.evidence[0]?.source ?? "auto" : "auto";
   const text = result.kind === "empty"

@@ -490,8 +490,9 @@ async function main(): Promise<void> {
       const query = requireQuery(rest, WEB_HELP, ["web"], asJson);
       const provider = (flags.get("provider") as SearchProvider | undefined) ?? "auto";
       const hq = flags.has("hq");
-      trace.step("web", "dispatch", { provider, hq, queryChars: query.length });
-      const rendered = await trace.span("web.search", hq ? "exa-paid" : provider, async () => runWebCommand(query, { provider, hq, trace: flags.has("verbose") }));
+      const objective = getStringFlag(flags, "objective");
+      trace.step("web", "dispatch", { provider, hq, queryChars: query.length, objective: Boolean(objective) });
+      const rendered = await trace.span("web.search", hq ? "exa-paid" : provider, async () => runWebCommand(query, { provider, hq, objective, trace: flags.has("verbose") }));
       if (rendered.kind === "error") emitFailure(["web"], rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions);
       addHistory({ kind: "web", input: { query, provider }, output: rendered.data });
       return emitSuccess({

@@ -181,10 +181,11 @@ Fallbacks (auto, free-first):
   5. Perplexity (uses key credits)
 
 Usage:
-  search web <query...> [--provider auto|exa|brave|perplexity|gemini] [--hq] [--json] [--verbose] [--out <path>]
+  search web <query...> [--provider auto|exa|brave|perplexity|gemini] [--hq] [--objective <text>] [--json] [--verbose] [--out <path>]
 
 Flags:
-  --hq    use Exa paid API for higher quality (answer synthesis, highlights)
+  --hq                 use Exa paid API for higher quality (answer synthesis, highlights)
+  --objective <text>   tell Exa what to rank first and pull out (default: the query)
 
 Examples:
   search web bun sqlite wasm
@@ -194,7 +195,7 @@ Examples:
 
 JSON:
   - answer
-  - results[]
+  - results[]: title, url, snippet, publishedDate?, author?
   - provider
   - requestedProvider
   - native backend payload

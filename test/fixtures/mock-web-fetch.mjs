@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 const realFetch = globalThis.fetch;
 
 function jsonResponse(data, init = {}) {
@@ -7,8 +9,25 @@ function jsonResponse(data, init = {}) {
   });
 }
 
+function exaFixture(name) {
+  return readFileSync(new URL(`./exa-mcp/${name}`, import.meta.url), "utf8");
+}
+
+function exaMcpResponse(body) {
+  const request = JSON.parse(body);
+  const result = { content: [{ type: "text", text: exaFixture("search-highlights.txt") }] };
+  return new Response(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n\n`, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" }
+  });
+}
+
 globalThis.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+  if (url === "https://mcp.exa.ai/mcp") {
+    return exaMcpResponse(String(init?.body ?? "{}"));
+  }
 
   if (url.startsWith("https://generativelanguage.googleapis.com/")) {
     return jsonResponse({
