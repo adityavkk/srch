@@ -15,14 +15,20 @@ function exaFixture(name) {
 
 // Pages served by the mocked web_fetch_exa tool. Other URLs get an error line.
 const exaPages = {
+  "https://docs.example.com/widgetry/cache": "# Widgetry guide: cache settings\nURL: https://docs.example.com/widgetry/cache\nPublished: 2025-01-20\n\nWidgetry keeps rendered widgets in memory for five minutes. Set `cache.ttl` to change the lifetime.",
   "https://mock.local/blocked": "# Blocked Article\nURL: https://mock.local/blocked\n\nThis text arrives through the Exa fallback because the page refuses plain HTTP clients."
 };
 
+// MOCK_EXA_FORMAT=summary simulates format drift: the text moves into a field srch does not parse.
+const driftedSearch = "Title: Widgetry guide: cache settings\nURL: https://docs.example.com/widgetry/cache\nSummary: Widgetry keeps rendered widgets in memory for five minutes.\n\n---\n\nTitle: Five small Widgetry tips\nURL: https://blog.example.org/posts/widgetry-tips\nSummary: Name every widget so it shows up in the debug panel.";
+
 function exaMcpResponse(body) {
   const request = JSON.parse(body);
-  const result = { content: [{ type: "text", text: request.params.name === "web_fetch_exa"
-    ? request.params.arguments.urls.map((url) => exaPages[url] ?? `Error fetching ${url}: CRAWL_NOT_FOUND`).join("\n\n")
-    : exaFixture("search-highlights.txt") }] };
+  const result = request.method === "tools/list"
+    ? JSON.parse(exaFixture("tools-list.json")).result
+    : { content: [{ type: "text", text: request.params.name === "web_fetch_exa"
+        ? request.params.arguments.urls.map((url) => exaPages[url] ?? `Error fetching ${url}: CRAWL_NOT_FOUND`).join("\n\n")
+        : process.env.MOCK_EXA_FORMAT === "summary" ? driftedSearch : exaFixture("search-highlights.txt") }] };
   return new Response(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n\n`, {
     status: 200,
     headers: { "content-type": "text/event-stream" }

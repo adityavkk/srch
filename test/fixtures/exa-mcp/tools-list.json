@@ -1,0 +1,35 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {
+        "name": "web_search_exa",
+        "description": "Synthetic fixture: web search.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string" },
+            "numResults": { "type": "number" },
+            "objective": { "type": "string" }
+          },
+          "required": ["query", "objective"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "web_fetch_exa",
+        "description": "Synthetic fixture: read pages.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "urls": { "type": "array", "items": { "type": "string" } },
+            "maxCharacters": { "type": "number" }
+          },
+          "required": ["urls"],
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

@@ -64,3 +64,19 @@ test("search fetch falls back to Exa when the page fetch fails", () => {
   assert.equal(at(payload, "data", "title"), "Blocked Article");
   assert.match(String(at(payload, "data", "content")), /arrives through the Exa fallback/);
 });
+
+test("search inspect exa reports ok against the current schema", () => {
+  const result = runCli(["inspect", "exa", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  const payload = jsonOutput(result.stdout);
+  assert.equal(at(payload, "data", "status"), "ok", JSON.stringify(at(payload, "data", "warnings")));
+  assert.equal(at(payload, "data", "search", "itemsWithText"), 2);
+  assert.equal(at(payload, "data", "fetch", "itemsWithText"), 1);
+});
+
+test("search inspect exa warns when hits lose the text Exa sent", () => {
+  const result = runCli(["inspect", "exa"], { MOCK_EXA_FORMAT: "summary" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^Exa MCP: warn/);
+  assert.match(result.stdout, /web_search_exa: 2 of 2 results have no text, but the reply has \d+ characters of text/);
+});

@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { diagnoseExaArguments, diagnoseExaReply, inspectExa } from "../src/lib/cli/exa-inspect.js";
 import { isRecord } from "../src/lib/core/guards.js";
 import { extractWithExa } from "../src/lib/fetch/exa.js";
-import { excerpt, parseExaFetchResults, parseExaSearchResults } from "../src/lib/upstream/exa-format.js";
-import { callExaMcpRaw, exaMcpText } from "../src/lib/upstream/exa-mcp.js";
+import { exaBodyChars, excerpt, parseExaFetchResults, parseExaSearchResults } from "../src/lib/upstream/exa-format.js";
+import { callExaMcpRaw, exaMcpText, listExaMcpTools } from "../src/lib/upstream/exa-mcp.js";
 import { mapExaSearchHits, searchWithExa } from "../src/lib/upstream/exa.js";
 
 const fixtureDir = resolve(dirname(fileURLToPath(import.meta.url)), "fixtures/exa-mcp");
@@ -93,6 +94,13 @@ test("parseExaFetchResults splits pages and error lines", () => {
   assert.equal(notes.url, "https://example.net/notes/plain.txt");
   assert.equal(notes.text, "Plain notes about Widgetry caching.");
   assert.deepEqual(broken, { kind: "error", url: "https://broken.example.invalid/page", error: "CRAWL_UNKNOWN_ERROR" });
+});
+
+test("exaBodyChars counts text outside known metadata", () => {
+  assert.equal(exaBodyChars("Title: A\nURL: https://a.example\nPublished: N/A\nAuthor: N/A\nHighlights:\n\n---\n"), 0);
+  assert.equal(exaBodyChars("Title: A\nURL: https://a.example\nSummary: twelve chars"), "twelve chars".length);
+  assert.equal(exaBodyChars("# Page\nURL: https://a.example\n\nError fetching https://b.example/x: CRAWL_NOT_FOUND"), 0);
+  assert.ok(exaBodyChars(fixture("search-highlights.txt")) > 200);
 });
 
 test("excerpt flattens markdown and cuts at a word boundary", () => {
@@ -201,6 +209,17 @@ test("callExaMcpRaw rejects malformed messages and surfaces JSON-RPC errors", as
   assert.throws(() => exaMcpText(value), /Exa MCP error -32000: rate limit/);
 });
 
+test("listExaMcpTools reads tool names, arguments and required fields", async () => {
+  const tools: unknown = JSON.parse(fixture("tools-list.json"));
+  const { value, calls } = await withMockExa(() => sse(tools), () => listExaMcpTools());
+
+  assert.deepEqual(calls, [{ method: "tools/list", params: {} }]);
+  assert.deepEqual(value, [
+    { name: "web_search_exa", arguments: ["query", "numResults", "objective"], required: ["query", "objective"] },
+    { name: "web_fetch_exa", arguments: ["urls", "maxCharacters"], required: ["urls"] }
+  ]);
+});
+
 test("extractWithExa returns page markdown with image metadata", async () => {
   const { value, calls } = await withMockExa(() => sse(toolText(fixture("fetch-batch.txt"))), () => extractWithExa("https://docs.example.com/widgetry/cache"));
 
@@ -218,4 +237,52 @@ test("extractWithExa reports crawl errors as fetch errors", async () => {
   );
   assert.equal(value.content, "");
   assert.equal(value.error, "Exa could not read the page: CRAWL_UNKNOWN_ERROR");
+});
+
+test("diagnoseExaArguments flags arguments that drift from tools/list", () => {
+  const tools = [{ name: "web_search_exa", arguments: ["query", "numResults", "objective"], required: ["query", "objective"] }];
+  assert.deepEqual(diagnoseExaArguments(tools, "web_search_exa", ["query", "numResults", "objective"]), []);
+  assert.deepEqual(diagnoseExaArguments(tools, "web_search_exa", ["query", "numResults", "livecrawl"]), [
+    "web_search_exa: srch sends \"livecrawl\", which tools/list does not list",
+    "web_search_exa: tools/list requires \"objective\", which srch does not send"
+  ]);
+  assert.deepEqual(diagnoseExaArguments(tools, "web_fetch_exa", ["urls"]), ["web_fetch_exa is missing from tools/list"]);
+});
+
+test("diagnoseExaReply warns when results lose text the reply carried", () => {
+  const lost = { tool: "web_search_exa", rawChars: 7053, bodyChars: 6400, items: 3, itemsWithText: 0, itemsMissingText: 3 };
+  assert.deepEqual(diagnoseExaReply(lost), ["web_search_exa: 3 of 3 results have no text, but the reply has 6400 characters of text"]);
+  assert.deepEqual(diagnoseExaReply({ ...lost, itemsWithText: 2, itemsMissingText: 0 }), []);
+  assert.deepEqual(diagnoseExaReply({ ...lost, items: 0, itemsWithText: 0, itemsMissingText: 0 }), ["web_search_exa: reply has 6400 characters of text, but srch parsed no results"]);
+});
+
+function exaServer(searchText: string): (call: McpCall) => Response {
+  return (call) => {
+    if (call.method === "tools/list") return sse(JSON.parse(fixture("tools-list.json")));
+    if (call.params.name === "web_fetch_exa") {
+      return sse(toolText("# Widgetry guide: cache settings\nURL: https://docs.example.com/widgetry/cache\n\nWidgetry keeps rendered widgets in memory."));
+    }
+    return sse(toolText(searchText));
+  };
+}
+
+test("inspectExa reports ok when schema and replies match srch", async () => {
+  const { value, calls } = await withMockExa(exaServer(fixture("search-highlights.txt")), () => inspectExa("widgetry cache"));
+
+  assert.equal(value.status, "ok", value.warnings.join("\n"));
+  assert.deepEqual(calls.map((call) => call.method === "tools/list" ? call.method : call.params.name), ["tools/list", "web_search_exa", "web_fetch_exa"]);
+  assert.equal(value.search?.items, 3);
+  assert.equal(value.search?.itemsWithText, 2);
+  assert.equal(value.search?.itemsMissingText, 0);
+  assert.equal(value.fetch?.url, "https://docs.example.com/widgetry/cache");
+  assert.equal(value.fetch?.itemsWithText, 1);
+});
+
+test("inspectExa warns when hits arrive without text the reply carried", async () => {
+  const summaries = ["Widgetry keeps rendered widgets in memory.", "Name every widget."];
+  const drifted = `Title: Widgetry guide\nURL: https://docs.example.com/widgetry/cache\nSummary: ${summaries[0]}\n\n---\n\nTitle: Widgetry tips\nURL: https://blog.example.org/posts/widgetry-tips\nSummary: ${summaries[1]}`;
+  const { value } = await withMockExa(exaServer(drifted), () => inspectExa("widgetry cache"));
+
+  assert.equal(value.status, "warn");
+  assert.deepEqual(value.warnings, [`web_search_exa: 2 of 2 results have no text, but the reply has ${summaries.join("").length} characters of text`]);
 });

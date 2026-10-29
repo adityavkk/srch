@@ -2,6 +2,7 @@
 import { getConfigSafe, setProvider, setSecret, setSecretRef, unsetField } from "./lib/config/commands.js";
 import { getConfigPath, loadConfig } from "./lib/core/config.js";
 import { inspectTools } from "./lib/cli/tools.js";
+import { formatExaInspect, inspectExa } from "./lib/cli/exa-inspect.js";
 import { CONFIG_HELP } from "./lib/cli/config-help.js";
 import { CODE_HELP, DOCS_HELP, FETCH_HELP, FLIGHTS_HELP, HISTORY_HELP, INSPECT_HELP, INSTALL_HELP, REWARDS_FLIGHTS_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
 import { TWITTER_HELP } from "./lib/cli/twitter-help.js";
@@ -246,9 +247,19 @@ async function main(): Promise<void> {
     }
 
     if (command === "inspect") {
-      if (flags.has("help") || rest[0] !== "tools") {
+      if (flags.has("help") || (rest[0] !== "tools" && rest[0] !== "exa")) {
         console.log(INSPECT_HELP);
         return;
+      }
+      if (rest[0] === "exa") {
+        const query = rest.slice(1).join(" ").trim() || undefined;
+        const report = await trace.span("inspect.exa", "exa mcp smoke check", async () => inspectExa(query));
+        return emitSuccess({
+          command: ["inspect", "exa"],
+          kind: "inspect",
+          data: { ...report, trace: trace.snapshot() },
+          text: formatExaInspect(report)
+        }, { asJson, outPath });
       }
       const result = await trace.span("inspect", "collect tool diagnostics", async () => inspectTools());
       return emitSuccess({

@@ -311,13 +311,20 @@ export const INSPECT_HELP = `search inspect — diagnostics
 
 Usage:
   search inspect tools [--json] [--verbose]
+  search inspect exa [query...] [--json]
 
 Examples:
   search inspect tools
   search inspect tools --json
   search inspect tools --verbose
+  search inspect exa
 
-JSON:
+inspect exa:
+  live smoke check of Exa's free MCP (3 calls)
+  warns when srch's arguments drift from tools/list
+  warns when results come back without text although the reply has text
+
+JSON (tools):
   - providers
   - secretResolution (redacted source only)
   - geminiWeb profile diagnostics
@@ -325,4 +332,10 @@ JSON:
   - docs backend/db
   - code backend
   - runtime
+
+JSON (exa):
+  - status: ok | warn
+  - warnings[]
+  - tools[]: name, arguments, required
+  - search, fetch: rawChars, bodyChars, items, itemsWithText, itemsMissingText
 `;

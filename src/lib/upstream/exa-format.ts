@@ -22,8 +22,10 @@ export type ExaFetchedPage =
 
 const FIELD_LINE = /^([A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*)?):(?: (.*))?$/;
 const BODY_MARKERS = new Set(["Highlights", "Text"]);
+const METADATA_KEYS = new Set(["Title", "URL", "Published", "Published Date", "Author"]);
 const FETCH_FIELDS = new Set(["Published", "Published Date", "Author"]);
 const FETCH_ERROR = /^Error fetching (\S+): (.*)$/;
+const SEPARATOR = /^-{3,}$/;
 
 function lines(text: string): string[] {
   return text.replace(/\r\n/g, "\n").split("\n");
@@ -96,6 +98,19 @@ export function parseExaSearchResults(text: string): ExaSearchHit[] {
 
 function isFetchPageStart(all: string[], index: number): boolean {
   return all[index].startsWith("# ") && (all[index + 1]?.startsWith("URL: ") ?? false);
+}
+
+// Characters outside known metadata, separators and error lines: the text a parser should keep.
+// Unknown "Key: value" lines count, so text moved into a new field still shows up as drift.
+export function exaBodyChars(text: string): number {
+  const all = lines(text);
+  return all.reduce((total, line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed || SEPARATOR.test(trimmed) || FETCH_ERROR.test(line) || isFetchPageStart(all, index)) return total;
+    const field = FIELD_LINE.exec(line);
+    if (!field) return total + trimmed.length;
+    return METADATA_KEYS.has(field[1]) ? total : total + (field[2] ?? "").trim().length;
+  }, 0);
 }
 
 function parseFetchSection(section: string[]): ExaFetchedPage {

@@ -14,6 +14,12 @@ export interface ExaMcpResponse {
   };
 }
 
+export interface ExaMcpTool {
+  name: string;
+  arguments: string[];
+  required: string[];
+}
+
 function isOptional(value: unknown, type: "string" | "number" | "boolean"): boolean {
   return value === undefined || typeof value === type;
 }
@@ -77,4 +83,27 @@ export function exaMcpText(response: ExaMcpResponse): string {
   const text = response.result?.content?.find((item) => item.type === "text" && item.text?.trim())?.text;
   if (!text) throw new Error("Exa MCP returned empty content");
   return text;
+}
+
+function readTool(value: unknown): ExaMcpTool[] {
+  if (!isRecord(value) || typeof value.name !== "string") return [];
+  const schema: Record<string, unknown> = isRecord(value.inputSchema) ? value.inputSchema : {};
+  return [{
+    name: value.name,
+    arguments: isRecord(schema.properties) ? Object.keys(schema.properties) : [],
+    required: Array.isArray(schema.required) ? schema.required.filter((item: unknown): item is string => typeof item === "string") : []
+  }];
+}
+
+export async function listExaMcpTools(signal?: AbortSignal): Promise<ExaMcpTool[]> {
+  for (const message of await postExaMcp("tools/list", {}, signal)) {
+    if (!isRecord(message)) continue;
+    if (isRecord(message.error)) {
+      throw new Error(`Exa MCP error: ${typeof message.error.message === "string" ? message.error.message : "Unknown error"}`);
+    }
+    if (isRecord(message.result) && Array.isArray(message.result.tools)) {
+      return message.result.tools.flatMap(readTool);
+    }
+  }
+  throw new Error("Exa MCP returned no tool list");
 }
