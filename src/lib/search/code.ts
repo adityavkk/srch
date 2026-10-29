@@ -4,6 +4,7 @@ import { resolveSecret } from "../core/secrets.js";
 import { activityMonitor } from "../core/activity.js";
 import { errorMessage, withTimeout } from "../core/http.js";
 import { callExaMcpRaw, exaMcpText } from "../upstream/exa-mcp.js";
+import { EXA_SEARCH_TOOL, exaSearchArguments, type ExaSearchArguments } from "../upstream/exa.js";
 
 const EXA_CONTEXT_URL = "https://api.exa.ai/context";
 
@@ -69,9 +70,16 @@ async function searchViaContextApi(query: string, maxTokens: number, signal?: Ab
   }
 }
 
+export function exaCodeSearchArguments(query: string, maxTokens: number): ExaSearchArguments {
+  return exaSearchArguments(`${query} site:github.com OR site:stackoverflow.com OR programming`, {
+    numResults: Math.min(Math.ceil(maxTokens / 500), 10),
+    objective: query
+  });
+}
+
 async function searchViaMcp(query: string, maxTokens: number, signal?: AbortSignal): Promise<{ text: string; native: { provider: "exa-mcp"; request: unknown; response: unknown } }> {
-  const request = { query: `${query} site:github.com OR site:stackoverflow.com OR programming`, numResults: Math.min(Math.ceil(maxTokens / 500), 10) };
-  const response = await callExaMcpRaw("web_search_exa", request, signal);
+  const request = exaCodeSearchArguments(query, maxTokens);
+  const response = await callExaMcpRaw(EXA_SEARCH_TOOL, request, signal);
   return { text: exaMcpText(response), native: { provider: "exa-mcp", request, response } };
 }
 

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { diagnoseExaArguments, diagnoseExaReply, inspectExa } from "../src/lib/cli/exa-inspect.js";
 import { isRecord } from "../src/lib/core/guards.js";
 import { extractWithExa } from "../src/lib/fetch/exa.js";
+import { exaCodeSearchArguments } from "../src/lib/search/code.js";
 import { exaBodyChars, excerpt, parseExaFetchResults, parseExaSearchResults } from "../src/lib/upstream/exa-format.js";
 import { callExaMcpRaw, exaMcpText, listExaMcpTools } from "../src/lib/upstream/exa-mcp.js";
 import { mapExaSearchHits, searchWithExa } from "../src/lib/upstream/exa.js";
@@ -167,6 +168,14 @@ test("searchWithExa passes an explicit objective", async () => {
   assert.deepEqual(calls[0]?.params, {
     name: "web_search_exa",
     arguments: { query: "widgetry cache", numResults: 3, objective: "the cache TTL setting and its default" }
+  });
+});
+
+test("code search's MCP fallback sends objective too", () => {
+  assert.deepEqual(exaCodeSearchArguments("react suspense cache", 5000), {
+    query: "react suspense cache site:github.com OR site:stackoverflow.com OR programming",
+    numResults: 10,
+    objective: "react suspense cache"
   });
 });
 
