@@ -349,7 +349,7 @@ Retrieval is organized into **domains**: stable, typed retrieval spaces. Each do
 | `web` | General web search | Exa, Brave, Perplexity, Gemini |
 | `code` | Code/library/API context | Exa Context, Context7, DeepWiki |
 | `docs` | Local indexed docs | QMD (BM25 + vector + reranking) |
-| `fetch` | Readable page extraction | Readability, Jina, Gemini URL |
+| `fetch` | Readable page extraction | Readability, Jina, Gemini URL, Exa |
 | `social` | Social/Twitter search | Bird (cookie auth) |
 | `flights` | Flight fares (optional) | Fli (Google Flights) |
 | `rewards-flights` | Award availability (optional) | Seats.aero |
@@ -369,8 +369,10 @@ if (result.kind === "success") {
     e.payload.kind;    // "search-result"  (literal type)
     e.payload.title;   // string
     e.payload.url;     // string
-    e.payload.snippet; // string
+    e.payload.snippet; // string -- short excerpt
     e.payload.content; // { kind: "inline"; text: string } | { kind: "none" }
+    e.payload.publishedDate; // string | undefined
+    e.payload.author;  // string | undefined
     e.source;          // string  -- which backend produced this
     e.provenance;      // Provenance  -- web | api | local | clone
   }
@@ -378,11 +380,17 @@ if (result.kind === "success") {
 
 // pin a provider
 await client.run({ domain: "web", query: "bun sqlite", provider: "brave" });
+
+// steer Exa: what to rank first and pull out (defaults to the query)
+await client.run({ domain: "web", query: "bun sqlite", objective: "official docs on bun:sqlite prepared statements" });
 ```
+
+Exa's free MCP returns highlights for each hit. srch keeps them as `content` and builds `snippet` from them. With `includeContent: true`, srch also reads each hit with Exa's `web_fetch_exa` and puts the page text in `content`.
 
 ```bash
 search web "bun sqlite wasm"
 search web "react compiler" --provider brave --json
+search web "bun sqlite" --objective "official docs on prepared statements" --json
 ```
 
 ### Code
@@ -411,6 +419,8 @@ search code repo . "auth middleware"                    # local codebase
 ### Fetch
 
 Turn any URL into clean, readable content. GFM tables are preserved; image metadata is exposed as `images[]`.
+
+If the page fetch fails or returns no text, srch retries through Exa's crawler (`web_fetch_exa`, free). The evidence `source` then reads `exa-fetch`.
 
 ```ts
 // result: RunResult<FetchEvidencePayload>
@@ -689,6 +699,7 @@ search hooks install|uninstall|status  agent session hooks
 search install <target>                install optional domains
 search config                          config management
 search inspect tools                   backend diagnostics
+search inspect exa                     Exa MCP smoke check (schema drift, lost text)
 search history                         prior runs
 search ambient-context                 emit session context
 ```
@@ -704,7 +715,7 @@ With no arguments, `search` shows a compact status dashboard.
 | Web search | Exa (free MCP + paid API), Brave (free tier), Gemini (API + cookie fallback), Perplexity |
 | Code search | Exa Context API, Context7 (free), DeepWiki (free) |
 | Local docs | QMD SDK (BM25 + vector + reranking) |
-| Page extraction | Readability, Jina Reader, Gemini URL Context |
+| Page extraction | Readability, Jina Reader, Gemini URL Context, Exa (free MCP) |
 | Social | Bird SDK (Chrome/Safari cookie auth) |
 | Flights | Fli Python SDK (Google Flights) |
 | Rewards flights | Seats.aero API |
