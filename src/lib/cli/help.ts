@@ -277,12 +277,14 @@ Examples:
 
 Notes:
   - prefer search fetch
+  - if the page fetch fails or yields no text, srch retries through Exa's crawler (free)
   - tables are emitted as GFM markdown tables
   - use --download-images for durable/offline notes
   - use --describe-images for diagram-heavy pages
   - search fetch-content remains the canonical command name for skills/docs references
 
 JSON:
+  - source: fetch-content | exa-fetch
   - url
   - title
   - content

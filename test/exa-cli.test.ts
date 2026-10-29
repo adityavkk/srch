@@ -55,3 +55,12 @@ test("search web keeps Exa highlights as snippets", () => {
   assert.equal(at(results, 1, "author"), "Ada Example");
   assert.match(String(at(payload, "data", "answer")), /Widgetry keeps rendered widgets in memory/);
 });
+
+test("search fetch falls back to Exa when the page fetch fails", () => {
+  const result = runCli(["fetch", "https://mock.local/blocked", "--json"], { GEMINI_API_KEY: "test-key" });
+  assert.equal(result.status, 0, result.stderr);
+  const payload = jsonOutput(result.stdout);
+  assert.equal(at(payload, "data", "source"), "exa-fetch");
+  assert.equal(at(payload, "data", "title"), "Blocked Article");
+  assert.match(String(at(payload, "data", "content")), /arrives through the Exa fallback/);
+});

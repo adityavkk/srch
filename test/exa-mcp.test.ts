@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { isRecord } from "../src/lib/core/guards.js";
+import { extractWithExa } from "../src/lib/fetch/exa.js";
 import { excerpt, parseExaFetchResults, parseExaSearchResults } from "../src/lib/upstream/exa-format.js";
 import { callExaMcpRaw, exaMcpText } from "../src/lib/upstream/exa-mcp.js";
 import { mapExaSearchHits, searchWithExa } from "../src/lib/upstream/exa.js";
@@ -198,4 +199,23 @@ test("callExaMcpRaw rejects malformed messages and surfaces JSON-RPC errors", as
     () => callExaMcpRaw("web_search_exa", { query: "x" })
   );
   assert.throws(() => exaMcpText(value), /Exa MCP error -32000: rate limit/);
+});
+
+test("extractWithExa returns page markdown with image metadata", async () => {
+  const { value, calls } = await withMockExa(() => sse(toolText(fixture("fetch-batch.txt"))), () => extractWithExa("https://docs.example.com/widgetry/cache"));
+
+  assert.deepEqual(calls[0]?.params, { name: "web_fetch_exa", arguments: { urls: ["https://docs.example.com/widgetry/cache"], maxCharacters: 50_000 } });
+  assert.equal(value.error, null);
+  assert.equal(value.title, "Widgetry guide: cache settings");
+  assert.match(value.content, /# Cache settings/);
+  assert.deepEqual(value.images, [{ alt: "Cache flow diagram", src: "https://docs.example.com/img/cache-flow.png" }]);
+});
+
+test("extractWithExa reports crawl errors as fetch errors", async () => {
+  const { value } = await withMockExa(
+    () => sse(toolText("Error fetching https://broken.example.invalid/page: CRAWL_UNKNOWN_ERROR")),
+    () => extractWithExa("https://broken.example.invalid/page")
+  );
+  assert.equal(value.content, "");
+  assert.equal(value.error, "Exa could not read the page: CRAWL_UNKNOWN_ERROR");
 });

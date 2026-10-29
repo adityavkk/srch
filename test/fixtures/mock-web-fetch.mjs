@@ -13,9 +13,16 @@ function exaFixture(name) {
   return readFileSync(new URL(`./exa-mcp/${name}`, import.meta.url), "utf8");
 }
 
+// Pages served by the mocked web_fetch_exa tool. Other URLs get an error line.
+const exaPages = {
+  "https://mock.local/blocked": "# Blocked Article\nURL: https://mock.local/blocked\n\nThis text arrives through the Exa fallback because the page refuses plain HTTP clients."
+};
+
 function exaMcpResponse(body) {
   const request = JSON.parse(body);
-  const result = { content: [{ type: "text", text: exaFixture("search-highlights.txt") }] };
+  const result = { content: [{ type: "text", text: request.params.name === "web_fetch_exa"
+    ? request.params.arguments.urls.map((url) => exaPages[url] ?? `Error fetching ${url}: CRAWL_NOT_FOUND`).join("\n\n")
+    : exaFixture("search-highlights.txt") }] };
   return new Response(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n\n`, {
     status: 200,
     headers: { "content-type": "text/event-stream" }
@@ -27,6 +34,14 @@ globalThis.fetch = async (input, init) => {
 
   if (url === "https://mcp.exa.ai/mcp") {
     return exaMcpResponse(String(init?.body ?? "{}"));
+  }
+
+  if (url === "https://mock.local/blocked" || url.startsWith("https://r.jina.ai/https://mock.local/")) {
+    return new Response("Forbidden", { status: url.startsWith("https://r.jina.ai/") ? 404 : 403, statusText: "Forbidden" });
+  }
+
+  if (url.startsWith("https://generativelanguage.googleapis.com/") && String(init?.body ?? "").includes("https://mock.local/blocked")) {
+    return jsonResponse({ error: { message: "mock: url context unavailable" } }, { status: 500 });
   }
 
   if (url.startsWith("https://generativelanguage.googleapis.com/")) {

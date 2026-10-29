@@ -86,7 +86,7 @@ export async function runFetchCommand(url: string, options: { trace?: boolean; d
   const payload = firstPayload<FetchEvidencePayload>(result)!;
   return {
     kind: "ok",
-    data: { alias: "fetch", canonicalCommand: "fetch-content", url: payload.url, title: payload.title, content: payload.content, images: payload.images, trace: result.trace },
+    data: { alias: "fetch", canonicalCommand: "fetch-content", source: result.evidence[0].source, url: payload.url, title: payload.title, content: payload.content, images: payload.images, trace: result.trace },
     text: `# ${payload.title}\n\n${payload.content}`
   };
 }

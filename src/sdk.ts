@@ -57,6 +57,12 @@ export {
   type FetchEvidencePayload
 } from "./sdk/sources/fetch-content.js";
 export {
+  exaFetchSource,
+  createExaFetchSource,
+  type ExaFetchSourceDeps,
+  type ExaFetchSourceRequest
+} from "./sdk/sources/exa-fetch.js";
+export {
   seatsAeroSource,
   type SeatsAeroEvidencePayload,
   type SeatsAeroSourceRequest
@@ -94,7 +100,7 @@ export {
   docsDefaultStrategy,
   type DocsStrategyRequest
 } from "./sdk/strategies/docs-default.js";
-export { fetchDefaultStrategy } from "./sdk/strategies/fetch-default.js";
+export { fetchDefaultStrategy, type FetchStrategyRequest } from "./sdk/strategies/fetch-default.js";
 export {
   flightsDefaultStrategy,
   type FlightsStrategyRequest

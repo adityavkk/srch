@@ -4,6 +4,7 @@ import type { Context7EvidencePayload } from "./sources/context7.js";
 import type { DeepWikiEvidencePayload } from "./sources/deepwiki.js";
 import type { DocsEvidencePayload, DocsSourceRequest } from "./sources/docs-qmd.js";
 import type { ExaCodeEvidencePayload, ExaCodeSourceRequest } from "./sources/exa-code.js";
+import type { ExaFetchSourceRequest } from "./sources/exa-fetch.js";
 import type { ExaEvidencePayload, ExaSourceRequest } from "./sources/exa.js";
 import type { FetchEvidencePayload, FetchSourceRequest } from "./sources/fetch-content.js";
 import type { FliEvidencePayload, FliSourceRequest } from "./sources/fli.js";
@@ -127,6 +128,7 @@ export type SearchFn = {
   (sourceName: "docs-qmd", req: DocsSourceRequest): Promise<Evidence<DocsEvidencePayload>[]>;
   (sourceName: "exa", req: ExaSourceRequest): Promise<Evidence<ExaEvidencePayload>[]>;
   (sourceName: "exa-code", req: ExaCodeSourceRequest): Promise<Evidence<ExaCodeEvidencePayload>[]>;
+  (sourceName: "exa-fetch", req: ExaFetchSourceRequest): Promise<Evidence<FetchEvidencePayload>[]>;
   (sourceName: "fetch-content", req: FetchSourceRequest): Promise<Evidence<FetchEvidencePayload>[]>;
   (sourceName: "fli", req: FliSourceRequest): Promise<Evidence<FliEvidencePayload>[]>;
   (sourceName: "gemini", req: GeminiSourceRequest): Promise<Evidence<GeminiEvidencePayload>[]>;
