@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import os
 import sys
 from datetime import datetime
@@ -105,7 +106,9 @@ def normalize_offer(item: Any, offer_index: int, cabin_class: str, currency_fall
         segments = list(item)
         outbound = segments[0]
         inbound = segments[1] if len(segments) > 1 else None
-        price_segment = outbound if len(segments) == 2 else segments[-1]
+        # The outbound board is a minimum RT lead. The selected return row
+        # carries the total for this particular combination, not an add-on.
+        price_segment = segments[-1]
         total_duration_seconds = sum(int(segment.duration) * 60 for segment in segments)
         total_stops = sum(int(segment.stops) for segment in segments)
         offer_currency = price_segment.currency or currency_fallback
@@ -181,6 +184,9 @@ def run_search(payload: dict[str, Any]) -> dict[str, Any]:
     from fli.core.parsers import resolve_airport
     from fli.search import SearchFlights
     from fli.search._wire import parse_first_wrb_payload
+    if not hasattr(SearchFlights, "sparse_passenger_mix"):
+        raise RuntimeError("Fli is outdated. Run `search install flights` for the pinned search fix.")
+    from fli.search._tfs import build_tfs, page_url
 
     origin = payload["origin"].upper()
     destination = payload["destination"].upper()
@@ -224,14 +230,31 @@ def run_search(payload: dict[str, Any]) -> dict[str, Any]:
 
     search = SearchFlights()
     search.client = ValidatedFlightClient(search.client, parse_first_wrb_payload)
-    results = search.search(filters, currency=currency)
-    if not results:
-        offers: list[dict[str, Any]] = []
-    else:
-        offers = [normalize_offer(item, index + 1, cabin_class, currency) for index, item in enumerate(results)]
+    top_n = options.get("topN") or 5
+    results = search.search(filters, currency=currency, top_n=top_n)
+    offers = []
+    unpriced = []
+    for index, item in enumerate(results or []):
+        price_leg = item[-1] if isinstance(item, tuple) else item
+        booking_url = search.build_flight_booking_url(
+            item, currency=currency, seat_type=filters.seat_type,
+            passenger_info=filters.passenger_info,
+        )
+        if price_leg.price is None or not math.isfinite(price_leg.price) or price_leg.price <= 0:
+            legs = list(item) if isinstance(item, tuple) else [item]
+            unpriced.append({
+                "outbound": normalize_route(legs[0], cabin_class),
+                "inbound": normalize_route(legs[1], cabin_class) if len(legs) > 1 else None,
+                "booking_url": booking_url,
+            })
+            continue
+        offer = normalize_offer(item, index + 1, cabin_class, currency)
+        offer["booking_url"] = booking_url
+        offers.append(offer)
 
     if (options.get("sort") or "").lower() == "duration":
-        offers.sort(key=lambda offer: offer["outbound"]["total_duration_seconds"])
+        offers.sort(key=lambda offer: offer["outbound"]["total_duration_seconds"]
+                    + (offer["inbound"]["total_duration_seconds"] if offer["inbound"] else 0))
     else:
         offers.sort(key=lambda offer: offer["price"])
 
@@ -240,6 +263,16 @@ def run_search(payload: dict[str, Any]) -> dict[str, Any]:
         offers = offers[:limit]
 
     passenger_count = int(options.get("adults") or 1) + int(options.get("children") or 0) + int(options.get("infants") or 0)
+    warnings = []
+    if search.sparse_passenger_mix:
+        warnings.append("Google did not publish prices for this child/infant passenger mix. "
+                        "Availability is unknown; open search_url to check the exact party. "
+                        "An adults-only quote is not a family total.")
+    if unpriced:
+        warnings.append(f"{len(unpriced)} itineraries have no published price for the selected flights. "
+                        "No outbound minimum was substituted for a missing round-trip total.")
+    if filters.passenger_info.children or filters.passenger_info.infants_on_lap:
+        warnings.append("Google may publish fewer fares for children or infants; results are not exhaustive.")
 
     return {
         "search_id": f"fli:{origin}:{destination}:{date_from}",
@@ -250,12 +283,21 @@ def run_search(payload: dict[str, Any]) -> dict[str, Any]:
         "currency": offers[0]["currency"] if offers else currency,
         "offers": offers,
         "total_results": len(offers),
+        "status": "priced" if offers else ("pricing_unavailable" if search.sparse_passenger_mix or unpriced else "empty"),
+        "warnings": warnings,
+        "search_url": page_url(build_tfs(filters), currency=currency),
+        "unpriced_count": len(unpriced),
+        "unpriced_itineraries": unpriced[:limit] if isinstance(limit, int) and limit > 0 else unpriced,
         "search_params": {
             "dateFrom": date_from,
             **options,
             "requestedCabinClass": cabin_class,
+            "expandedOutboundLimit": top_n if return_date else None,
         },
-        "pricing_note": "Fli Google Flights search",
+        "pricing_note": "Google Flights discovery prices for the exact requested party; not checkout-confirmed. "
+                        + (f"Expanded up to {top_n} outbound candidates. "
+                           "Selected return-row prices are whole-trip totals, not amounts to add to outbound leads."
+                           if return_date else "One-way totals."),
     }
 
 
@@ -316,4 +358,4 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except Exception as exc:
         print(str(exc), file=sys.stderr)
-        raise
+        raise SystemExit(1)

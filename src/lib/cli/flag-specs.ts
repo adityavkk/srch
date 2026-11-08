@@ -68,6 +68,7 @@ const COMMAND_FLAGS: Record<string, FlagSchema> = {
     infants: "string",
     cabin: "string",
     "max-stopovers": "string",
+    "top-n": "string",
     currency: "string",
     limit: "string",
     sort: "string"

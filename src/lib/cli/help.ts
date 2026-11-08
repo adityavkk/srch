@@ -154,11 +154,12 @@ Search flags:
   --return <date>            return date YYYY-MM-DD
   --adults <n>               adult passengers
   --children <n>             child passengers
-  --infants <n>              infant passengers
+  --infants <n>              lap infants (at most one per adult)
   --cabin <M|W|C|F>          cabin class
-  --max-stopovers <n>        maximum stopovers
+  --max-stopovers <0|1|2>    maximum stopovers; omit for any
   --currency <code>          fare currency
-  --limit <n>                max offers returned
+  --limit <n>                max priced offers returned
+  --top-n <1..10>            outbound candidates expanded for round trips (default 5)
   --sort <price|duration>    offer sort order
 
 Examples:
@@ -168,6 +169,10 @@ Examples:
 
 Notes:
   - Fli is a Python SDK/CLI for Google Flights-style search
+  - prices are for the requested party, not checkout-confirmed
+  - round trips use the selected return's total, not an outbound minimum
+  - unpriced itineraries retain links; child/infant pricing gaps are explicit
+  - no adult-only passenger substitution is performed
   - srch drops zero-price/invalid cash offers before ranking results
   - install it on demand with \`search install flights\`
   - \`resolve\` matches against Fli's bundled airport data

@@ -8,7 +8,8 @@ import { TWITTER_HELP } from "./lib/cli/twitter-help.js";
 import { emitFailure, emitSuccess } from "./lib/cli/emit.js";
 import type { SearchProvider } from "./lib/core/types.js";
 import { docsAddCollection, docsEmbed, docsListCollections, docsStatus, docsUpdate } from "./lib/docs/qmd.js";
-import { formatFlightLocationsText, formatFlightSearchText, resolveFlightLocation, searchFlights, type FliFlightSearchOptions } from "./lib/flights/fli.js";
+import { formatFlightLocationsText, formatFlightSearchText, resolveFlightLocation, searchFlights } from "./lib/flights/fli.js";
+import { parseFlightSearchOptions } from "./lib/cli/flight-options.js";
 import { listHistory, addHistory } from "./lib/history/store.js";
 import { buildInstallPlan, executeInstallPlan, isOptionalInstallTarget, renderInstallPlan } from "./lib/install/optional.js";
 import { formatRewardsFlightSearchText, formatRewardsRoutesText, formatRewardsTripsText, getRewardFlightRoutes, getRewardFlightTrips, searchRewardFlights, type RewardsCabin, type RewardsFlightSearchOptions } from "./lib/rewards-flights/seats-aero.js";
@@ -40,24 +41,6 @@ function currentAmbientCommand(): string {
   if (script.endsWith(".ts")) return `\"${process.execPath}\" --import tsx \"${script}\" ambient-context`;
   if (script.endsWith(".js")) return `\"${process.execPath}\" \"${script}\" ambient-context`;
   return `\"${script}\" ambient-context`;
-}
-
-function parseFlightSearchOptions(flags: Map<string, FlagValue>): FliFlightSearchOptions {
-  const cabin = getStringFlag(flags, "cabin");
-  const sort = getStringFlag(flags, "sort");
-  const returnDate = getStringFlag(flags, "return") ?? getStringFlag(flags, "return-date");
-  const currency = getStringFlag(flags, "currency")?.toUpperCase();
-  return {
-    returnDate,
-    adults: getNumberFlag(flags, "adults"),
-    children: getNumberFlag(flags, "children"),
-    infants: getNumberFlag(flags, "infants"),
-    cabinClass: cabin === "M" || cabin === "W" || cabin === "C" || cabin === "F" ? cabin : undefined,
-    maxStopovers: getNumberFlag(flags, "max-stopovers"),
-    currency,
-    limit: getNumberFlag(flags, "limit"),
-    sort: sort === "price" || sort === "duration" ? sort : undefined
-  };
 }
 
 function parseRewardsFlightSearchOptions(originAirport: string, destinationAirport: string, flags: Map<string, FlagValue>): RewardsFlightSearchOptions {

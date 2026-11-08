@@ -1,4 +1,4 @@
-import { searchFlights, type FlightOffer, type FliFlightSearchOptions, type FlightSearchResult } from "../../lib/flights/fli.js";
+import { searchFlights, FlightPricingUnavailableError, type FlightOffer, type FliFlightSearchOptions, type FlightSearchResult } from "../../lib/flights/fli.js";
 import { defineSource } from "../define.js";
 import type { Source, SourceRequest } from "../types.js";
 
@@ -25,6 +25,12 @@ export const fliSource: Source<FliSourceRequest, FliEvidencePayload> = defineSou
   async run(req, ctx) {
     ctx.trace.step("source.fli", `${req.origin}-${req.destination}`, { dateFrom: req.dateFrom });
     const result = await searchFlights(req.origin, req.destination, req.dateFrom, req.options);
+    if (!result.result.offers.length && result.result.status === "pricing_unavailable") {
+      throw new FlightPricingUnavailableError(
+        result.result.warnings?.join(" ") || "Prices are unavailable for the requested party; seat availability is unknown.",
+        result.result.search_url
+      );
+    }
     return result.result.offers.map((offer, index) => ({
       source: "fli",
       domain: "flights",

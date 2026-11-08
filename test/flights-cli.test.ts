@@ -67,6 +67,24 @@ test("search flights surfaces requested passenger count", () => {
   assert.equal(payload.data?.result.passenger_ids.length, 6);
 });
 
+test("unpriced family search preserves the exact party and explains the limitation", () => {
+  const args = ["flights", "JFK", "CUN", "2026-11-25", "--return", "2026-12-02", "--adults", "2", "--children", "1", "--infants", "1", "--cabin", "C"];
+  const env = { SRCH_FLI_FIXTURE: resolve(here, "fixtures/fli-unpriced.py") };
+  const result = runCli([...args, "--json"], env);
+  assert.equal(result.status, 0, result.stderr);
+  const search = parseJson(result.stdout).data?.result;
+  assert.equal(search.status, "pricing_unavailable");
+  assert.equal(search.search_params.adults, 2);
+  assert.equal(search.search_params.children, 1);
+  assert.equal(search.search_params.infants, 1);
+  assert.equal(search.offers.length, 0);
+  assert.ok(search.search_url);
+  const text = runCli(args, env);
+  assert.match(text.stdout, /Pricing unavailable/);
+  assert.match(text.stdout, /No price returned for the requested party/);
+  assert.doesNotMatch(text.stdout, /Pricing returned for: 4/);
+});
+
 test("search flights resolve returns Fli airport suggestions", () => {
   const result = runCli(["flights", "resolve", "berlin", "--json"]);
   assert.equal(result.status, 0, result.stderr);

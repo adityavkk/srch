@@ -54,6 +54,25 @@ PyPI `flights` 0.9.0 predates that fix. Do not replace the pinned installation w
 
 The public page can still omit fares for children and infants, particularly in business class. No rows for that passenger mix do not establish that seats are unavailable. Browser-based checks and airline checkout remain separate steps; an adults-only quote is not a substitute for a family total.
 
+### Price semantics and incomplete results
+
+- Prices cover the exact requested party. Infants are on laps. The CLI never silently substitutes adults or omits infants.
+- A round-trip outbound row is a minimum lead, not a price for every possible return. The bridge uses the selected return row's whole-trip total. It does not add the two row prices or fall back to the outbound lead when the return price is missing.
+- Each priced offer includes a Google Flights itinerary link carrying the same passenger mix and cabin. It is a discovery quote, not a verified airline checkout offer.
+- `--top-n 1..10` controls how many outbound candidates are expanded; default 5. `--limit` caps the returned priced offers. Neither guarantees an exhaustive search. Duration sorting covers both directions.
+- JSON `status` is `priced`, `empty`, or `pricing_unavailable`. An incomplete result includes `warnings` and `search_url`; schedules without prices remain in `unpriced_itineraries`, separate from priced `offers`.
+- The SDK's flights strategy reports `flight_pricing_unavailable` rather than discarding this diagnosis as an empty result. Its suggestion links to the exact requested search.
+
+Example family search:
+
+```bash
+search flights JFK CUN 2026-11-25 --return 2026-12-02 \
+  --adults 2 --children 1 --infants 1 --cabin C \
+  --max-stopovers 0 --top-n 10 --currency USD --json
+```
+
+If it returns `pricing_unavailable`, open `search_url` or confirm the party with the airline. Do not interpret an adult-only schedule check as the family fare.
+
 `npm run build` copies the Python bridge into `dist`, alongside the compiled CLI. Regression tests cover both source and built entry points, plus the distinction between a missing payload and valid empty inventory.
 
 ## End-to-end journey

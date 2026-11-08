@@ -1,6 +1,6 @@
 import { defineStrategy } from "../define.js";
 import type { ProviderAttempt, RunResult, StaticStrategy, StrategyRequest } from "../types.js";
-import type { FliFlightSearchOptions } from "../../lib/flights/fli.js";
+import { FlightPricingUnavailableError, type FliFlightSearchOptions } from "../../lib/flights/fli.js";
 
 export type FlightsStrategyRequest = StrategyRequest & {
   options?: FliFlightSearchOptions;
@@ -30,7 +30,10 @@ export const flightsDefaultStrategy: StaticStrategy<FlightsStrategyRequest> = de
       }
       return { kind: "success", domain: "flights", strategy: "flights/default", evidence: [evidence[0]!, ...evidence.slice(1)], summary: { totalEvidence: evidence.length, sourceBreakdown: { fli: evidence.length }, attempts, durationMs: Date.now() - startedAt }, trace: [] };
     } catch (error) {
-      return { kind: "error", domain: "flights", strategy: "flights/default", error: { code: "flights_unavailable", message: error instanceof Error ? error.message : String(error) }, trace: [], suggestions: ["Run `search install flights` to install the optional backend"] };
+      if (error instanceof FlightPricingUnavailableError) {
+        return { kind: "error", domain: "flights", strategy: "flights/default", error: { code: error.code, message: error.message }, trace: [], suggestions: [error.searchUrl ? `Check the exact party in a browser: ${error.searchUrl}` : "Check the exact party on the airline website; do not substitute adult-only prices"] };
+      }
+      return { kind: "error", domain: "flights", strategy: "flights/default", error: { code: "flights_unavailable", message: error instanceof Error ? error.message : String(error) }, trace: [], suggestions: ["Check the reported error; use `search install flights` if the backend is missing or outdated"] };
     }
   }
 });

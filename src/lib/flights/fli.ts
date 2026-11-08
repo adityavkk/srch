@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { activityMonitor } from "../core/activity.js";
 import { fliPython, FLI_REVISION } from "./runtime.js";
+import { validateFlightSearch } from "./validation.js";
 
 const execFileAsync = promisify(execFile);
 const BRIDGE_PATH = fileURLToPath(new URL("./fli-bridge.py", import.meta.url));
@@ -16,6 +17,7 @@ export interface FliFlightSearchOptions {
   maxStopovers?: number;
   currency?: string;
   limit?: number;
+  topN?: number;
   sort?: "price" | "duration";
 }
 
@@ -68,6 +70,19 @@ export interface FlightSearchResult {
   total_results: number;
   search_params: Record<string, unknown>;
   pricing_note: string;
+  status?: "priced" | "empty" | "pricing_unavailable";
+  warnings?: string[];
+  search_url?: string;
+  unpriced_count?: number;
+  unpriced_itineraries?: Array<{ outbound: FlightRoute; inbound: FlightRoute | null; booking_url: string }>;
+}
+
+export class FlightPricingUnavailableError extends Error {
+  readonly code = "flight_pricing_unavailable";
+  constructor(message: string, readonly searchUrl?: string) {
+    super(message);
+    this.name = "FlightPricingUnavailableError";
+  }
 }
 
 export interface FlightsInspectResult {
@@ -155,6 +170,7 @@ export async function inspectFli(): Promise<FlightsInspectResult> {
 }
 
 export async function searchFlights(origin: string, destination: string, dateFrom: string, options: FliFlightSearchOptions = {}) {
+  validateFlightSearch(dateFrom, options);
   const activityId = activityMonitor.logStart({ type: "api", query: `fli:${origin}-${destination}` });
   try {
     const result = await runBridge<FlightSearchResult>({
@@ -171,6 +187,7 @@ export async function searchFlights(origin: string, destination: string, dateFro
       ...result,
       offers: validOffers,
       total_results: validOffers.length,
+      status: validOffers.length ? "priced" : result.status === "pricing_unavailable" ? "pricing_unavailable" : "empty",
       passenger_ids: Array.from({ length: requestedPassengers }, (_, index) => result.passenger_ids[index] ?? `pas_${index + 1}`),
       search_params: {
         ...result.search_params,
@@ -236,18 +253,22 @@ function formatRoute(route: FlightRoute): string {
 export function summarizeOffer(offer: FlightOffer): string {
   const airline = offer.owner_airline || offer.airlines[0] || "?";
   const cabin = offer.outbound.segments[0]?.cabin_class ? normalizeCabin(offer.outbound.segments[0].cabin_class) : "unknown";
-  return `${offer.price_formatted} | ${airline} | ${formatRoute(offer.outbound)} | ${cabin} | ${formatDuration(offer.outbound.total_duration_seconds)} | ${offer.outbound.stopovers} stop(s)`;
+  return `${offer.price_formatted} | ${airline} | ${formatRoute(offer.outbound)} | ${cabin} | ${formatDuration(offer.outbound.total_duration_seconds)} | ${offer.outbound.stopovers} stop(s)${offer.inbound ? ` | return ${formatRoute(offer.inbound)} | ${formatDuration(offer.inbound.total_duration_seconds)} | ${offer.inbound.stopovers} stop(s)` : ""}`;
 }
 
 export function formatFlightSearchText(result: FlightSearchResult, summaries: string[], bestOffer: FlightOffer | null): string {
   const requestedPassengers = typeof result.search_params.requestedPassengers === "number" ? result.search_params.requestedPassengers : result.passenger_ids.length;
   const lines = [
-    `${result.total_results} offers for ${result.origin} -> ${result.destination}`,
+    result.status === "pricing_unavailable"
+      ? `Pricing unavailable for ${result.origin} -> ${result.destination}; seat availability is unknown`
+      : `${result.total_results} priced offers for ${result.origin} -> ${result.destination}`,
     `Provider: Fli`,
     `Requested passengers: ${requestedPassengers}`,
-    `Pricing returned for: ${result.passenger_ids.length} passenger(s)`
+    result.offers.length ? `Pricing returned for: ${result.passenger_ids.length} passenger(s)` : "No price returned for the requested party"
   ];
   if (result.pricing_note) lines.push(`Pricing: ${result.pricing_note}`);
+  for (const warning of result.warnings ?? []) lines.push(`Warning: ${warning}`);
+  if (result.search_url) lines.push(`Search: ${result.search_url}`);
   if (bestOffer) lines.push(`Best: ${summarizeOffer(bestOffer)}`);
   if (summaries.length > 0) {
     lines.push("");
