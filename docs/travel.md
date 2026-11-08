@@ -1,5 +1,7 @@
 # srch travel workflow
 
+Contents: [Product boundary](#product-boundary) | [Install](#install) | [Agent verification](#agent-verification) | [End-to-end journey](#end-to-end-journey) | [Commands](#command-reference)
+
 `srch` is the research surface for travel.
 
 Use it to:
@@ -74,6 +76,29 @@ search flights JFK CUN 2026-11-25 --return 2026-12-02 \
 If it returns `pricing_unavailable`, open `search_url` or confirm the party with the airline. Do not interpret an adult-only schedule check as the family fare.
 
 `npm run build` copies the Python bridge into `dist`, alongside the compiled CLI. Regression tests cover both source and built entry points, plus the distinction between a missing payload and valid empty inventory.
+
+## Agent verification
+
+Use this sequence when a fare search fails or returns unexpected emptiness:
+
+1. Confirm the exact request and runtime. Read `search flights --help`; check the installed CLI, SDK module provenance, managed interpreter and pinned revision. A successful package import is not proof that the intended SDK was loaded.
+2. Separate a local failure from an upstream response. Missing bridge files, unsupported Python, transport errors and empty fare payloads need different fixes. Preserve the exact error without logging credentials or response headers.
+3. Run a positive control: a common route, valid future date, one adult, economy. Try another common route if the first is empty. Airport resolution alone cannot validate live fare retrieval. Keep diagnostic passenger changes separate from the user's quote.
+4. Check upstream before replacing anything. Compare the installed source with PyPI, release tags, current GitHub source and the actual fix linked from closed issues. A registry's latest release can be months behind a merged fix. Test an immutable revision without overwriting the working installation.
+5. Re-run the original request. A successful adult-only control establishes that the backend can retrieve fares, not that it can price a child/infant party. Retain explicit `pricing_unavailable` diagnostics and the exact-party search link when necessary.
+6. Verify both directions, requested currency, passenger basis and observation time. Label the evidence stage: departure-list lead, selected round-trip discovery total, displayed booking offer, or checkout-confirmed price. Generated links alone do not raise that confidence level.
+
+Regression cases from the backend repair:
+
+| Case | Required interpretation |
+|---|---|
+| Airport lookup succeeds; ordinary live searches return zero | Live pricing is not validated. Inspect the response and run controls before inferring availability. |
+| Registry release is broken; a search-restoring PR is merged | Test the merged source before proposing a replacement provider. |
+| Outbound lead is $547; selected return row is $593 | Report $593 for that combination, not $547 or $1,140. |
+| Three-adult business search returns a fare; exact family search has no inline prices | The adult quote is not the family total. Preserve the family-pricing limitation. |
+| `import "srch"` succeeds but `createClient` is missing | Wrong package or module path, not a failed search backend. |
+
+These are diagnosis and reporting checks, not live price guarantees. Positive controls and offline regression tests complement each other; neither makes search results exhaustive.
 
 ## End-to-end journey
 
