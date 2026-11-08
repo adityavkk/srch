@@ -5,6 +5,7 @@ import { dirname, resolve, join } from "node:path";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { FLI_MANAGED_PYTHON, FLI_REQUIREMENT, FLI_RUNTIME_DIR } from "../src/lib/flights/runtime.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..");
@@ -125,7 +126,7 @@ test("search flights returns a clear install hint when Fli is unavailable", () =
   const payload = parseJson(result.stderr);
   assert.equal(payload.ok, false);
   assert.match(payload.error?.message ?? "", /search install flights/);
-  assert.match(payload.error?.message ?? "", /pip install flights/);
+  assert.match(payload.error?.message ?? "", /managed runtime/);
 });
 
 test("search install flights dry-run returns a plan for optional Fli install", () => {
@@ -135,10 +136,10 @@ test("search install flights dry-run returns a plan for optional Fli install", (
   assert.equal(payload.ok, true);
   assert.deepEqual(payload.command, ["install", "flights"]);
   assert.equal(payload.data?.plan.steps.length, 2);
-  assert.equal(payload.data?.plan.steps[0].command, "python3");
-  assert.equal(payload.data?.plan.steps[0].id, "fli-python-version");
-  assert.match(payload.data?.plan.steps[0].args[1], /Python 3\.10\+/);
-  assert.deepEqual(payload.data?.plan.steps[1].args, ["-m", "pip", "install", "flights"]);
+  assert.equal(payload.data?.plan.steps[0].command, "uv");
+  assert.equal(payload.data?.plan.steps[0].id, "fli-python-runtime");
+  assert.deepEqual(payload.data?.plan.steps[0].args, ["venv", "--python", "3.12", "--allow-existing", FLI_RUNTIME_DIR]);
+  assert.deepEqual(payload.data?.plan.steps[1].args, ["pip", "install", "--python", FLI_MANAGED_PYTHON, FLI_REQUIREMENT]);
 });
 
 test("search install all dry-run includes Fli install", () => {
@@ -149,7 +150,17 @@ test("search install all dry-run includes Fli install", () => {
   assert.deepEqual(payload.command, ["install", "all"]);
   assert.equal(payload.data?.plan.globalInstall, true);
   assert.equal(payload.data?.plan.steps.length, 2);
-  assert.deepEqual(payload.data?.plan.steps[1].args, ["-m", "pip", "install", "flights"]);
+  assert.deepEqual(payload.data?.plan.steps[1].args, ["pip", "install", "--python", FLI_MANAGED_PYTHON, FLI_REQUIREMENT]);
+});
+
+test("flight install honors an explicit Python override without replacing it", () => {
+  const result = runCli(["install", "flights", "--dry-run", "--json"], { SRCH_FLI_PYTHON: "custom-python" });
+  assert.equal(result.status, 0, result.stderr);
+  const steps = parseJson(result.stdout).data?.plan.steps;
+  assert.equal(steps[0].command, "custom-python");
+  assert.match(steps[0].args[1], /Python 3\.10\+/);
+  assert.equal(steps[1].command, "custom-python");
+  assert.deepEqual(steps[1].args, ["-m", "pip", "install", FLI_REQUIREMENT]);
 });
 
 test("flight response validation distinguishes upstream failure from empty inventory", () => {

@@ -38,25 +38,21 @@ npm install
 npm run build
 ```
 
-Flights provider setup requires Python 3.10 or newer. The installer checks the interpreter before running pip. `SRCH_FLI_PYTHON` selects the interpreter for both installation and searches.
+Flights setup requires `uv` and Git on PATH:
 
 ```bash
 search install flights
 ```
 
-If the default Python is too old or system-managed, use an isolated environment with `uv`:
+The installer creates an isolated Python 3.12 environment under `~/.search/runtimes/flights/<revision>/`. Searches use it automatically; no shell configuration or system Python changes are needed. Repeating the install reuses the environment. `SRCH_FLI_PYTHON` remains an explicit override; that interpreter needs Python 3.10+ and pip, and installation targets it instead of the managed environment.
 
-```bash
-uv venv --python 3.12 "$HOME/.cache/srch/flights"
-uv pip install --python "$HOME/.cache/srch/flights/bin/python" flights
-export SRCH_FLI_PYTHON="$HOME/.cache/srch/flights/bin/python"
-```
+### Upstream version, verified November 8, 2026
 
-### Live-search limitation, verified November 8, 2026
+The backend is pinned to GitHub revision `881aee5ff4321e81ea2157cb44be94ce6a21dc1b`, including [search fix #230](https://github.com/punitarani/fli/pull/230). It reads embedded results from the public Google Flights page rather than calling the rejected RPC endpoint. Live one-adult searches and an adults-only business round trip returned fares through this version.
 
-Fli 0.9.0 receives Google RPC error 13 inside an HTTP-200 response on tested routes. Its parser treats the missing fare payload as an empty result. The srch bridge now rejects this response with an explicit error; it must not be interpreted as sold-out flights.
+PyPI `flights` 0.9.0 predates that fix. Do not replace the pinned installation with `pip install flights`: the published version receives RPC error 13 and can misreport that failure as no flights. The bridge rejects unusable RPC payloads rather than treating them as empty inventory.
 
-[Upstream issue #223](https://github.com/punitarani/fli/issues/223) attributes the rejection to a browser-generated signature tied to the request body. Installing a compatible Python fixes the runtime, not this upstream restriction. Airport lookup uses bundled data and can work while live pricing fails. Browser-based price checks remain a separate workflow; this CLI does not silently fall back to one.
+The public page can still omit fares for children and infants, particularly in business class. No rows for that passenger mix do not establish that seats are unavailable. Browser-based checks and airline checkout remain separate steps; an adults-only quote is not a substitute for a family total.
 
 `npm run build` copies the Python bridge into `dist`, alongside the compiled CLI. Regression tests cover both source and built entry points, plus the distinction between a missing payload and valid empty inventory.
 

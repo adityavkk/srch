@@ -2,10 +2,10 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { activityMonitor } from "../core/activity.js";
+import { fliPython, FLI_REVISION } from "./runtime.js";
 
 const execFileAsync = promisify(execFile);
 const BRIDGE_PATH = fileURLToPath(new URL("./fli-bridge.py", import.meta.url));
-const DEFAULT_PYTHON = process.env.SRCH_FLI_PYTHON?.trim() || "python3";
 
 export interface FliFlightSearchOptions {
   returnDate?: string;
@@ -76,9 +76,10 @@ export interface FlightsInspectResult {
   pythonCommand: string;
   installHint: string;
   docsHint: string;
+  expectedRevision: string;
 }
 
-const FLI_INSTALL_HINT = "Install the optional flights backend with `search install flights` or manually via `python3 -m pip install flights`.";
+const FLI_INSTALL_HINT = "Install the pinned flights backend with `search install flights` (requires uv). Set SRCH_FLI_PYTHON only to override the managed runtime. PyPI flights 0.9.0 lacks the search fix.";
 const FLI_DOCS_HINT = "Fli provides Google Flights search through its Python SDK: https://github.com/punitarani/fli";
 
 function isMissingFliRuntime(message: string): boolean {
@@ -98,7 +99,7 @@ function optionalInstallError(detail?: string): Error {
 async function canImportFli(): Promise<boolean> {
   if (process.env.SRCH_FLI_FIXTURE?.trim()) return true;
   try {
-    await execFileAsync(DEFAULT_PYTHON, ["-c", "import fli"], { timeout: 15_000, env: process.env });
+    await execFileAsync(fliPython(), ["-c", "from fli.search import SearchFlights; assert hasattr(SearchFlights, 'sparse_passenger_mix')"], { timeout: 15_000, env: process.env });
     return true;
   } catch {
     return false;
@@ -107,7 +108,7 @@ async function canImportFli(): Promise<boolean> {
 
 async function runBridge<T>(payload: Record<string, unknown>): Promise<T> {
   return await new Promise<T>((resolve, reject) => {
-    const child = spawn(DEFAULT_PYTHON, [BRIDGE_PATH], {
+    const child = spawn(fliPython(), [BRIDGE_PATH], {
       env: process.env,
       stdio: ["pipe", "pipe", "pipe"]
     });
@@ -146,9 +147,10 @@ export async function inspectFli(): Promise<FlightsInspectResult> {
   return {
     backend: "fli-sdk",
     packageInstalled: await canImportFli(),
-    pythonCommand: DEFAULT_PYTHON,
+    pythonCommand: fliPython(),
     installHint: FLI_INSTALL_HINT,
-    docsHint: FLI_DOCS_HINT
+    docsHint: FLI_DOCS_HINT,
+    expectedRevision: FLI_REVISION
   };
 }
 

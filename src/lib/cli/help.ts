@@ -127,7 +127,8 @@ Examples:
 Notes:
   - flights installs the Python package \`flights\`, which exposes the \`fli\` SDK
   - use this instead of remembering the individual setup commands
-  - for flights, \`--global\` is metadata only; install runs through the selected Python interpreter
+  - flights uses a managed Python runtime via uv; SRCH_FLI_PYTHON overrides it
+  - for flights, \`--global\` is metadata only; system Python is not changed by default
 `;
 
 export const FLIGHTS_HELP = `search flights — optional flight search via Fli
@@ -140,8 +141,9 @@ What it does:
 Install:
   search install flights
 
-Manual fallback:
-  python3 -m pip install flights
+Runtime:
+  Requires uv and Git. Installs the pinned upstream fix in an isolated Python 3.12 environment.
+  SRCH_FLI_PYTHON overrides the managed interpreter. PyPI 0.9.0 lacks the search fix.
 
 Usage:
   search flights <origin> <destination> <date> [flags]

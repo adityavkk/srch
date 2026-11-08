@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { FLI_MANAGED_PYTHON, FLI_REQUIREMENT, FLI_RUNTIME_DIR } from "../flights/runtime.js";
 
 export type OptionalInstallTarget = "flights" | "all";
 
@@ -42,19 +43,34 @@ export function buildInstallPlan(target: OptionalInstallTarget, globalInstall = 
   const steps: InstallStep[] = [];
 
   if (target === "flights" || target === "all") {
-    const python = process.env.SRCH_FLI_PYTHON?.trim() || "python3";
-    steps.push({
-      id: "fli-python-version",
-      title: "check Fli Python version",
-      command: python,
-      args: ["-c", "import sys; sys.exit('Fli requires Python 3.10+. Set SRCH_FLI_PYTHON to a compatible interpreter; see docs/travel.md.') if sys.version_info < (3, 10) else None"]
-    });
-    steps.push({
-      id: "fli-python-sdk",
-      title: "install Fli Python SDK",
-      command: python,
-      args: ["-m", "pip", "install", "flights"]
-    });
+    const python = process.env.SRCH_FLI_PYTHON?.trim();
+    if (python) {
+      steps.push({
+        id: "fli-python-version",
+        title: "check Fli Python version",
+        command: python,
+        args: ["-c", "import sys; sys.exit('Fli requires Python 3.10+. Unset SRCH_FLI_PYTHON to use the managed runtime.') if sys.version_info < (3, 10) else None"]
+      });
+      steps.push({
+        id: "fli-python-sdk",
+        title: "install pinned Fli Python SDK",
+        command: python,
+        args: ["-m", "pip", "install", FLI_REQUIREMENT]
+      });
+    } else {
+      steps.push({
+        id: "fli-python-runtime",
+        title: "create isolated Fli Python 3.12 runtime",
+        command: "uv",
+        args: ["venv", "--python", "3.12", "--allow-existing", FLI_RUNTIME_DIR]
+      });
+      steps.push({
+        id: "fli-python-sdk",
+        title: "install pinned Fli Python SDK",
+        command: "uv",
+        args: ["pip", "install", "--python", FLI_MANAGED_PYTHON, FLI_REQUIREMENT]
+      });
+    }
   }
 
   return {
@@ -122,7 +138,11 @@ function runStep(step: InstallStep, captureOutput: boolean): Promise<InstallStep
       });
     }
 
-    child.on("error", reject);
+    child.on("error", (error) => reject(new Error(
+      step.command === "uv"
+        ? `The managed flights runtime requires uv on PATH. ${error.message}`
+        : error.message
+    )));
     child.on("close", (code) => {
       resolve({
         id: step.id,
