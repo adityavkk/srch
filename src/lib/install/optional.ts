@@ -42,10 +42,17 @@ export function buildInstallPlan(target: OptionalInstallTarget, globalInstall = 
   const steps: InstallStep[] = [];
 
   if (target === "flights" || target === "all") {
+    const python = process.env.SRCH_FLI_PYTHON?.trim() || "python3";
+    steps.push({
+      id: "fli-python-version",
+      title: "check Fli Python version",
+      command: python,
+      args: ["-c", "import sys; sys.exit('Fli requires Python 3.10+. Set SRCH_FLI_PYTHON to a compatible interpreter; see docs/travel.md.') if sys.version_info < (3, 10) else None"]
+    });
     steps.push({
       id: "fli-python-sdk",
       title: "install Fli Python SDK",
-      command: process.env.SRCH_FLI_PYTHON?.trim() || "python3",
+      command: python,
       args: ["-m", "pip", "install", "flights"]
     });
   }

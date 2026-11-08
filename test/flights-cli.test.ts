@@ -11,8 +11,8 @@ const repoRoot = resolve(here, "..");
 const cliPath = resolve(repoRoot, "src/cli.ts");
 const fliFixturePath = resolve(repoRoot, "test/fixtures/fli-mock.py");
 
-function runCli(args: string[], env: NodeJS.ProcessEnv = {}) {
-  return spawnSync(process.execPath, ["--import", "tsx", cliPath, ...args], {
+function runCli(args: string[], env: NodeJS.ProcessEnv = {}, entryPoint = cliPath) {
+  return spawnSync(process.execPath, ["--import", "tsx", entryPoint, ...args], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -134,9 +134,11 @@ test("search install flights dry-run returns a plan for optional Fli install", (
   const payload = parseJson(result.stdout);
   assert.equal(payload.ok, true);
   assert.deepEqual(payload.command, ["install", "flights"]);
-  assert.equal(payload.data?.plan.steps.length, 1);
+  assert.equal(payload.data?.plan.steps.length, 2);
   assert.equal(payload.data?.plan.steps[0].command, "python3");
-  assert.deepEqual(payload.data?.plan.steps[0].args, ["-m", "pip", "install", "flights"]);
+  assert.equal(payload.data?.plan.steps[0].id, "fli-python-version");
+  assert.match(payload.data?.plan.steps[0].args[1], /Python 3\.10\+/);
+  assert.deepEqual(payload.data?.plan.steps[1].args, ["-m", "pip", "install", "flights"]);
 });
 
 test("search install all dry-run includes Fli install", () => {
@@ -146,8 +148,27 @@ test("search install all dry-run includes Fli install", () => {
   assert.equal(payload.ok, true);
   assert.deepEqual(payload.command, ["install", "all"]);
   assert.equal(payload.data?.plan.globalInstall, true);
-  assert.equal(payload.data?.plan.steps.length, 1);
-  assert.deepEqual(payload.data?.plan.steps[0].args, ["-m", "pip", "install", "flights"]);
+  assert.equal(payload.data?.plan.steps.length, 2);
+  assert.deepEqual(payload.data?.plan.steps[1].args, ["-m", "pip", "install", "flights"]);
+});
+
+test("flight response validation distinguishes upstream failure from empty inventory", () => {
+  const result = spawnSync(process.env.SRCH_FLI_PYTHON?.trim() || "python3", [resolve(here, "flights-bridge.test.py")], {
+    encoding: "utf8"
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("built CLI includes and executes the Python bridge", () => {
+  const build = spawnSync("npm", ["run", "build"], { cwd: repoRoot, encoding: "utf8" });
+  assert.equal(build.status, 0, build.stdout + build.stderr);
+  assert.equal(
+    readFileSync(resolve(repoRoot, "dist/lib/flights/fli-bridge.py"), "utf8"),
+    readFileSync(resolve(repoRoot, "src/lib/flights/fli-bridge.py"), "utf8")
+  );
+  const result = runCli(["flights", "JFK", "CUN", "2026-11-25", "--json"], {}, resolve(repoRoot, "dist/cli.js"));
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(parseJson(result.stdout).data?.bestOffer.id, "fli_best");
 });
 
 test("search install rejects unknown targets", () => {

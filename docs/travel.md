@@ -38,17 +38,27 @@ npm install
 npm run build
 ```
 
-Flights provider setup:
+Flights provider setup requires Python 3.10 or newer. The installer checks the interpreter before running pip. `SRCH_FLI_PYTHON` selects the interpreter for both installation and searches.
 
 ```bash
 search install flights
 ```
 
-Manual fallback:
+If the default Python is too old or system-managed, use an isolated environment with `uv`:
 
 ```bash
-python3 -m pip install flights
+uv venv --python 3.12 "$HOME/.cache/srch/flights"
+uv pip install --python "$HOME/.cache/srch/flights/bin/python" flights
+export SRCH_FLI_PYTHON="$HOME/.cache/srch/flights/bin/python"
 ```
+
+### Live-search limitation, verified November 8, 2026
+
+Fli 0.9.0 receives Google RPC error 13 inside an HTTP-200 response on tested routes. Its parser treats the missing fare payload as an empty result. The srch bridge now rejects this response with an explicit error; it must not be interpreted as sold-out flights.
+
+[Upstream issue #223](https://github.com/punitarani/fli/issues/223) attributes the rejection to a browser-generated signature tied to the request body. Installing a compatible Python fixes the runtime, not this upstream restriction. Airport lookup uses bundled data and can work while live pricing fails. Browser-based price checks remain a separate workflow; this CLI does not silently fall back to one.
+
+`npm run build` copies the Python bridge into `dist`, alongside the compiled CLI. Regression tests cover both source and built entry points, plus the distinction between a missing payload and valid empty inventory.
 
 ## End-to-end journey
 

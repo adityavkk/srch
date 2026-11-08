@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import importlib.util
 import json
 import os
@@ -147,6 +149,29 @@ def normalize_offer(item: Any, offer_index: int, cabin_class: str, currency_fall
     }
 
 
+class ValidatedFlightClient:
+    """Reject HTTP-200 error envelopes before Fli treats them as no inventory."""
+
+    def __init__(self, client, parse_payload):
+        self.client = client
+        self.parse_payload = parse_payload
+
+    def __getattr__(self, name):
+        return getattr(self.client, name)
+
+    def post(self, *args, **kwargs):
+        response = self.client.post(*args, **kwargs)
+        response.raise_for_status()
+        if self.parse_payload(response.text) is None:
+            raise RuntimeError(
+                "Google Flights returned no usable search payload "
+                f"(HTTP {response.status_code}). This may be an upstream error "
+                "or request block, not zero available flights. "
+                "See https://github.com/punitarani/fli/issues/223"
+            )
+        return response
+
+
 def run_search(payload: dict[str, Any]) -> dict[str, Any]:
     fixture = load_fixture_module()
     if fixture is not None:
@@ -155,6 +180,7 @@ def run_search(payload: dict[str, Any]) -> dict[str, Any]:
     from fli.models import FlightSearchFilters, FlightSegment, PassengerInfo, TripType
     from fli.core.parsers import resolve_airport
     from fli.search import SearchFlights
+    from fli.search._wire import parse_first_wrb_payload
 
     origin = payload["origin"].upper()
     destination = payload["destination"].upper()
@@ -196,7 +222,9 @@ def run_search(payload: dict[str, Any]) -> dict[str, Any]:
         show_all_results=True,
     )
 
-    results = SearchFlights().search(filters)
+    search = SearchFlights()
+    search.client = ValidatedFlightClient(search.client, parse_first_wrb_payload)
+    results = search.search(filters, currency=currency)
     if not results:
         offers: list[dict[str, Any]] = []
     else:
