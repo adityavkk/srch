@@ -4,11 +4,20 @@ export interface SearchResult {
   snippet: string;
 }
 
+export interface DocumentExtraction {
+  transport: "http" | "jina" | "gemini" | "github-api" | "github-clone";
+  completeness: "complete" | "partial" | "unknown";
+  warnings: string[];
+  generated: boolean;
+  pages?: { total: number; extracted: number };
+}
+
 export interface ExtractedContent {
   url: string;
   title: string;
   content: string;
   error: string | null;
+  extraction?: DocumentExtraction;
 }
 
 export interface SearchResponse {

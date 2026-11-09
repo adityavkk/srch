@@ -1,12 +1,14 @@
 import { fetchContent } from "../../lib/fetch/content.js";
 import { defineSource } from "../define.js";
 import type { Source, SourceRequest } from "../types.js";
+import type { DocumentExtraction } from "../../lib/core/types.js";
 
 export type FetchEvidencePayload = {
   kind: "document";
   url: string;
   title: string;
   content: string;
+  extraction: DocumentExtraction;
 };
 
 export const fetchContentSource: Source<SourceRequest, FetchEvidencePayload> = defineSource({
@@ -14,14 +16,22 @@ export const fetchContentSource: Source<SourceRequest, FetchEvidencePayload> = d
   domain: "fetch",
   capabilities: ["fetch", "extract"],
   traits: ["content-capable"],
-  transports: ["http|jina|gemini|github"],
+  transports: ["http", "jina", "gemini", "github-api", "github-clone"],
   async run(req, ctx) {
     ctx.trace.step("source.fetch-content", req.query);
-    const result = await fetchContent(req.query, req.signal);
+    const result = await fetchContent(req.query, req.signal, ctx);
+    req.signal?.throwIfAborted();
     if (result.error && !result.content.trim()) {
       throw new Error(result.error);
     }
+    if (!result.content.trim()) return [];
 
+    const extraction = result.extraction ?? {
+      transport: "http",
+      completeness: result.error ? "partial" : "unknown",
+      warnings: result.error ? [result.error] : [],
+      generated: false
+    } satisfies DocumentExtraction;
     return [{
       source: "fetch-content",
       domain: "fetch",
@@ -29,7 +39,7 @@ export const fetchContentSource: Source<SourceRequest, FetchEvidencePayload> = d
       provenance: {
         kind: "web",
         url: result.url,
-        transport: "http|jina|gemini|github",
+        transport: extraction.transport,
         timestamp: Date.now(),
         cached: false
       },
@@ -37,7 +47,8 @@ export const fetchContentSource: Source<SourceRequest, FetchEvidencePayload> = d
         kind: "document",
         url: result.url,
         title: result.title,
-        content: result.content
+        content: result.content,
+        extraction
       }
     }];
   }

@@ -75,10 +75,11 @@ export async function runFetchCommand(url: string, options: { trace?: boolean })
   }
 
   const payload = firstPayload<FetchEvidencePayload>(result)!;
+  const warnings = (payload.extraction?.warnings ?? []).map((warning) => `Warning: ${warning}`);
   return {
     kind: "ok",
-    data: { alias: "fetch", canonicalCommand: "fetch-content", url: payload.url, title: payload.title, content: payload.content, trace: result.trace },
-    text: `# ${payload.title}\n\n${payload.content}`
+    data: { alias: "fetch", canonicalCommand: "fetch-content", url: payload.url, title: payload.title, content: payload.content, extraction: payload.extraction, trace: result.trace },
+    text: [`# ${payload.title}`, ...warnings, payload.content].join("\n\n")
   };
 }
 

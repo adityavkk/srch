@@ -76,7 +76,7 @@ test("fetch-content declares the capabilities and transport it uses", () => {
     name: "fetch-content",
     domain: "fetch",
     capabilities: ["fetch", "extract"],
-    transports: ["http|jina|gemini|github"]
+    transports: ["http", "jina", "gemini", "github-api", "github-clone"]
   });
 });
 
@@ -87,7 +87,7 @@ test("fetch-content extracts a document into contract-conforming evidence", asyn
   const [item] = evidence;
   assert.equal(item?.provenance.kind, "web");
   if (item?.provenance.kind !== "web") throw new Error("expected web provenance");
-  assert.equal(item.provenance.transport, "http|jina|gemini|github");
+  assert.equal(item.provenance.transport, "http");
   assert.equal(item.provenance.url, ARTICLE_URL);
   assert.equal(item.payload.kind, "document");
   assert.equal(item.payload.url, ARTICLE_URL);

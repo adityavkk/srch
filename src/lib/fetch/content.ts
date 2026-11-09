@@ -2,8 +2,10 @@ import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
 import { activityMonitor } from "../core/activity.js";
-import { errorMessage, isAbortError, withTimeout } from "../core/http.js";
+import { errorMessage, withTimeout } from "../core/http.js";
 import type { ExtractedContent } from "../core/types.js";
+import { fetchWithContext, type WebSearchContext } from "../upstream/context.js";
+import { readResponseBytes, readResponseText } from "./body.js";
 import { extractWithUrlContext } from "./gemini-url-context.js";
 import { extractGitHub } from "./github.js";
 import { extractWithJinaReader } from "./jina.js";
@@ -26,17 +28,21 @@ function isLikelyJsRendered(html: string): boolean {
   return text.length < 500 && scriptCount > 3;
 }
 
-async function extractViaHttp(url: string, signal?: AbortSignal): Promise<ExtractedContent> {
+async function extractViaHttp(url: string, signal?: AbortSignal, context?: WebSearchContext): Promise<ExtractedContent> {
+  signal?.throwIfAborted();
   const activityId = activityMonitor.logStart({ type: "fetch", url });
+  const requestSignal = withTimeout(signal, 30_000);
+  const complete = { transport: "http", completeness: "complete", warnings: [] as string[], generated: false } as const;
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchWithContext(url, {
       headers: {
         "User-Agent": "Mozilla/5.0",
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
       },
-      signal: withTimeout(signal, 30_000)
-    });
+      signal: requestSignal
+    }, context);
+    requestSignal.throwIfAborted();
 
     if (!response.ok) {
       activityMonitor.logComplete(activityId, response.status);
@@ -45,14 +51,20 @@ async function extractViaHttp(url: string, signal?: AbortSignal): Promise<Extrac
 
     const contentType = response.headers.get("content-type") || "";
     if (isPdf(url, contentType)) {
-      const buffer = await response.arrayBuffer();
-      const result = await extractPdfToMarkdown(buffer, url);
+      const bytes = await readResponseBytes(response, requestSignal);
+      const result = await extractPdfToMarkdown(bytes.buffer, url, requestSignal);
       activityMonitor.logComplete(activityId, response.status);
       return {
         url,
         title: result.title,
-        content: `PDF extracted and saved to: ${result.outputPath}\n\nPages: ${result.pages}\nCharacters: ${result.chars}`,
-        error: null
+        content: result.content,
+        error: null,
+        extraction: {
+          ...complete,
+          completeness: result.warnings.length ? "partial" : "complete",
+          warnings: result.warnings,
+          pages: { total: result.pages, extracted: result.extractedPages }
+        }
       };
     }
 
@@ -61,11 +73,11 @@ async function extractViaHttp(url: string, signal?: AbortSignal): Promise<Extrac
       return { url, title: "", content: "", error: `Unsupported content type: ${contentType.split(";")[0]}` };
     }
 
-    const text = await response.text();
+    const text = await readResponseText(response, requestSignal);
     activityMonitor.logComplete(activityId, response.status);
 
     if (!contentType.includes("html")) {
-      return { url, title: new URL(url).hostname, content: text, error: null };
+      return { url, title: new URL(url).hostname, content: text, error: null, extraction: complete };
     }
 
     const { document } = parseHTML(text);
@@ -74,7 +86,7 @@ async function extractViaHttp(url: string, signal?: AbortSignal): Promise<Extrac
     // null/undefined, so treat a missing `content` the same as a null parse.
     if (!article || !article.content) {
       const rsc = extractRscContent(text);
-      if (rsc) return { url, title: rsc.title, content: rsc.content, error: null };
+      if (rsc) return { url, title: rsc.title, content: rsc.content, error: null, extraction: complete };
       return {
         url,
         title: "",
@@ -86,12 +98,14 @@ async function extractViaHttp(url: string, signal?: AbortSignal): Promise<Extrac
     const markdown = turndown.turndown(article.content);
     if (markdown.length < 200) {
       const rsc = extractRscContent(text);
-      if (rsc) return { url, title: rsc.title, content: rsc.content, error: null };
+      if (rsc) return { url, title: rsc.title, content: rsc.content, error: null, extraction: complete };
+      const warning = isLikelyJsRendered(text) ? "Page appears JavaScript-rendered" : "Extracted content appears incomplete";
       return {
         url,
         title: article.title || new URL(url).hostname,
         content: markdown,
-        error: isLikelyJsRendered(text) ? "Page appears JavaScript-rendered" : "Extracted content appears incomplete"
+        error: warning,
+        extraction: { ...complete, completeness: "partial", warnings: [warning] }
       };
     }
 
@@ -99,30 +113,33 @@ async function extractViaHttp(url: string, signal?: AbortSignal): Promise<Extrac
       url,
       title: article.title || new URL(url).hostname,
       content: markdown,
-      error: null
+      error: null,
+      extraction: complete
     };
   } catch (error) {
-    if (isAbortError(error)) {
-      activityMonitor.logComplete(activityId, 0);
-      return { url, title: "", content: "", error: "Aborted" };
-    }
     activityMonitor.logError(activityId, errorMessage(error));
+    signal?.throwIfAborted();
     return { url, title: "", content: "", error: errorMessage(error) };
   }
 }
 
-export async function fetchContent(url: string, signal?: AbortSignal): Promise<ExtractedContent> {
-  const githubResult = await extractGitHub(url, signal);
+export async function fetchContent(url: string, signal?: AbortSignal, context?: WebSearchContext): Promise<ExtractedContent> {
+  signal?.throwIfAborted();
+  const githubResult = await extractGitHub(url, signal, context);
+  signal?.throwIfAborted();
   if (githubResult) return githubResult;
 
-  const httpResult = await extractViaHttp(url, signal);
+  const httpResult = await extractViaHttp(url, signal, context);
+  signal?.throwIfAborted();
   if (!httpResult.error) return httpResult;
   if (NON_RECOVERABLE_ERRORS.some((prefix) => httpResult.error?.startsWith(prefix))) return httpResult;
 
-  const jinaResult = await extractWithJinaReader(url, signal);
+  const jinaResult = await extractWithJinaReader(url, signal, context);
+  signal?.throwIfAborted();
   if (jinaResult) return jinaResult;
 
-  const geminiResult = await extractWithUrlContext(url, signal);
+  const geminiResult = await extractWithUrlContext(url, signal, context);
+  signal?.throwIfAborted();
   if (geminiResult) return geminiResult;
 
   return httpResult;
