@@ -30,16 +30,32 @@ function successResult(req: CodeStrategyRequest, evidence: Evidence[], attempts:
 }
 
 function emptyResult(req: CodeStrategyRequest, attempts: ProviderAttempt[], startedAt: number): RunResult {
+  const summary = {
+    totalEvidence: 0,
+    sourceBreakdown: {},
+    attempts: [attempts[0]!, ...attempts.slice(1)] as [ProviderAttempt, ...ProviderAttempt[]],
+    durationMs: Date.now() - startedAt
+  };
+  if (attempts.some((attempt) => attempt.status === "failed")) {
+    const allFailed = attempts.every((attempt) => attempt.status === "failed");
+    return {
+      kind: "error",
+      domain: "code",
+      strategy: "code/default",
+      error: {
+        code: allFailed ? "code_unavailable" : "code_incomplete",
+        message: allFailed ? "No code search provider completed successfully" : "Some code search providers failed; completed providers returned no evidence"
+      },
+      summary,
+      trace: [],
+      suggestions: ["Check the failed providers in summary.attempts and retry"]
+    };
+  }
   return {
     kind: "empty",
     domain: "code",
     strategy: "code/default",
-    summary: {
-      totalEvidence: 0,
-      sourceBreakdown: {},
-      attempts: [attempts[0]!, ...attempts.slice(1)],
-      durationMs: Date.now() - startedAt
-    },
+    summary,
     trace: [],
     suggestions: [
       `Try adding a repo name to \"${req.query}\"`,
@@ -70,6 +86,7 @@ async function trySource<TRequest extends SourceRequest>(
     attempts.push({
       provider: sourceName,
       status: "failed",
+      transport,
       error: error instanceof Error ? error.message : String(error),
       durationMs: Date.now() - startedAt
     });

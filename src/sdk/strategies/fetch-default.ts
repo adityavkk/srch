@@ -13,7 +13,19 @@ export const fetchDefaultStrategy: StaticStrategy<StrategyRequest> = defineStrat
 
     try {
       const evidence = await ctx.search("fetch-content", { query: req.query, signal: req.signal });
-      const attempts: [ProviderAttempt] = [{ provider: "fetch-content", status: "success", transport: "http|jina|gemini|github", durationMs: Date.now() - startedAt, evidenceCount: evidence.length }];
+      const provenance = evidence[0]?.provenance;
+      const transport = provenance && "transport" in provenance ? provenance.transport : "fetch-content";
+      const attempts: [ProviderAttempt] = [{ provider: "fetch-content", status: "success", transport, durationMs: Date.now() - startedAt, evidenceCount: evidence.length }];
+      if (evidence.length === 0) {
+        return {
+          kind: "empty",
+          domain: "fetch",
+          strategy: "fetch/default",
+          summary: { totalEvidence: 0, sourceBreakdown: {}, attempts, durationMs: Date.now() - startedAt },
+          trace: [],
+          suggestions: ["Try an alternate URL or a different source"]
+        };
+      }
       return {
         kind: "success",
         domain: "fetch",

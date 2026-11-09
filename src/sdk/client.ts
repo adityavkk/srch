@@ -7,8 +7,11 @@ import { SourceRegistry } from "./registry.js";
 import { StrategyRegistry } from "./strategy.js";
 import type {
   AnySource,
+  ProviderAttempt,
+  RunError,
   RunRequest,
   RunResult,
+  RunSummary,
   SearchFn,
   SourceRequest,
   SrchStatus,
@@ -30,15 +33,20 @@ import type { SeatsAeroEvidencePayload } from "./sources/seats-aero.js";
 
 export type ClientSearch = SearchFn;
 
+type BuiltinDomain = "web" | "code" | "docs" | "fetch" | "social" | "flights" | "rewards-flights";
+type DomainRunRequest<TDomain extends string> = { domain: TDomain; strategy?: string };
+
 export type ClientRun = {
-  (req: { domain: "web" } & WebStrategyRequest): Promise<RunResult<WebEvidencePayload>>;
-  (req: { domain: "code" } & CodeStrategyRequest): Promise<RunResult<CodeTextEvidencePayload>>;
-  (req: { domain: "docs" } & DocsStrategyRequest): Promise<RunResult<DocsEvidencePayload>>;
-  (req: { domain: "fetch" } & RunRequest): Promise<RunResult<FetchEvidencePayload>>;
-  (req: { domain: "social" } & SocialStrategyRequest): Promise<RunResult<BirdEvidencePayload>>;
-  (req: { domain: "flights" } & FlightsStrategyRequest): Promise<RunResult<FliEvidencePayload>>;
-  (req: { domain: "rewards-flights" } & RewardsStrategyRequest): Promise<RunResult<SeatsAeroEvidencePayload>>;
-  <TRequest extends RunRequest>(req: TRequest): Promise<RunResult>;
+  (req: DomainRunRequest<"web"> & WebStrategyRequest): Promise<RunResult<WebEvidencePayload>>;
+  (req: DomainRunRequest<"code"> & CodeStrategyRequest): Promise<RunResult<CodeTextEvidencePayload>>;
+  (req: DomainRunRequest<"docs"> & DocsStrategyRequest): Promise<RunResult<DocsEvidencePayload>>;
+  (req: DomainRunRequest<"fetch"> & RunRequest): Promise<RunResult<FetchEvidencePayload>>;
+  (req: DomainRunRequest<"social"> & SocialStrategyRequest): Promise<RunResult<BirdEvidencePayload>>;
+  (req: DomainRunRequest<"flights"> & FlightsStrategyRequest): Promise<RunResult<FliEvidencePayload>>;
+  (req: DomainRunRequest<"rewards-flights"> & RewardsStrategyRequest): Promise<RunResult<SeatsAeroEvidencePayload>>;
+  <const TRequest extends RunRequest>(req: TRequest & (
+    Extract<BuiltinDomain, TRequest["domain"]> extends never ? unknown : never
+  )): Promise<RunResult>;
 };
 
 export type SrchClient = {
@@ -57,7 +65,7 @@ function toNonEmpty(items: string[]): [string, ...string[]] {
   return [items[0], ...items.slice(1)];
 }
 
-function makeError(req: RunRequest, code: string, message: string): RunResult {
+function makeError(req: RunRequest, code: string, message: string): RunError {
   return {
     kind: "error",
     domain: req.domain,
@@ -68,10 +76,39 @@ function makeError(req: RunRequest, code: string, message: string): RunResult {
   };
 }
 
-function validateDomainReferences(domains: DomainRegistry, strategies: StrategyRegistry): void {
-  for (const domain of domains.list()) {
-    strategies.get(domain.defaultStrategy);
+function resultProblem(result: RunResult, domain: string, strategy: string): string | undefined {
+  if (!result || !["success", "empty", "error"].includes(result.kind)) return "Strategy returned an unknown result kind";
+  if (result.domain !== domain || result.strategy !== strategy) return "Strategy returned a result for a different domain or strategy";
+  if (result.kind === "success" && (!Array.isArray(result.evidence) || result.evidence.length === 0
+    || result.evidence.some((item) => !item || typeof item !== "object" || item.domain !== domain
+      || typeof item.source !== "string" || typeof item.query !== "string" || !item.provenance || !("payload" in item)))) {
+    return "Successful results must contain nonempty, valid evidence";
   }
+  if (result.kind !== "error" && (!result.summary || !Array.isArray(result.summary.attempts)
+    || result.summary.attempts.length === 0 || result.summary.attempts.some((attempt) => !attempt)
+    || result.summary.totalEvidence !== (result.kind === "success" ? result.evidence.length : 0))) {
+    return "Result summary must describe its evidence and provider attempts";
+  }
+  if (result.kind === "error" && (!result.error || typeof result.error.code !== "string" || typeof result.error.message !== "string")) {
+    return "Error results must contain an error code and message";
+  }
+  return undefined;
+}
+
+// Stop waiting for noncooperative adapters without claiming their work stopped.
+function abortable<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted();
+  const pending = operation();
+  if (!signal) return pending;
+  return new Promise<T>((resolve, reject) => {
+    const aborted = () => { signal.removeEventListener("abort", aborted); reject(signal.reason); };
+    signal.addEventListener("abort", aborted, { once: true });
+    if (signal.aborted) aborted();
+    pending.then(
+      (value) => { signal.removeEventListener("abort", aborted); resolve(value); },
+      (error: unknown) => { signal.removeEventListener("abort", aborted); reject(error); }
+    );
+  });
 }
 
 export function createClient(options: CreateClientOptions = {}): SrchClient {
@@ -80,14 +117,13 @@ export function createClient(options: CreateClientOptions = {}): SrchClient {
   const strategies = new StrategyRegistry(resolved.strategies);
   const domains = new DomainRegistry(resolved.domains);
   const agentAdapters = new Map<string, AgentAdapter>((options.agentAdapters ?? [piMonoAgentAdapter]).map((adapter) => [adapter.name, adapter]));
-  validateDomainReferences(domains, strategies);
 
   const search = (async (sourceOrName: string | AnySource, req: SourceRequest) => {
     const source = typeof sourceOrName === "string"
       ? sources.get(sourceOrName)
       : sourceOrName;
 
-    return source.run(req as never, createSourceContext(options));
+    return abortable(() => source.run(req as never, createSourceContext(options)), req.signal);
   }) as ClientSearch;
 
   const run = (async (req: RunRequest) => {
@@ -99,21 +135,42 @@ export function createClient(options: CreateClientOptions = {}): SrchClient {
       }
 
       const strategyName = req.strategy ?? resolved.defaults?.strategy ?? domain.defaultStrategy;
+      const selectedRequest = { ...req, strategy: strategyName };
 
       let strategy;
       try {
         strategy = strategies.get(strategyName);
       } catch (error) {
-        return makeError(req, "unknown_strategy", error instanceof Error ? error.message : String(error));
+        return makeError(selectedRequest, "unknown_strategy", error instanceof Error ? error.message : String(error));
+      }
+      if (strategy.domain !== domain.name || !domain.strategies.includes(strategyName)) {
+        return makeError(selectedRequest, "invalid_strategy", `Strategy ${strategyName} is not registered for domain ${domain.name}`);
       }
 
       const context = createSourceContext(options);
+      const startedAt = Date.now();
+      const attempts: ProviderAttempt[] = [];
+      const activeAttempts = new Set<{ provider: string; startedAt: number }>();
       const strategySearch = (async (sourceOrName: string | AnySource, sourceReq: SourceRequest) => {
-        const source = typeof sourceOrName === "string"
-          ? sources.get(sourceOrName)
-          : sourceOrName;
-
-        return source.run(sourceReq as never, context);
+        const provider = typeof sourceOrName === "string" ? sourceOrName : sourceOrName.name;
+        const attemptStarted = Date.now();
+        const active = { provider, startedAt: attemptStarted };
+        activeAttempts.add(active);
+        try {
+          const source = typeof sourceOrName === "string" ? sources.get(sourceOrName) : sourceOrName;
+          const signal = req.signal && sourceReq.signal && req.signal !== sourceReq.signal
+            ? AbortSignal.any([req.signal, sourceReq.signal]) : req.signal ?? sourceReq.signal;
+          const evidence = await abortable(() => source.run({ ...sourceReq, signal } as never, context), signal);
+          const provenance = evidence[0]?.provenance;
+          const transport = provenance && "transport" in provenance ? provenance.transport : source.transports[0];
+          attempts.push({ provider, status: "success", transport, durationMs: Date.now() - attemptStarted, evidenceCount: evidence.length });
+          return evidence;
+        } catch (error) {
+          attempts.push({ provider, status: "failed", error: error instanceof Error ? error.message : String(error), durationMs: Date.now() - attemptStarted });
+          throw error;
+        } finally {
+          activeAttempts.delete(active);
+        }
       }) as SearchFn;
 
       const strategyContext: StrategyContext = {
@@ -124,17 +181,45 @@ export function createClient(options: CreateClientOptions = {}): SrchClient {
         merge
       };
 
-      const result = strategy.kind === "agentic"
-        ? await (() => {
-            const agent = agentAdapters.get(strategy.adapter);
-            if (!agent) {
-              return Promise.resolve(makeError(req, "unknown_agent_adapter", `Unknown agent adapter: ${strategy.adapter}`));
-            }
+      let result: RunResult | undefined;
+      let failure: unknown;
+      try {
+        req.signal?.throwIfAborted();
+        if (strategy.kind === "agentic") {
+          const agent = agentAdapters.get(strategy.adapter);
+          if (!agent) {
+            result = makeError(selectedRequest, "unknown_agent_adapter", `Unknown agent adapter: ${strategy.adapter}`);
+          } else {
             const agenticContext: AgenticStrategyContext = { ...strategyContext, agent };
-            return strategy.run(req as never, agenticContext);
-          })()
-        : await strategy.run(req as never, strategyContext);
-      return { ...result, trace: context.trace.snapshot() };
+            result = await abortable(() => strategy.run(req as never, agenticContext), req.signal);
+          }
+        } else {
+          result = await abortable(() => strategy.run(req as never, strategyContext), req.signal);
+        }
+      } catch (error) {
+        failure = error;
+      }
+
+      const reason = req.signal?.aborted ? req.signal.reason : failure;
+      const cancelled = req.signal?.aborted || reason instanceof Error && ["AbortError", "TimeoutError"].includes(reason.name);
+      const observedAttempts: ProviderAttempt[] = [...attempts, ...(cancelled ? [...activeAttempts].map((attempt): ProviderAttempt => ({
+        provider: attempt.provider, status: "failed", error: "Search was cancelled", durationMs: Date.now() - attempt.startedAt
+      })) : [])];
+      const observedSummary: RunSummary | undefined = observedAttempts.length > 0 ? {
+        totalEvidence: 0, sourceBreakdown: {}, attempts: [observedAttempts[0]!, ...observedAttempts.slice(1)], durationMs: Date.now() - startedAt
+      } : undefined;
+      const trace = [...new Set([...context.trace.snapshot(), ...(Array.isArray(result?.trace) ? result.trace : [])])];
+      const fail = (code: string, message: string, summary = result?.summary ?? observedSummary): RunResult => ({
+        ...makeError(selectedRequest, code, message), summary, trace
+      });
+      if (cancelled) {
+        const timedOut = reason instanceof Error && reason.name === "TimeoutError";
+        return fail(timedOut ? "timeout" : "aborted", timedOut ? "Search exceeded its time limit" : "Search was cancelled");
+      }
+      if (!result) return fail("strategy_failed", failure instanceof Error ? failure.message : failure === undefined ? "Strategy returned no result" : String(failure));
+      const problem = resultProblem(result, domain.name, strategyName);
+      if (problem) return fail("invalid_result", problem, observedSummary);
+      return { ...result, ...(result.kind === "error" && !result.summary && observedSummary ? { summary: observedSummary } : {}), trace };
     }) as ClientRun;
 
   return {

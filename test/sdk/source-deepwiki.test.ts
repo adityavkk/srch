@@ -65,20 +65,18 @@ test("deepwiki declares the capabilities and transport it uses", () => {
   });
 });
 
-// The code strategy fans out to exa-code, context7 and deepwiki; with the MCP
-// calls stubbed to fail none yields evidence, so the strategy degrades to a
-// typed RunEmpty rather than letting a source error escape.
-test("deepwiki empty path surfaces a typed RunEmpty without throwing out of the source", async () => {
+// Transport failures must remain errors even when another provider returns no evidence.
+test("deepwiki provider outage surfaces a typed RunError", async () => {
   globalThis.fetch = (async () =>
     new Response("upstream boom", { status: 500, statusText: "Server Error" })) as typeof fetch;
   const client = createClient({ config: { modules: [coreModule] } });
 
   const result = await assertTypedFailure(
     () => client.run({ domain: "code", query: "oven-sh/bun obscure symbol" }),
-    { kind: "empty", domain: "code" }
+    { kind: "error", domain: "code" }
   );
 
-  assert.equal(result.kind, "empty");
+  assert.equal(result.kind, "error");
 });
 
 test("deepwiki maps a repo answer into contract-conforming evidence", async () => {

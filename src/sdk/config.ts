@@ -59,7 +59,8 @@ export function createSourceContext(options: CreateClientOptions = {}): SourceCo
   return {
     secrets: options.secrets ?? defaultSecrets,
     trace: createTraceSink(options.trace ?? false),
-    http: options.http ?? defaultHttp
+    http: options.http ?? defaultHttp,
+    allowLocalGitHub: options.http === undefined && options.secrets === undefined
   };
 }
 
@@ -92,6 +93,26 @@ export function resolveConfig(options: CreateClientOptions = {}): Required<Pick<
 
   const sourceNames = new Set(sources.map((source) => source.name));
   const strategyNames = new Set(strategies.map((strategy) => strategy.name));
+  const explicitDomainNames = new Set([
+    ...(options.domains ?? []),
+    ...(config?.domains ?? []),
+    ...(config?.modules?.flatMap((module) => module.domains) ?? [])
+  ].map((domain) => domain.name));
+  for (const domain of domains) {
+    if (!explicitDomainNames.has(domain.name)) continue;
+    if (!domain.strategies.includes(domain.defaultStrategy)) {
+      throw new Error(`Domain ${domain.name} must list its default strategy ${domain.defaultStrategy}`);
+    }
+    for (const name of domain.strategies) {
+      const strategy = strategies.find((item) => item.name === name);
+      if (!strategy) throw new Error(`Domain ${domain.name} references unknown strategy ${name}`);
+      if (strategy.domain !== domain.name) throw new Error(`Strategy ${name} belongs to domain ${strategy.domain}, not ${domain.name}`);
+    }
+    if (domain.sources.length === 0) throw new Error(`Domain ${domain.name} requires at least one source`);
+    for (const name of domain.sources) {
+      if (!sourceNames.has(name)) throw new Error(`Domain ${domain.name} references unknown source ${name}`);
+    }
+  }
   const actionableDomains = domains.filter((domain) => (
     strategyNames.has(domain.defaultStrategy)
     && domain.sources.some((sourceName) => sourceNames.has(sourceName))
@@ -100,6 +121,12 @@ export function resolveConfig(options: CreateClientOptions = {}): Required<Pick<
   if (sources.length === 0) throw new Error("createClient requires at least one source");
   if (strategies.length === 0) throw new Error("createClient requires at least one strategy");
   if (actionableDomains.length === 0) throw new Error("createClient requires at least one actionable domain");
+  if (config?.defaults?.domain && !actionableDomains.some((domain) => domain.name === config.defaults!.domain)) {
+    throw new Error(`Default domain ${config.defaults.domain} is not registered`);
+  }
+  if (config?.defaults?.strategy && !strategyNames.has(config.defaults.strategy)) {
+    throw new Error(`Default strategy ${config.defaults.strategy} is not registered`);
+  }
 
   return {
     sources: [...sources],

@@ -57,20 +57,18 @@ test("exa-code declares the capabilities and transports it uses", () => {
   });
 });
 
-// The code strategy fans out to exa-code, context7 and deepwiki; with both the
-// Context API and every MCP call stubbed to fail, none yields evidence and the
-// strategy degrades to a typed RunEmpty rather than letting an error escape.
-test("exa-code empty path surfaces a typed RunEmpty without throwing out of the source", async () => {
+// Transport failures must remain errors even when another provider returns no evidence.
+test("exa-code provider outage surfaces a typed RunError", async () => {
   globalThis.fetch = (async () =>
     new Response("upstream boom", { status: 500, statusText: "Server Error" })) as typeof fetch;
   const client = createClient({ config: { modules: [coreModule] } });
 
   const result = await assertTypedFailure(
     () => client.run({ domain: "code", query: "obscure private symbol" }),
-    { kind: "empty", domain: "code" }
+    { kind: "error", domain: "code" }
   );
 
-  assert.equal(result.kind, "empty");
+  assert.equal(result.kind, "error");
 });
 
 test("exa-code maps Context API output into contract-conforming evidence", async () => {

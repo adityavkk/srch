@@ -89,6 +89,7 @@ export type SourceContext = {
   secrets: SecretResolver;
   trace: TraceSink;
   http: HttpClient;
+  allowLocalGitHub?: boolean;
 };
 
 export type Source<
