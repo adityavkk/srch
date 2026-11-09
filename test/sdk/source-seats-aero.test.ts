@@ -94,7 +94,7 @@ test("seats-aero maps award availability into contract-conforming evidence", asy
   const evidence = await assertSuccessContract(
     seatsAeroSource,
     { query: "JFK CDG", originAirport: "JFK", destinationAirport: "CDG", startDate: "2026-07-01" },
-    makeSourceContext()
+    makeSourceContext({ secrets: { seatsAeroApiKey: "injected-test-key" } })
   );
 
   assert.equal(evidence.length, 1);

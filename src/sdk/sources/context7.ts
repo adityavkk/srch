@@ -12,8 +12,9 @@ export const context7Source: Source<SourceRequest, Context7EvidencePayload> = de
   traits: ["mcp"],
   transports: ["context7-mcp"],
   async run(req, ctx) {
+    req.signal?.throwIfAborted();
     ctx.trace.step("source.context7", req.query);
-    const result = await queryContext7(req.query, req.signal);
+    const result = await queryContext7(req.query, req.signal, ctx);
     if (!result.meaningful || !result.text.trim() || !result.libraryId) return [];
 
     return [{

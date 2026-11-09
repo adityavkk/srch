@@ -83,7 +83,7 @@ test("exa-code maps Context API output into contract-conforming evidence", async
   const evidence = await assertSuccessContract(
     exaCodeSource,
     { query: "bun sqlite", maxTokens: 2000 },
-    makeSourceContext()
+    makeSourceContext({ secrets: { exaApiKey: "injected-test-key" } })
   );
 
   assert.equal(evidence.length, 1);

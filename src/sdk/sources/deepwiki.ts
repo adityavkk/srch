@@ -12,11 +12,12 @@ export const deepwikiSource: Source<SourceRequest, DeepWikiEvidencePayload> = de
   traits: ["mcp", "repo-aware"],
   transports: ["deepwiki-mcp"],
   async run(req, ctx) {
+    req.signal?.throwIfAborted();
     ctx.trace.step("source.deepwiki", req.query);
     const repo = inferGithubRepo(req.query);
     if (!repo) return [];
 
-    const result = await queryDeepWiki(repo, req.query, req.signal);
+    const result = await queryDeepWiki(repo, req.query, req.signal, ctx);
     if (!result.meaningful || !result.text.trim()) return [];
 
     return [{

@@ -23,8 +23,9 @@ export const fliSource: Source<FliSourceRequest, FliEvidencePayload> = defineSou
   traits: ["optional-backend"],
   transports: ["fli-sdk"],
   async run(req, ctx) {
+    req.signal?.throwIfAborted();
     ctx.trace.step("source.fli", `${req.origin}-${req.destination}`, { dateFrom: req.dateFrom });
-    const result = await searchFlights(req.origin, req.destination, req.dateFrom, req.options);
+    const result = await searchFlights(req.origin, req.destination, req.dateFrom, req.options, req.signal);
     if (!result.result.offers.length && result.result.status === "pricing_unavailable") {
       throw new FlightPricingUnavailableError(
         result.result.warnings?.join(" ") || "Prices are unavailable for the requested party; seat availability is unknown.",

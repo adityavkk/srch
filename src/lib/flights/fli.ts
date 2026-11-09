@@ -1,9 +1,10 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { activityMonitor } from "../core/activity.js";
 import { fliPython, FLI_REVISION } from "./runtime.js";
 import { validateFlightSearch } from "./validation.js";
+import { withTimeout } from "../core/http.js";
 
 const execFileAsync = promisify(execFile);
 const BRIDGE_PATH = fileURLToPath(new URL("./fli-bridge.py", import.meta.url));
@@ -19,6 +20,7 @@ export interface FliFlightSearchOptions {
   limit?: number;
   topN?: number;
   sort?: "price" | "duration";
+  timeoutMs?: number;
 }
 
 export interface FlightSegment {
@@ -121,40 +123,37 @@ async function canImportFli(): Promise<boolean> {
   }
 }
 
-async function runBridge<T>(payload: Record<string, unknown>): Promise<T> {
+async function runBridge<T>(payload: Record<string, unknown>, signal?: AbortSignal, timeoutMs = 120_000): Promise<T> {
+  const requestSignal = withTimeout(signal, timeoutMs);
+  requestSignal.throwIfAborted();
   return await new Promise<T>((resolve, reject) => {
-    const child = spawn(fliPython(), [BRIDGE_PATH], {
+    const child = execFile(fliPython(), [BRIDGE_PATH], {
       env: process.env,
-      stdio: ["pipe", "pipe", "pipe"]
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    const fail = (message: string) => {
-      if (isMissingFliRuntime(message)) reject(optionalInstallError(message));
-      else reject(new Error(message));
-    };
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", (error) => fail(error instanceof Error ? error.message : String(error)));
-    child.on("close", (code) => {
-      if (code !== 0) return fail(stderr.trim() || stdout.trim() || `Fli bridge exited with code ${code ?? 1}`);
-      const text = stdout.trim();
-      if (!text) return fail(stderr.trim() || "Fli bridge returned empty output");
+      killSignal: "SIGKILL",
+      maxBuffer: 8 * 1024 * 1024,
+      encoding: "utf8"
+    }, (error, stdout, stderr) => {
+      requestSignal.removeEventListener("abort", stop);
+      if (requestSignal.aborted) return reject(requestSignal.reason);
+      if (error) {
+        const detail = (stderr.trim() || error.message).slice(0, 2000);
+        return reject(isMissingFliRuntime(detail) ? optionalInstallError(detail) : new Error(detail, { cause: error }));
+      }
       try {
+        const text = stdout.trim();
+        if (!text) throw new Error(stderr.trim() || "Fli bridge returned empty output");
         resolve(JSON.parse(text) as T);
       } catch (error) {
-        fail(error instanceof Error ? error.message : String(error));
+        reject(error);
       }
     });
-
-    child.stdin.end(JSON.stringify(payload));
+    // execFile does not pass its killSignal option to AbortSignal handling.
+    const stop = () => { child.kill("SIGKILL"); };
+    requestSignal.addEventListener("abort", stop, { once: true });
+    if (requestSignal.aborted) stop();
+    // execFile handles process failures; an early exit can also close stdin.
+    child.stdin?.on("error", () => {});
+    child.stdin?.end(JSON.stringify(payload));
   });
 }
 
@@ -169,8 +168,10 @@ export async function inspectFli(): Promise<FlightsInspectResult> {
   };
 }
 
-export async function searchFlights(origin: string, destination: string, dateFrom: string, options: FliFlightSearchOptions = {}) {
+export async function searchFlights(origin: string, destination: string, dateFrom: string, options: FliFlightSearchOptions = {}, signal?: AbortSignal) {
+  signal?.throwIfAborted();
   validateFlightSearch(dateFrom, options);
+  const { timeoutMs, ...searchOptions } = options;
   const activityId = activityMonitor.logStart({ type: "api", query: `fli:${origin}-${destination}` });
   try {
     const result = await runBridge<FlightSearchResult>({
@@ -178,8 +179,9 @@ export async function searchFlights(origin: string, destination: string, dateFro
       origin: origin.toUpperCase(),
       destination: destination.toUpperCase(),
       dateFrom,
-      options
-    });
+      options: searchOptions
+    }, signal, timeoutMs);
+    signal?.throwIfAborted();
     const validOffers = result.offers.filter(isValidOffer);
     const droppedInvalidOffers = result.offers.length - validOffers.length;
     const requestedPassengers = Math.max((options.adults ?? 1) + (options.children ?? 0) + (options.infants ?? 0), 1);
@@ -210,13 +212,14 @@ export async function searchFlights(origin: string, destination: string, dateFro
   }
 }
 
-export async function resolveFlightLocation(query: string) {
+export async function resolveFlightLocation(query: string, signal?: AbortSignal) {
+  signal?.throwIfAborted();
   const activityId = activityMonitor.logStart({ type: "api", query: `fli-resolve:${query}` });
   try {
     const result = await runBridge<{ query: string; locations: Array<Record<string, unknown>> }>({
       command: "resolve",
       query
-    });
+    }, signal, 30_000);
     activityMonitor.logComplete(activityId, 200);
     return { provider: "fli-sdk", ...result };
   } catch (error) {

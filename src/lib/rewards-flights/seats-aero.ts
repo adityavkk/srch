@@ -1,6 +1,7 @@
 import { activityMonitor } from "../core/activity.js";
 import { errorMessage, withTimeout } from "../core/http.js";
 import { resolveSecret } from "../core/secrets.js";
+import { fetchWithContext, type WebSearchContext } from "../upstream/context.js";
 
 const DEFAULT_BASE_URL = "https://seats.aero/partnerapi";
 
@@ -92,8 +93,10 @@ export interface RewardsTripsResult {
   native: unknown;
 }
 
-async function getApiKey(): Promise<string> {
-  const key = await resolveSecret("seatsAeroApiKey");
+async function getApiKey(signal: AbortSignal, context?: WebSearchContext): Promise<string> {
+  signal.throwIfAborted();
+  const key = await (context ? context.secrets.resolve("seatsAeroApiKey", signal) : resolveSecret("seatsAeroApiKey", signal));
+  signal.throwIfAborted();
   if (!key) throw new Error("Seats.aero requires an API key. Configure via: search config set-secret-ref seatsAeroApiKey op ... or set SEATS_AERO_API_KEY.");
   return key;
 }
@@ -117,7 +120,9 @@ export async function inspectSeatsAero(): Promise<SeatsAeroInspectResult> {
   };
 }
 
-export async function searchRewardFlights(query: RewardsFlightSearchOptions): Promise<RewardsFlightSearchResult> {
+export async function searchRewardFlights(query: RewardsFlightSearchOptions, signal?: AbortSignal, context?: WebSearchContext): Promise<RewardsFlightSearchResult> {
+  const requestSignal = withTimeout(signal, 60_000);
+  requestSignal.throwIfAborted();
   const activityId = activityMonitor.logStart({ type: "api", query: `seats-aero:${query.originAirport}-${query.destinationAirport}` });
   try {
     const url = new URL(`${getBaseUrl()}/search`);
@@ -135,8 +140,9 @@ export async function searchRewardFlights(query: RewardsFlightSearchOptions): Pr
     if (query.onlyDirectFlights) url.searchParams.set("only_direct_flights", "true");
     if (query.orderBy === "lowest_mileage") url.searchParams.set("order_by", "lowest_mileage");
 
-    const response = await callSeatsAero(url);
+    const response = await callSeatsAero(url, requestSignal, context);
     const data = await response.json() as Record<string, unknown> | unknown[];
+    requestSignal.throwIfAborted();
     const items = extractCollection(data);
     const requestedSeats = query.includeZeroSeats ? 0 : Math.max(query.minSeats ?? 1, 1);
     const filteredItems = items.filter((item) => matchesSeatRequirement(item, query.cabins, requestedSeats));
@@ -158,13 +164,16 @@ export async function searchRewardFlights(query: RewardsFlightSearchOptions): Pr
   }
 }
 
-export async function getRewardFlightRoutes(source: string): Promise<RewardsRoutesResult> {
+export async function getRewardFlightRoutes(source: string, signal?: AbortSignal, context?: WebSearchContext): Promise<RewardsRoutesResult> {
+  const requestSignal = withTimeout(signal, 60_000);
+  requestSignal.throwIfAborted();
   const activityId = activityMonitor.logStart({ type: "api", query: `seats-aero-routes:${source}` });
   try {
     const url = new URL(`${getBaseUrl()}/routes`);
     url.searchParams.set("source", source);
-    const response = await callSeatsAero(url);
+    const response = await callSeatsAero(url, requestSignal, context);
     const data = await response.json() as Record<string, unknown> | unknown[];
+    requestSignal.throwIfAborted();
     const routes = extractCollection(data);
     activityMonitor.logComplete(activityId, response.status);
     return {
@@ -182,13 +191,16 @@ export async function getRewardFlightRoutes(source: string): Promise<RewardsRout
   }
 }
 
-export async function getRewardFlightTrips(availabilityId: string, includeFiltered = false): Promise<RewardsTripsResult> {
+export async function getRewardFlightTrips(availabilityId: string, includeFiltered = false, signal?: AbortSignal, context?: WebSearchContext): Promise<RewardsTripsResult> {
+  const requestSignal = withTimeout(signal, 60_000);
+  requestSignal.throwIfAborted();
   const activityId = activityMonitor.logStart({ type: "api", query: `seats-aero-trips:${availabilityId}` });
   try {
     const url = new URL(`${getBaseUrl()}/trips/${availabilityId}`);
     if (includeFiltered) url.searchParams.set("include_filtered", "true");
-    const response = await callSeatsAero(url);
+    const response = await callSeatsAero(url, requestSignal, context);
     const data = await response.json() as Record<string, unknown> | unknown[];
+    requestSignal.throwIfAborted();
     const trips = extractCollection(data);
     activityMonitor.logComplete(activityId, response.status);
     return {
@@ -206,14 +218,17 @@ export async function getRewardFlightTrips(availabilityId: string, includeFilter
   }
 }
 
-async function callSeatsAero(url: URL): Promise<Response> {
-  const response = await fetch(url, {
+async function callSeatsAero(url: URL, signal: AbortSignal, context?: WebSearchContext): Promise<Response> {
+  signal.throwIfAborted();
+  const apiKey = await getApiKey(signal, context);
+  const response = await fetchWithContext(url, {
     headers: {
       accept: "application/json",
-      "Partner-Authorization": await getApiKey()
+      "Partner-Authorization": apiKey
     },
-    signal: withTimeout(undefined, 60_000)
-  });
+    signal
+  }, context);
+  signal.throwIfAborted();
   if (!response.ok) {
     const body = (await response.text()).slice(0, 400);
     if (response.status === 401) {

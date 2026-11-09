@@ -22,8 +22,9 @@ export const exaCodeSource: Source<ExaCodeSourceRequest, ExaCodeEvidencePayload>
   traits: ["multi-transport"],
   transports: ["exa-context-api", "exa-mcp"],
   async run(req, ctx) {
+    req.signal?.throwIfAborted();
     ctx.trace.step("source.exa-code", req.query, { maxTokens: req.maxTokens ?? 5000 });
-    const result = await searchCodePrimary(req.query, req.maxTokens ?? 5000, req.signal);
+    const result = await searchCodePrimary(req.query, req.maxTokens ?? 5000, req.signal, ctx);
     if (!result?.text.trim()) return [];
 
     return [{

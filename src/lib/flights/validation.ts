@@ -7,7 +7,8 @@ export function validateFlightSearch(dateFrom: string, options: FliFlightSearchO
     ["infants", options.infants, 0, 9],
     ["maxStopovers", options.maxStopovers, 0, 2],
     ["topN", options.topN, 1, 10],
-    ["limit", options.limit, 1, 1000]
+    ["limit", options.limit, 1, 1000],
+    ["timeoutMs", options.timeoutMs, 1, 600_000]
   ] as const) {
     if (value !== undefined && (!Number.isInteger(value) || value < min || value > max)) {
       throw new Error(`${name} must be an integer between ${min} and ${max}.`);

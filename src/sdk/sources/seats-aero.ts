@@ -18,6 +18,7 @@ export const seatsAeroSource: Source<SeatsAeroSourceRequest, SeatsAeroEvidencePa
   traits: ["api-key-required"],
   transports: ["seats-aero"],
   async run(req, ctx) {
+    req.signal?.throwIfAborted();
     ctx.trace.step("source.seats-aero", `${req.originAirport}-${req.destinationAirport}`);
     const result = await searchRewardFlights({
       originAirport: req.originAirport,
@@ -35,7 +36,7 @@ export const seatsAeroSource: Source<SeatsAeroSourceRequest, SeatsAeroEvidencePa
       minSeats: req.minSeats,
       onlyDirectFlights: req.onlyDirectFlights,
       orderBy: req.orderBy
-    });
+    }, req.signal, ctx);
 
     return result.items.map((item, index) => ({
       source: "seats-aero",
