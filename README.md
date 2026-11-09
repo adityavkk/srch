@@ -179,6 +179,12 @@ also stop credential and browser keychain commands. The SDK returns `timeout`
 or `aborted`, and the CLI exits with status 1. Direct `client.search()` calls
 accept a caller `signal`; the total deadline belongs to `client.run()`.
 
+Provider answers are available as `payload.answer` alongside their source
+URLs. The CLI uses that field instead of interpreting raw provider data.
+An answer without source URLs is a failed retrieval, not an empty search or
+cited evidence. Direct source callers can catch `WebAnswerWithoutSourcesError`
+and inspect its `answer`; run diagnostics omit the generated text.
+
 #### Connection diagnostics
 
 ```bash
@@ -245,6 +251,17 @@ const c = createClient();
 const r = await c.run({ domain: "fetch", query: url });
 const text = r.kind === "success" ? documentText(r.evidence[0].payload) : "";
 ```
+
+PDF retrieval returns the extracted text and does not write to Downloads.
+`payload.extraction` records the actual transport, completeness, warnings,
+whether a model generated the text, and PDF page counts. Read the warnings
+before treating partial content as a complete document. PDF extraction stops
+at 100 pages and reports that limit. HTTP document bodies are capped at 10 MiB,
+including streamed responses without a Content-Length header.
+
+The default client retains GitHub cloning and `gh` authentication. Clients
+with injected HTTP or secrets use the GitHub HTTP API through those
+dependencies. An injected resolver can supply `githubToken` for private repos.
 
 > Note: `srch` is not on npm yet, so `npm install srch` / `bun add srch` (no source prefix) will resolve to an unrelated package. Install from GitHub (`github:adityavkk/srch`) or a local `file:` path as shown above until it is published.
 
@@ -645,6 +662,10 @@ if (result.kind === "success") {
 search flights JFK HNL 2026-04-20 --cabin C --adults 4 --sort price --json
 ```
 
+Flight subprocesses have a 120-second default deadline and an 8 MiB output
+limit. SDK callers can set `options.timeoutMs` from 1 to 600000 milliseconds
+and pass `signal` on the request. Cancellation terminates the subprocess.
+
 ---
 
 ## How it works
@@ -709,7 +730,16 @@ type RunResult<T> = RunSuccess<T> | RunEmpty | RunError;
 // RunError.suggestions is NonEmptyArray<string> -- always actionable
 ```
 
-No silent failures. No `if (result.data && result.data.length > 0)` guards.
+`client.run()` returns a typed error when a strategy throws or returns an
+invalid result. Code retrieval with no evidence and failed providers returns
+an error with the attempted sources; a completed search with no matches
+returns `empty`. Explicit configuration is checked at client creation, and a
+run cannot invoke a strategy from another domain.
+
+Cancellation stops waiting even when a custom adapter ignores its signal.
+Such adapters must implement cancellation to stop their underlying work.
+Built-in HTTP sources and the flight subprocess receive the signal.
+`client.search()` rejects failures directly, so callers should catch them.
 
 ---
 
@@ -888,6 +918,12 @@ With no arguments, `search` shows a compact status dashboard.
 ### Secret management
 
 Runtime secret resolution from 1Password or fnox. No plaintext on disk.
+
+Environment and configuration values are read on every lookup. Successful
+external-store lookups are cached for at most 60 seconds, scoped to the config
+path, working directory, credential field, and store reference. Missing values
+are not cached. Call the exported `clearSecretCache()` after rotating an
+external-store credential to invalidate the cache immediately.
 
 ```bash
 search config set-secret-ref exaApiKey op 'op://vault/exa/API Key'

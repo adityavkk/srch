@@ -75,7 +75,7 @@ test("run does not repeat a context trace returned by the strategy", async () =>
 
 test("run rejects malformed success and wrong-domain results", async () => {
   for (const changed of [
-    { evidence: [] }, { evidence: [undefined] }, { evidence: [{ ...evidence, domain: "web" }] },
+    { evidence: [] }, { evidence: [undefined] }, { evidence: [{ ...evidence, domain: "" }] },
     { evidence: [{ ...evidence, query: 42 }] }, { evidence: [{ ...evidence, source: null }] },
     { domain: "web" }, { summary: undefined },
     { summary: { totalEvidence: 1, attempts: [undefined] } }
@@ -102,6 +102,23 @@ test("run honors cancellation even when a strategy returns success after abort",
     assert.equal(result.error.code, reason.name === "TimeoutError" ? "timeout" : "aborted");
     assert.equal(result.summary?.attempts[0].status, "success");
     assert.ok(result.trace.some((event) => event.label === "before-abort"));
+  }
+});
+
+test("malformed error and empty results cannot omit their required suggestions", async () => {
+  for (const kind of ["error", "empty"] as const) {
+    for (const suggestions of [undefined, [], [""], [42]]) {
+      const client = notesClient(async () => ({
+        ...notesResult(), kind, evidence: undefined, error: { code: "offline", message: "Source is offline" },
+        summary: { ...notesResult().summary!, totalEvidence: 0 }, suggestions
+      }) as unknown as RunResult);
+      const result = await client.run({ domain: "notes", query: "test" });
+      assert.equal(result.kind, "error");
+      if (result.kind === "error") {
+        assert.equal(result.error.code, "invalid_result");
+        assert.ok(result.suggestions.length > 0);
+      }
+    }
   }
 });
 
@@ -163,6 +180,29 @@ test("run rejects cross-domain strategies before executing them", async () => {
   const result = await createClient().run({ domain: "web", strategy: "docs/default", query: "test" });
   assert.equal(result.kind, "error");
   if (result.kind === "error") assert.equal(result.error.code, "invalid_strategy");
+});
+
+test("custom strategies can compose sources while preserving their original evidence domain", async () => {
+  const webEvidence = { ...evidence, source: "web-source", domain: "web" };
+  const client = createClient({ config: {
+    modules: [],
+    sources: [source("web-source", "web", async () => [webEvidence])],
+    domains: [{ ...notesDomain, sources: ["web-source"] }],
+    strategies: [defineStrategy({
+      kind: "static", name: "notes/default", domain: "notes",
+      async run(req, ctx) {
+        const found = await ctx.search("web-source", req);
+        return {
+          ...notesResult(), evidence: [found[0]!, ...found.slice(1)],
+          summary: { totalEvidence: found.length, sourceBreakdown: { "web-source": found.length },
+            attempts: [{ provider: "web-source", status: "success", transport: "mock", durationMs: 0, evidenceCount: found.length }], durationMs: 0 }
+        };
+      }
+    })]
+  } });
+  const result = await client.run({ domain: "notes", query: "test" });
+  assert.equal(result.kind, "success");
+  if (result.kind === "success") assert.equal(result.evidence[0].domain, "web");
 });
 
 test("fetch with no evidence returns empty and records its actual transport when present", async () => {

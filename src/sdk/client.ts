@@ -80,7 +80,7 @@ function resultProblem(result: RunResult, domain: string, strategy: string): str
   if (!result || !["success", "empty", "error"].includes(result.kind)) return "Strategy returned an unknown result kind";
   if (result.domain !== domain || result.strategy !== strategy) return "Strategy returned a result for a different domain or strategy";
   if (result.kind === "success" && (!Array.isArray(result.evidence) || result.evidence.length === 0
-    || result.evidence.some((item) => !item || typeof item !== "object" || item.domain !== domain
+    || result.evidence.some((item) => !item || typeof item !== "object" || typeof item.domain !== "string" || !item.domain.trim()
       || typeof item.source !== "string" || typeof item.query !== "string" || !item.provenance || !("payload" in item)))) {
     return "Successful results must contain nonempty, valid evidence";
   }
@@ -89,8 +89,13 @@ function resultProblem(result: RunResult, domain: string, strategy: string): str
     || result.summary.totalEvidence !== (result.kind === "success" ? result.evidence.length : 0))) {
     return "Result summary must describe its evidence and provider attempts";
   }
-  if (result.kind === "error" && (!result.error || typeof result.error.code !== "string" || typeof result.error.message !== "string")) {
+  if (result.kind === "error" && (!result.error || typeof result.error.code !== "string" || !result.error.code.trim()
+    || typeof result.error.message !== "string" || !result.error.message.trim())) {
     return "Error results must contain an error code and message";
+  }
+  if (result.kind !== "success" && (!Array.isArray(result.suggestions) || result.suggestions.length === 0
+    || result.suggestions.some((item) => typeof item !== "string" || !item.trim()))) {
+    return "Empty and error results must contain nonempty suggestions";
   }
   return undefined;
 }
