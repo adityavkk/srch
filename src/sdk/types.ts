@@ -31,8 +31,8 @@ export type Evidence<T = unknown> = {
 
 export type ProviderAttempt =
   | { provider: string; status: "success"; transport: string; durationMs: number; evidenceCount: number }
-  | { provider: string; status: "skipped"; reason: string }
-  | { provider: string; status: "failed"; error: string; durationMs: number };
+  | { provider: string; status: "skipped"; transport?: string; reason: string }
+  | { provider: string; status: "failed"; transport?: string; error: string; durationMs: number };
 
 export type RunSummary = {
   totalEvidence: number;
@@ -65,6 +65,7 @@ export type RunError = {
   domain: string;
   strategy: string;
   error: { message: string; code: string };
+  summary?: RunSummary;
   trace: TraceEvent[];
   suggestions: NonEmptyArray<string>;
 };

@@ -14,7 +14,7 @@ export const braveSource: Source<WebSourceRequest, BraveEvidencePayload> = defin
   async run(req, ctx) {
     ctx.trace.step("source.brave", req.query);
 
-    if (!(await isBraveAvailable())) {
+    if (!(await isBraveAvailable(ctx))) {
       throw new Error("Brave unavailable: missing API key");
     }
 
@@ -24,7 +24,7 @@ export const braveSource: Source<WebSourceRequest, BraveEvidencePayload> = defin
       recencyFilter: req.recencyFilter,
       domainFilter: req.domainFilter,
       signal: req.signal
-    });
+    }, ctx);
 
     return mapSearchResponseEvidence("brave", req.query, response, response.native.provider);
   }

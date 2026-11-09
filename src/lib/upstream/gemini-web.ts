@@ -1,8 +1,14 @@
 import { activityMonitor } from "../core/activity.js";
 import type { SearchOptions, SearchResponse } from "../core/types.js";
 import { getGeminiCookies } from "../fetch/chrome-cookies.js";
+import { errorMessage } from "../core/http.js";
+import { fetchWithContext, type WebSearchContext } from "./context.js";
 
 const GEMINI_WEB_URL = "https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate";
+
+type GeminiWebContext = WebSearchContext & {
+  getCookies?: typeof getGeminiCookies;
+};
 
 export interface GeminiWebSearchResult extends SearchResponse {
   native: {
@@ -12,15 +18,15 @@ export interface GeminiWebSearchResult extends SearchResponse {
   };
 }
 
-export async function searchWithGeminiWeb(query: string, options: SearchOptions = {}): Promise<GeminiWebSearchResult | null> {
-  const cookies = await getGeminiCookies();
+export async function searchWithGeminiWeb(query: string, options: SearchOptions = {}, context?: GeminiWebContext): Promise<GeminiWebSearchResult | null> {
+  const cookies = await (context?.getCookies ?? getGeminiCookies)();
   if (!cookies) return null;
   const activityId = activityMonitor.logStart({ type: "api", query });
   const prompt = `Search the web and answer the following question. Include source URLs as markdown links. Question: ${query}`;
   const request = { prompt, cookieNames: Object.keys(cookies) };
   try {
     const cookieHeader = Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join("; ");
-    const response = await fetch(GEMINI_WEB_URL, {
+    const response = await fetchWithContext(GEMINI_WEB_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
@@ -28,10 +34,10 @@ export async function searchWithGeminiWeb(query: string, options: SearchOptions 
       },
       body: new URLSearchParams({ "f.req": JSON.stringify([null, prompt]) }),
       signal: AbortSignal.any([AbortSignal.timeout(60_000), ...(options.signal ? [options.signal] : [])])
-    });
+    }, context);
     if (!response.ok) {
       activityMonitor.logComplete(activityId, response.status);
-      return null;
+      throw new Error(`Gemini web HTTP error ${response.status}`);
     }
     const text = await response.text();
     activityMonitor.logComplete(activityId, response.status);
@@ -44,8 +50,8 @@ export async function searchWithGeminiWeb(query: string, options: SearchOptions 
       results,
       native: { provider: "gemini-web", request, response: { raw: text.slice(0, 8000) } }
     };
-  } catch {
-    activityMonitor.logComplete(activityId, 0);
-    return null;
+  } catch (error) {
+    activityMonitor.logError(activityId, errorMessage(error));
+    throw error;
   }
 }

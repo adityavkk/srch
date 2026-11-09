@@ -68,19 +68,20 @@ test("gemini declares the capabilities and transports it uses", () => {
 
 // Pinning the web strategy to `provider: "gemini"` isolates the failure: with no
 // browser profile the web transport yields nothing and the stubbed API returns
-// 500, so the strategy degrades to a typed RunEmpty without throwing out of the
+// 500, so the strategy reports a typed RunError without throwing out of the
 // source boundary.
-test("gemini failure surfaces a typed RunEmpty without throwing out of the source", async () => {
+test("gemini failure surfaces a typed RunError without throwing out of the source", async () => {
   globalThis.fetch = (async () =>
     new Response("upstream boom", { status: 500, statusText: "Server Error" })) as typeof fetch;
   const client = createClient({ config: { modules: [coreModule] } });
 
   const result = await assertTypedFailure(
     () => client.run({ domain: "web", query: "bun sqlite", provider: "gemini" }),
-    { kind: "empty", domain: "web" }
+    { kind: "error", domain: "web" }
   );
 
-  assert.equal(result.kind, "empty");
+  assert.equal(result.kind, "error");
+  if (result.kind === "error") assert.equal(result.error.code, "web_unavailable");
 });
 
 test("gemini maps grounded API results into contract-conforming evidence", async () => {
@@ -93,7 +94,7 @@ test("gemini maps grounded API results into contract-conforming evidence", async
   const evidence = await assertSuccessContract(
     geminiSource,
     { query: "bun sqlite", transport: "api", numResults: 5 },
-    makeSourceContext()
+    makeSourceContext({ secrets: { geminiApiKey: "dummy-gemini-key" } })
   );
 
   assert.equal(evidence.length, 2);

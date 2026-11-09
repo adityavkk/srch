@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createClient, createWebDefaultStrategy, defineSource } from "../../src/sdk.js";
-import type { Evidence, Source, SourceRequest } from "../../src/sdk.js";
+import type { Evidence, Source, SourceRequest, WebStrategyRequest } from "../../src/sdk.js";
 
 function makeEvidence(source: string, query: string, transport: string): Evidence<{ title: string }> {
   return {
@@ -89,4 +89,141 @@ test("web/default returns definitive empty state when all providers yield no evi
   assert.equal(result.summary.totalEvidence, 0);
   assert.equal(result.summary.attempts.length, 5);
   assert.ok(result.suggestions.length >= 1);
+});
+
+test("web/default reports an outage when providers fail and the remaining providers are unavailable", async () => {
+  const fail = async () => { throw new Error("transport offline"); };
+  const client = createClient({
+    sources: [createSource("exa", "exa-mcp", fail), createSource("gemini", "gemini-web", fail)],
+    strategies: [createWebDefaultStrategy({
+      isBraveAvailable: async () => false,
+      isGeminiApiAvailable: async () => false,
+      isPerplexityAvailable: async () => false
+    })]
+  });
+
+  const result = await client.run({ domain: "web", query: "OpenAI" });
+
+  assert.equal(result.kind, "error");
+  if (result.kind !== "error") return;
+  assert.equal(result.error.code, "web_unavailable");
+  assert.match(result.error.message, /exa \(exa-mcp\): transport offline/);
+  assert.match(result.error.message, /gemini \(gemini-web\): transport offline/);
+  assert.equal(result.summary?.totalEvidence, 0);
+  assert.deepEqual(result.summary?.attempts.map(({ provider, status, transport }) => ({ provider, status, transport })), [
+    { provider: "exa", status: "failed", transport: "exa-mcp" },
+    { provider: "brave", status: "skipped", transport: "brave-search-api" },
+    { provider: "gemini", status: "failed", transport: "gemini-web" },
+    { provider: "gemini", status: "skipped", transport: "gemini-api" },
+    { provider: "perplexity", status: "skipped", transport: "perplexity-api" }
+  ]);
+  assert.ok(result.suggestions.some((suggestion) => suggestion.includes("inspect tools")));
+  assert.ok(result.suggestions.every((suggestion) => !suggestion.includes("broader terms") && !suggestion.includes("--hq")));
+});
+
+for (const options of [
+  { provider: "exa" },
+  { provider: "exa", hq: true },
+  { provider: "brave" },
+  { provider: "gemini" },
+  { provider: "gemini", hq: true },
+  { provider: "perplexity" },
+  { hq: true }
+] satisfies Array<Partial<WebStrategyRequest>>) {
+  test(`web/default reports a provider failure for ${JSON.stringify(options)}`, async () => {
+    const calls: string[] = [];
+    const sources = ["exa", "brave", "gemini", "perplexity"].map((name) => createSource(name, "mock", async () => {
+      calls.push(name);
+      throw new Error("upstream HTTP 503");
+    }));
+    const client = createClient({
+      sources,
+      strategies: [createWebDefaultStrategy({
+        isBraveAvailable: async () => true,
+        isGeminiApiAvailable: async () => false,
+        isPerplexityAvailable: async () => true
+      })]
+    });
+
+    const result = await client.run({ domain: "web", query: "OpenAI", ...options });
+
+    assert.equal(result.kind, "error");
+    if (result.kind !== "error") return;
+    assert.equal(result.error.code, "web_unavailable");
+    assert.deepEqual(calls, ["provider" in options ? options.provider : "exa"]);
+    assert.equal(result.summary?.attempts[0].status, "failed");
+    assert.match(result.error.message, /upstream HTTP 503/);
+  });
+}
+
+test("web/default keeps a genuine zero-result response distinct from later provider failures", async () => {
+  const client = createClient({
+    sources: [
+      createSource("exa", "exa-mcp", async () => []),
+      createSource("gemini", "gemini-web", async () => { throw new Error("browser unavailable"); })
+    ],
+    strategies: [createWebDefaultStrategy({
+      isBraveAvailable: async () => false,
+      isGeminiApiAvailable: async () => false,
+      isPerplexityAvailable: async () => false
+    })]
+  });
+
+  const result = await client.run({ domain: "web", query: "obscure query" });
+
+  assert.equal(result.kind, "empty");
+  if (result.kind !== "empty") return;
+  assert.equal(result.summary.attempts[0].status, "success");
+  assert.ok(result.summary.attempts.some((attempt) => attempt.status === "failed"));
+});
+
+test("web/default preserves an explicit provider's genuine empty response", async () => {
+  const client = createClient({ sources: [createSource("exa", "exa-mcp", async () => [])] });
+
+  const result = await client.run({ domain: "web", query: "obscure query", provider: "exa" });
+
+  assert.equal(result.kind, "empty");
+  if (result.kind !== "empty") return;
+  assert.equal(result.summary.attempts.length, 1);
+  assert.equal(result.summary.attempts[0].status, "success");
+});
+
+test("web/default stops cancelled searches before contacting providers", async () => {
+  let calls = 0;
+  const client = createClient({ sources: [createSource("exa", "exa-mcp", async () => {
+    calls += 1;
+    return [];
+  })] });
+
+  const result = await client.run({ domain: "web", query: "OpenAI", signal: AbortSignal.abort() });
+
+  assert.equal(result.kind, "error");
+  if (result.kind !== "error") return;
+  assert.equal(result.error.code, "aborted");
+  assert.equal(calls, 0);
+});
+
+test("web/default stops fallback after cancellation during a provider request", async () => {
+  const controller = new AbortController();
+  let availabilityCalls = 0;
+  const unavailable = async () => { availabilityCalls += 1; return false; };
+  const client = createClient({
+    sources: [createSource("exa", "exa-mcp", async () => {
+      controller.abort();
+      throw controller.signal.reason;
+    })],
+    strategies: [createWebDefaultStrategy({
+      isBraveAvailable: unavailable,
+      isGeminiApiAvailable: unavailable,
+      isPerplexityAvailable: unavailable
+    })]
+  });
+
+  const result = await client.run({ domain: "web", query: "OpenAI", signal: controller.signal });
+
+  assert.equal(result.kind, "error");
+  if (result.kind !== "error") return;
+  assert.equal(result.error.code, "aborted");
+  assert.equal(result.summary?.attempts.length, 1);
+  assert.equal(availabilityCalls, 0);
 });

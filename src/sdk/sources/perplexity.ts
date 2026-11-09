@@ -14,7 +14,7 @@ export const perplexitySource: Source<WebSourceRequest, PerplexityEvidencePayloa
   async run(req, ctx) {
     ctx.trace.step("source.perplexity", req.query);
 
-    if (!(await isPerplexityAvailable())) {
+    if (!(await isPerplexityAvailable(ctx))) {
       throw new Error("Perplexity unavailable: missing API key");
     }
 
@@ -24,7 +24,7 @@ export const perplexitySource: Source<WebSourceRequest, PerplexityEvidencePayloa
       recencyFilter: req.recencyFilter,
       domainFilter: req.domainFilter,
       signal: req.signal
-    });
+    }, ctx);
 
     return mapSearchResponseEvidence("perplexity", req.query, response, response.native.provider);
   }

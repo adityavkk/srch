@@ -59,7 +59,7 @@ export async function runWebCommand(query: string, options: { provider?: "auto" 
 
   return {
     kind: "ok",
-    data: { query, provider, answer, results, trace: result.trace },
+    data: { query, provider, answer, results, kind: result.kind, summary: result.summary, suggestions: result.suggestions, trace: result.trace },
     text
   };
 }

@@ -64,18 +64,19 @@ test("brave declares the capabilities and transport it uses", () => {
 
 // Pinning the web strategy to `provider: "brave"` isolates the failure to the
 // source under test: the stubbed API returns 500, the source throws, and the
-// strategy degrades to a typed RunEmpty rather than letting the error escape.
-test("brave failure surfaces a typed RunEmpty without throwing out of the source", async () => {
+// strategy reports a typed RunError rather than claiming the search was empty.
+test("brave failure surfaces a typed RunError without throwing out of the source", async () => {
   globalThis.fetch = (async () =>
     new Response("upstream boom", { status: 500, statusText: "Server Error" })) as typeof fetch;
   const client = createClient({ config: { modules: [coreModule] } });
 
   const result = await assertTypedFailure(
     () => client.run({ domain: "web", query: "bun sqlite", provider: "brave" }),
-    { kind: "empty", domain: "web" }
+    { kind: "error", domain: "web" }
   );
 
-  assert.equal(result.kind, "empty");
+  assert.equal(result.kind, "error");
+  if (result.kind === "error") assert.equal(result.error.code, "web_unavailable");
 });
 
 test("brave maps search results into contract-conforming evidence", async () => {
@@ -88,7 +89,7 @@ test("brave maps search results into contract-conforming evidence", async () => 
   const evidence = await assertSuccessContract(
     braveSource,
     { query: "bun sqlite", numResults: 5 },
-    makeSourceContext()
+    makeSourceContext({ secrets: { braveApiKey: "dummy-brave-key" } })
   );
 
   assert.equal(evidence.length, 2);

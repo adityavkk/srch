@@ -2,6 +2,7 @@ import { activityMonitor } from "../core/activity.js";
 import { errorMessage } from "../core/http.js";
 import type { SearchOptions, SearchResponse } from "../core/types.js";
 import { API_BASE, DEFAULT_MODEL, getApiKey } from "./gemini-api.js";
+import { fetchWithContext, type WebSearchContext } from "./context.js";
 
 export interface GeminiSearchResult extends SearchResponse {
   native: {
@@ -24,8 +25,8 @@ interface GeminiSearchResponse {
   }>;
 }
 
-export async function searchWithGemini(query: string, options: SearchOptions = {}): Promise<GeminiSearchResult> {
-  const apiKey = await getApiKey();
+export async function searchWithGemini(query: string, options: SearchOptions = {}, context?: WebSearchContext): Promise<GeminiSearchResult> {
+  const apiKey = await getApiKey(context);
   if (!apiKey) throw new Error("Missing Gemini API key");
 
   const activityId = activityMonitor.logStart({ type: "api", query });
@@ -36,15 +37,15 @@ export async function searchWithGemini(query: string, options: SearchOptions = {
       tools: [{ google_search: {} }]
     };
 
-    const response = await fetch(`${API_BASE}/models/${DEFAULT_MODEL}:generateContent?key=${apiKey}`, {
+    const response = await fetchWithContext(`${API_BASE}/models/${DEFAULT_MODEL}:generateContent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify(request),
       signal: AbortSignal.any([
         AbortSignal.timeout(60_000),
         ...(options.signal ? [options.signal] : [])
       ])
-    });
+    }, context);
 
     if (!response.ok) {
       activityMonitor.logComplete(activityId, response.status);

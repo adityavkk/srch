@@ -2,6 +2,7 @@ import { activityMonitor } from "../core/activity.js";
 import { errorMessage } from "../core/http.js";
 import { resolveSecret } from "../core/secrets.js";
 import type { SearchOptions, SearchResponse } from "../core/types.js";
+import { fetchWithContext, type WebSearchContext } from "./context.js";
 
 const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions";
 const RATE_LIMIT = { maxRequests: 10, windowMs: 60_000 };
@@ -15,8 +16,8 @@ export interface PerplexitySearchResult extends SearchResponse {
   };
 }
 
-async function getApiKey(): Promise<string> {
-  const key = await resolveSecret("perplexityApiKey");
+async function getApiKey(context?: WebSearchContext): Promise<string> {
+  const key = await (context ? context.secrets.resolve("perplexityApiKey") : resolveSecret("perplexityApiKey"));
   if (!key) throw new Error("Missing Perplexity API key");
   return key;
 }
@@ -33,11 +34,11 @@ function checkRateLimit(): void {
   requestTimestamps.push(now);
 }
 
-export async function isPerplexityAvailable(): Promise<boolean> {
-  return !!(await resolveSecret("perplexityApiKey"));
+export async function isPerplexityAvailable(context?: WebSearchContext): Promise<boolean> {
+  return !!(await (context ? context.secrets.resolve("perplexityApiKey") : resolveSecret("perplexityApiKey")));
 }
 
-export async function searchWithPerplexity(query: string, options: SearchOptions = {}): Promise<PerplexitySearchResult> {
+export async function searchWithPerplexity(query: string, options: SearchOptions = {}, context?: WebSearchContext): Promise<PerplexitySearchResult> {
   checkRateLimit();
   const activityId = activityMonitor.logStart({ type: "api", query });
 
@@ -51,15 +52,15 @@ export async function searchWithPerplexity(query: string, options: SearchOptions
       ...(options.domainFilter?.length ? { search_domain_filter: options.domainFilter } : {})
     };
 
-    const response = await fetch(PERPLEXITY_API_URL, {
+    const response = await fetchWithContext(PERPLEXITY_API_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${await getApiKey()}`,
+        Authorization: `Bearer ${await getApiKey(context)}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify(request),
       signal: options.signal
-    });
+    }, context);
 
     if (!response.ok) {
       activityMonitor.logComplete(activityId, response.status);

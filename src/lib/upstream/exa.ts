@@ -3,6 +3,7 @@ import { errorMessage, withTimeout } from "../core/http.js";
 import { resolveSecret } from "../core/secrets.js";
 import type { ExtractedContent, SearchOptions, SearchResponse } from "../core/types.js";
 import { callExaMcpRaw, exaMcpText, type ExaMcpResponse } from "./exa-mcp.js";
+import { fetchWithContext, type WebSearchContext } from "./context.js";
 
 const EXA_ANSWER_URL = "https://api.exa.ai/answer";
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
@@ -16,8 +17,8 @@ export interface ExaSearchResult extends SearchResponse {
   };
 }
 
-async function getApiKey(): Promise<string | null> {
-  return resolveSecret("exaApiKey");
+async function getApiKey(context?: WebSearchContext): Promise<string | null> {
+  return context ? context.secrets.resolve("exaApiKey") : resolveSecret("exaApiKey");
 }
 
 export async function hasExaApiKey(): Promise<boolean> {
@@ -28,8 +29,8 @@ export function isExaAvailable(): boolean {
   return true;
 }
 
-export async function callExaMcp(toolName: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
-  const response = await callExaMcpRaw(toolName, args, signal);
+export async function callExaMcp(toolName: string, args: Record<string, unknown>, signal?: AbortSignal, context?: WebSearchContext): Promise<string> {
+  const response = await callExaMcpRaw(toolName, args, signal, context);
   return exaMcpText(response);
 }
 
@@ -64,7 +65,7 @@ function mapMcpResponse(query: string, options: SearchOptions, response: ExaMcpR
 
   return {
     answer: parsed.map((item, index) => `${item.content.slice(0, 500)}\nSource: ${item.title || `Source ${index + 1}`} (${item.url})`).join("\n\n"),
-    results: parsed.map((item, index) => ({ title: item.title || `Source ${index + 1}`, url: item.url, snippet: "" })),
+    results: parsed.map((item, index) => ({ title: item.title || `Source ${index + 1}`, url: item.url, snippet: item.content.slice(0, 500) })),
     inlineContent: options.includeContent
       ? parsed.filter((item) => item.content).map<ExtractedContent>((item) => ({ url: item.url, title: item.title, content: item.content, error: null }))
       : undefined,
@@ -78,7 +79,7 @@ function mapMcpResponse(query: string, options: SearchOptions, response: ExaMcpR
 }
 
 // Free MCP tier only. No API key consumed.
-export async function searchWithExa(query: string, options: SearchOptions = {}): Promise<ExaSearchResult> {
+export async function searchWithExa(query: string, options: SearchOptions = {}, context?: WebSearchContext): Promise<ExaSearchResult> {
   const activityId = activityMonitor.logStart({ type: "api", query });
   try {
     const response = await callExaMcpRaw("web_search_exa", {
@@ -87,7 +88,7 @@ export async function searchWithExa(query: string, options: SearchOptions = {}):
       livecrawl: "fallback",
       type: "auto",
       contextMaxCharacters: options.includeContent ? 50_000 : 3_000
-    }, options.signal);
+    }, options.signal, context);
     activityMonitor.logComplete(activityId, 200);
     return mapMcpResponse(query, options, response);
   } catch (error) {
@@ -97,8 +98,8 @@ export async function searchWithExa(query: string, options: SearchOptions = {}):
 }
 
 // Paid API. Requires API key. Better quality (answer synthesis, highlights).
-export async function searchWithExaPaid(query: string, options: SearchOptions = {}): Promise<ExaSearchResult> {
-  const apiKey = await getApiKey();
+export async function searchWithExaPaid(query: string, options: SearchOptions = {}, context?: WebSearchContext): Promise<ExaSearchResult> {
+  const apiKey = await getApiKey(context);
   if (!apiKey) throw new Error("Exa paid API requires an API key. Configure via: search config set-secret-ref exaApiKey op ...");
   const activityId = activityMonitor.logStart({ type: "api", query: `exa-paid: ${query}` });
 
@@ -115,12 +116,12 @@ export async function searchWithExaPaid(query: string, options: SearchOptions = 
         }
       : { query, text: true };
 
-    const response = await fetch(endpoint, {
+    const response = await fetchWithContext(endpoint, {
       method: "POST",
       headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
       body: JSON.stringify(request),
       signal: withTimeout(options.signal, 60_000)
-    });
+    }, context);
 
     if (!response.ok) {
       activityMonitor.logComplete(activityId, response.status);
@@ -145,7 +146,7 @@ export async function searchWithExaPaid(query: string, options: SearchOptions = 
 
     return {
       answer: (data.results ?? []).map((item, index) => `${(item.highlights?.join(" ") || item.text || "").slice(0, 1000)}\nSource: ${item.title || `Source ${index + 1}`} (${item.url || ""})`).join("\n\n"),
-      results: (data.results ?? []).flatMap((item, index) => item.url ? [{ title: item.title || `Source ${index + 1}`, url: item.url, snippet: "" }] : []),
+      results: (data.results ?? []).flatMap((item, index) => item.url ? [{ title: item.title || `Source ${index + 1}`, url: item.url, snippet: (item.highlights?.join(" ") || item.text || "").slice(0, 1000) }] : []),
       inlineContent: options.includeContent
         ? (data.results ?? []).flatMap((item) => item.url && item.text ? [{ url: item.url, title: item.title || "", content: item.text, error: null }] : [])
         : undefined,

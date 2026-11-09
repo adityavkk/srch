@@ -28,7 +28,7 @@ function parseJson(output: string) {
     ok: boolean;
     command: string[];
     data?: Record<string, any>;
-    error?: { message: string };
+    error?: { message: string; code?: string; summary?: { attempts: Array<{ status: string; transport?: string; error?: string }> }; suggestions?: string[] };
   };
 }
 
@@ -60,6 +60,62 @@ test("search web can persist json output with --out", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("search web exits nonzero and preserves provider diagnostics on failure", () => {
+  const result = runCli(["web", "mock provider failure", "--provider", "exa", "--hq", "--json"], {
+    EXA_API_KEY: "test_exa_key"
+  });
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  const payload = parseJson(result.stderr);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.error?.code, "web_unavailable");
+  assert.equal(payload.error?.summary?.attempts[0].status, "failed");
+  assert.equal(payload.error?.summary?.attempts[0].transport, "exa-api");
+  assert.match(payload.error?.summary?.attempts[0].error ?? "", /503/);
+  assert.doesNotMatch(result.stderr, /Try broader terms|test_exa_key/);
+});
+
+test("search web text errors identify the failed transport", () => {
+  const result = runCli(["web", "mock provider failure", "--provider", "exa", "--hq"], {
+    EXA_API_KEY: "test_exa_key"
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /exa-api: .*503/);
+  assert.doesNotMatch(result.stderr, /0 results|test_exa_key/);
+});
+
+test("search web returns its answer when saving history fails", () => {
+  const result = runCli(["web", "mock history failure", "--provider", "exa", "--hq", "--json"], {
+    EXA_API_KEY: "test_exa_key"
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(parseJson(result.stdout).data?.answer, "Mock Exa answer");
+  assert.match(result.stderr, /Warning: Could not save search history/);
+});
+
+test("search web keeps a successful empty response distinct from failure", () => {
+  const result = runCli(["web", "mock empty query", "--provider", "exa", "--hq", "--json"], {
+    EXA_API_KEY: "test_exa_key"
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const payload = parseJson(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data?.kind, "empty");
+  assert.deepEqual(payload.data?.results, []);
+  assert.equal(payload.data?.summary.attempts[0].status, "success");
+  assert.equal(payload.data?.summary.attempts[0].evidenceCount, 0);
+});
+
+test("search web retains MCP excerpts and successful attempt details", () => {
+  const result = runCli(["web", "mock query", "--provider", "exa", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  const payload = parseJson(result.stdout);
+  assert.equal(payload.data?.kind, "success");
+  assert.equal(payload.data?.results[0].snippet, "A useful excerpt from the search result.");
+  assert.match(payload.data?.answer, /useful excerpt/);
+  assert.equal(payload.data?.summary.attempts[0].transport, "exa-mcp");
 });
 
 test("search fetch can persist text output with --out", () => {

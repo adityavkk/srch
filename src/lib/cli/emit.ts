@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fail, ok } from "./output.js";
+import { fail, ok, type FailureDetails } from "./output.js";
 import type { EmitOptions } from "./result.js";
 import type { CliSuccessResult } from "./result.js";
 
@@ -29,10 +29,13 @@ export function emitSuccess(result: CliSuccessResult, options: EmitOptions): voi
   if (options.outPath) writeOutputFile(options.outPath, payload);
 }
 
-export function emitFailure(command: string[], message: string, options: EmitOptions, suggestions?: string[]): never {
+export function emitFailure(command: string[], message: string, options: EmitOptions, suggestions?: string[], details?: FailureDetails): never {
+  const attempts = details?.summary?.attempts.flatMap((attempt) => attempt.status === "failed"
+    ? [`${attempt.transport ?? attempt.provider}: ${attempt.error}`]
+    : attempt.status === "skipped" ? [`${attempt.transport ?? attempt.provider}: skipped (${attempt.reason})`] : []) ?? [];
   const payload = options.asJson
-    ? ensureTrailingNewline(JSON.stringify(fail(command, message, suggestions), null, 2))
-    : ensureTrailingNewline([message, ...(suggestions?.length ? ["", ...suggestions.map((item) => `help: ${item}`)] : [])].join("\n"));
+    ? ensureTrailingNewline(JSON.stringify(fail(command, message, suggestions, details), null, 2))
+    : ensureTrailingNewline([message, ...attempts, ...(suggestions?.length ? ["", ...suggestions.map((item) => `help: ${item}`)] : [])].join("\n"));
   process.stderr.write(payload);
   process.exit(1);
 }

@@ -1,4 +1,5 @@
-const realFetch = globalThis.fetch;
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 
 function jsonResponse(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -11,11 +12,35 @@ globalThis.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
   if (url === "https://api.exa.ai/answer") {
+    const query = JSON.parse(init.body).query;
+    if (query === "mock history failure") {
+      const writeFileSync = fs.writeFileSync;
+      fs.writeFileSync = (path, ...args) => {
+        if (String(path).endsWith("/.search/history.json")) {
+          throw Object.assign(new Error("Test history write denied"), { code: "EACCES" });
+        }
+        return writeFileSync(path, ...args);
+      };
+      syncBuiltinESMExports();
+    }
+    if (query === "mock provider failure") {
+      return jsonResponse({ error: "Search backend unavailable" }, { status: 503 });
+    }
+    if (query === "mock empty query") {
+      return jsonResponse({ answer: "", citations: [] });
+    }
     return jsonResponse({
       answer: "Mock Exa answer",
       citations: [
         { title: "Mock Source", url: "https://example.com/mock-source" }
       ]
+    });
+  }
+
+  if (url === "https://mcp.exa.ai/mcp") {
+    return jsonResponse({
+      jsonrpc: "2.0", id: 1,
+      result: { content: [{ type: "text", text: "Title: Mock Source\nURL: https://example.com/mock-source\nText: A useful excerpt from the search result." }] }
     });
   }
 
@@ -26,5 +51,5 @@ globalThis.fetch = async (input, init) => {
     });
   }
 
-  return realFetch(input, init);
+  throw new Error(`Unexpected URL in mock web transport: ${new URL(url).origin}`);
 };

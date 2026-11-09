@@ -3,7 +3,7 @@ import { searchWithGemini, type GeminiSearchResult } from "../../lib/upstream/ge
 import { searchWithGeminiWeb, type GeminiWebSearchResult } from "../../lib/upstream/gemini-web.js";
 import { defineSource } from "../define.js";
 import { mapSearchResponseEvidence, type WebEvidencePayload, type WebSourceRequest } from "./web-shared.js";
-import type { Source } from "../types.js";
+import type { Source, SourceContext } from "../types.js";
 
 export type GeminiSourceRequest = WebSourceRequest & {
   transport?: "auto" | "web" | "api";
@@ -11,14 +11,14 @@ export type GeminiSourceRequest = WebSourceRequest & {
 
 export type GeminiEvidencePayload = WebEvidencePayload<GeminiSearchResult["native"] | GeminiWebSearchResult["native"]>;
 
-async function runWeb(query: string, req: GeminiSourceRequest) {
+async function runWeb(query: string, req: GeminiSourceRequest, ctx: SourceContext) {
   const response = await searchWithGeminiWeb(query, {
     numResults: req.numResults,
     includeContent: req.includeContent,
     recencyFilter: req.recencyFilter,
     domainFilter: req.domainFilter,
     signal: req.signal
-  });
+  }, ctx);
 
   if (!response) {
     throw new Error("Gemini web unavailable: no logged-in browser profile found");
@@ -27,14 +27,14 @@ async function runWeb(query: string, req: GeminiSourceRequest) {
   return response;
 }
 
-async function runApi(query: string, req: GeminiSourceRequest) {
+async function runApi(query: string, req: GeminiSourceRequest, ctx: SourceContext) {
   return searchWithGemini(query, {
     numResults: req.numResults,
     includeContent: req.includeContent,
     recencyFilter: req.recencyFilter,
     domainFilter: req.domainFilter,
     signal: req.signal
-  });
+  }, ctx);
 }
 
 export const geminiSource: Source<GeminiSourceRequest, GeminiEvidencePayload> = defineSource({
@@ -48,12 +48,12 @@ export const geminiSource: Source<GeminiSourceRequest, GeminiEvidencePayload> = 
     ctx.trace.step("source.gemini", req.query, { transport });
 
     const response = transport === "web"
-      ? await runWeb(req.query, req)
+      ? await runWeb(req.query, req, ctx)
       : transport === "api"
-        ? await runApi(req.query, req)
-        : await isGeminiApiAvailable()
-          ? await runApi(req.query, req)
-          : await runWeb(req.query, req);
+        ? await runApi(req.query, req, ctx)
+        : await isGeminiApiAvailable(ctx)
+          ? await runApi(req.query, req, ctx)
+          : await runWeb(req.query, req, ctx);
 
     return mapSearchResponseEvidence<GeminiSearchResult["native"] | GeminiWebSearchResult["native"]>(
       "gemini",

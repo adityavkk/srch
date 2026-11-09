@@ -74,6 +74,12 @@ console.log(typeof createClient); // function
 TS
 ```
 
+Do not install the unrelated registry package named `srch`. A successful import
+alone does not verify this SDK; it must export `createClient`. Bun can resolve a
+cached package even when Node cannot resolve it from the same directory. To test
+a local checkout without package resolution, build it and import `./dist/sdk.js`
+from its root directory.
+
 Then use the SDK from Bun/TypeScript:
 
 ```bash
@@ -86,6 +92,52 @@ TS
 ```
 
 Bun runs TypeScript directly. No `bunx`, `tsx`, flags, or bash parsing.
+
+#### Debugging web search
+
+Web search returns `success` when it has results, `empty` when a provider
+completed successfully with no results, and `error` with code `web_unavailable`
+when no provider completed successfully. Check `summary.attempts` for each
+provider's transport, status, and failure reason. A failed fallback can appear
+alongside a successful empty response, so inspect the attempts before treating
+an empty response as proof that nothing exists.
+
+The CLI exits with status 1 on a search failure. With `--json`, it writes the
+error to stderr, including `error.code` and `error.summary.attempts`. Successful
+responses go to stdout, including `data.kind` and `data.summary`. Start with a
+single provider to isolate the failing connection:
+
+```bash
+search web "TypeScript official documentation" --provider exa --json
+```
+
+If the CLI cannot save web search history, it prints a warning to stderr and
+still returns the search results.
+
+To test the SDK from this checkout using Node:
+
+```bash
+bun run build
+node --input-type=module <<'JS'
+import { createClient, loadConfig } from './dist/sdk.js';
+const client = createClient({ config: (await loadConfig()) ?? undefined });
+const result = await client.run({
+  domain: 'web', provider: 'exa', query: 'TypeScript official documentation'
+});
+console.log(JSON.stringify(result, null, 2));
+process.exitCode = result.kind === 'error' ? 1 : 0;
+JS
+```
+
+The CLI loads `srch.config.*` automatically. The SDK accepts that configuration
+explicitly through `loadConfig()` as shown above. Built-in web sources also use
+the HTTP client and secret resolver supplied to `createClient({ http, secrets })`.
+
+Compare the runtimes and proxy settings when only one entry point works. A CLI
+wrapper may select Node and enable `NODE_USE_ENV_PROXY`, while a direct Bun or
+Node SDK call does not execute that wrapper. Use the configured proxy for your
+environment; changing search terms or enabling `--hq` does not repair a failed
+connection. `--hq` selects the paid Exa API and needs an Exa API key.
 
 #### Fetch extraction
 

@@ -55,8 +55,8 @@ export function createExaSource(deps: ExaSourceDeps = defaultDeps): Source<ExaSo
       };
 
       const response = req.mode === "api"
-        ? await deps.searchApi(req.query, options)
-        : await deps.searchMcp(req.query, options);
+        ? await deps.searchApi(req.query, options, ctx)
+        : await deps.searchMcp(req.query, options, ctx);
 
       return mapEvidence(req.query, response);
     }

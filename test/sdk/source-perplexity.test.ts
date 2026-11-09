@@ -62,18 +62,19 @@ test("perplexity declares the capabilities and transport it uses", () => {
 
 // Pinning the web strategy to `provider: "perplexity"` isolates the failure: the
 // stubbed API returns 500, the source throws, and the strategy degrades to a
-// typed RunEmpty without letting the error escape the source boundary.
-test("perplexity failure surfaces a typed RunEmpty without throwing out of the source", async () => {
+// typed RunError without letting the error escape the source boundary.
+test("perplexity failure surfaces a typed RunError without throwing out of the source", async () => {
   globalThis.fetch = (async () =>
     new Response("upstream boom", { status: 500, statusText: "Server Error" })) as typeof fetch;
   const client = createClient({ config: { modules: [coreModule] } });
 
   const result = await assertTypedFailure(
     () => client.run({ domain: "web", query: "bun sqlite", provider: "perplexity" }),
-    { kind: "empty", domain: "web" }
+    { kind: "error", domain: "web" }
   );
 
-  assert.equal(result.kind, "empty");
+  assert.equal(result.kind, "error");
+  if (result.kind === "error") assert.equal(result.error.code, "web_unavailable");
 });
 
 test("perplexity maps citations into contract-conforming evidence", async () => {
@@ -86,7 +87,7 @@ test("perplexity maps citations into contract-conforming evidence", async () => 
   const evidence = await assertSuccessContract(
     perplexitySource,
     { query: "bun sqlite", numResults: 5 },
-    makeSourceContext()
+    makeSourceContext({ secrets: { perplexityApiKey: "dummy-perplexity-key" } })
   );
 
   assert.equal(evidence.length, 2);

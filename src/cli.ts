@@ -454,8 +454,16 @@ async function main(): Promise<void> {
       const hq = flags.has("hq");
       trace.step("web", "dispatch", { provider, hq, queryChars: query.length });
       const rendered = await trace.span("web.search", hq ? "exa-paid" : provider, async () => runWebCommand(query, { provider, hq, trace: flags.has("verbose") }));
-      if (rendered.kind === "error") emitFailure(["web"], rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions);
-      addHistory({ kind: "web", input: { query, provider }, output: rendered.data });
+      if (rendered.kind === "error") emitFailure(["web"], rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions, {
+        code: rendered.error.error.code,
+        summary: rendered.error.summary,
+        trace: rendered.error.trace
+      });
+      try {
+        addHistory({ kind: "web", input: { query, provider }, output: rendered.data });
+      } catch (error) {
+        console.error(`Warning: Could not save search history: ${error instanceof Error ? error.message : String(error)}`);
+      }
       return emitSuccess({
         command: ["web"],
         kind: "web",
