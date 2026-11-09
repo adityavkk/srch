@@ -1,9 +1,17 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { loadConfig, type SecretField, type SearchConfig } from "./config.js";
+import { getConfigPath, loadConfig, type SecretField, type SearchConfig } from "./config.js";
 
 const execFileAsync = promisify(execFile);
-const cache = new Map<SecretField, string | null>();
+const cache = new Map<string, { value: string; expiresAt: number }>();
+const CACHE_TTL_MS = 60_000;
+let cacheGeneration = 0;
+
+/** Invalidate cached external-store credentials after rotating a key. */
+export function clearSecretCache(): void {
+  cacheGeneration++;
+  cache.clear();
+}
 
 const FALLBACK_ENV_KEYS: Record<SecretField, string> = {
   exaApiKey: "EXA_API_KEY",
@@ -48,40 +56,34 @@ async function readOp(path: string, signal?: AbortSignal): Promise<string | null
 
 export async function resolveSecret(field: SecretField, signal?: AbortSignal): Promise<string | null> {
   signal?.throwIfAborted();
-  if (cache.has(field)) return cache.get(field) ?? null;
-  const config = loadConfig();
   const envKey = FALLBACK_ENV_KEYS[field];
-
   const envValue = process.env[envKey]?.trim();
-  if (envValue) {
-    cache.set(field, envValue);
-    return envValue;
-  }
+  if (envValue) return envValue;
 
+  const config = loadConfig();
   const configValue = config[field]?.trim();
-  if (configValue) {
-    cache.set(field, configValue);
-    return configValue;
-  }
+  if (configValue) return configValue;
 
   const ref = config.secrets?.[field];
-  if (ref?.source === "fnox" && ref.key) {
-    const value = await readFnox(ref.key, signal);
-    signal?.throwIfAborted();
-    cache.set(field, value);
-    return value;
-  }
-  if (ref?.source === "op" && ref.key) {
-    const value = await readOp(ref.key, signal);
-    signal?.throwIfAborted();
-    cache.set(field, value);
-    return value;
-  }
+  const source = ref?.key && (ref.source === "fnox" || ref.source === "op") ? ref.source : "fnox";
+  const key = ref?.key && (ref.source === "fnox" || ref.source === "op") ? ref.key : envKey;
+  const cacheKey = JSON.stringify([getConfigPath(), process.cwd(), field, source, key]);
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-  const fallbackValue = await readFnox(envKey, signal);
+  const generation = cacheGeneration;
+  const value = await (source === "op" ? readOp(key, signal) : readFnox(key, signal));
   signal?.throwIfAborted();
-  cache.set(field, fallbackValue);
-  return fallbackValue;
+  // Missing credentials must be retried, and environment/config values stay fresh.
+  cache.delete(cacheKey);
+  if (value && generation === cacheGeneration) {
+    for (const [entry, cachedValue] of cache) {
+      if (cachedValue.expiresAt <= Date.now()) cache.delete(entry);
+    }
+    if (cache.size >= 64) cache.delete(cache.keys().next().value!);
+    cache.set(cacheKey, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+  }
+  return value;
 }
 
 export async function inspectSecretSources(config?: SearchConfig): Promise<Record<SecretField, SecretResolution>> {

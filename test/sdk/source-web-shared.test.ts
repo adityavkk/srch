@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SearchResponse } from "../../src/lib/core/types.js";
-import { mapSearchResponseEvidence } from "../../src/sdk/sources/web-shared.js";
+import { mapSearchResponseEvidence, WebAnswerWithoutSourcesError } from "../../src/sdk/sources/web-shared.js";
 import { assertEvidenceContract } from "./source-contract.js";
 
 type Native = { provider: string; ok: boolean };
@@ -62,4 +62,25 @@ test("mapSearchResponseEvidence returns an empty array when the transport return
   const mapped = mapSearchResponseEvidence("brave", "no hits", response(native, []), "brave-api");
 
   assert.deepEqual(mapped, []);
+});
+
+test("normalized answers remain available without parsing provider-specific native responses", () => {
+  const mapped = mapSearchResponseEvidence("gemini", "query", {
+    answer: "The provider's complete answer.",
+    results: [{ title: "Source", url: "https://example.com", snippet: "" }],
+    native: { candidates: [{ content: { parts: [{ text: "The provider's complete answer." }] } }] }
+  }, "gemini-api");
+  assert.equal(mapped[0]?.payload.answer, "The provider's complete answer.");
+});
+
+test("an uncited answer is an explicit failure, with text available to direct source callers", () => {
+  assert.throws(() => mapSearchResponseEvidence("gemini", "query", {
+    answer: "Uncited generated text.", results: [], native: {}
+  }, "gemini-api"), (error) => {
+    assert.ok(error instanceof WebAnswerWithoutSourcesError);
+    assert.equal(error.code, "web_answer_uncited");
+    assert.equal(error.answer, "Uncited generated text.");
+    assert.ok(!error.message.includes(error.answer), "generated text must not be copied into diagnostics");
+    return true;
+  });
 });

@@ -15,6 +15,7 @@ function firstPayload<T>(result: RunResult): T | null {
 function deriveWebAnswer(result: RunResult): string {
   if (result.kind !== "success") return "";
   const payload = result.evidence[0]?.payload as WebEvidencePayload<{ response?: { answer?: string } }> | undefined;
+  if (payload?.answer) return payload.answer;
   const answer = payload?.native && typeof payload.native === "object" && "response" in payload.native
     ? (payload.native.response as { answer?: string } | undefined)?.answer
     : undefined;

@@ -53,6 +53,23 @@ globalThis.fetch = async (input, init) => {
     }] } });
   }
 
+  if (url.startsWith("https://generativelanguage.googleapis.com/")) {
+    const query = JSON.parse(init.body).contents[0].parts[0].text;
+    return jsonResponse({ candidates: [{
+      content: { parts: [{ text: "The complete Gemini answer." }] },
+      groundingMetadata: { groundingChunks: query.includes("uncited") ? [] : [
+        { web: { title: "Gemini reference", uri: "https://example.com/gemini" } }
+      ] }
+    }] });
+  }
+
+  if (url === "https://api.perplexity.ai/chat/completions") {
+    return jsonResponse({
+      choices: [{ message: { content: "The complete Perplexity answer." } }],
+      citations: [{ title: "Perplexity reference", url: "https://example.com/perplexity" }]
+    });
+  }
+
   if (url === "https://mock.local/article") {
     return new Response(`<!doctype html><html><head><title>Mock Article</title></head><body><main><h1>Mock Article</h1><p>First paragraph with enough text to be extracted cleanly for testing persisted fetch output behavior in the CLI.</p><p>Second paragraph for readability extraction.</p></main></body></html>`, {
       status: 200,

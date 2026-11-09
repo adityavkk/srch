@@ -82,3 +82,26 @@ test("ordinary status does not claim untested sources are healthy", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /0 healthy, \d+ untested/);
 });
+
+test("web preserves generated provider answers alongside their source URLs", () => {
+  for (const provider of ["gemini", "perplexity"]) {
+    const flags = provider === "gemini" ? ["--hq"] : [];
+    const result = runCli(["web", "query", "--provider", provider, ...flags, "--json"], {
+      GEMINI_API_KEY: "synthetic-gemini", PERPLEXITY_API_KEY: "synthetic-perplexity"
+    }, imports);
+    assert.equal(result.status, 0, result.stderr);
+    const data = JSON.parse(result.stdout).data;
+    assert.equal(data.answer, `The complete ${provider === "gemini" ? "Gemini" : "Perplexity"} answer.`);
+    assert.equal(data.results[0].url, `https://example.com/${provider}`);
+  }
+});
+
+test("web does not report an uncited provider answer as an empty search", () => {
+  const result = runCli(["web", "uncited", "--provider", "gemini", "--hq", "--json"], {
+    GEMINI_API_KEY: "synthetic-gemini"
+  }, imports);
+  assert.equal(result.status, 1);
+  const error = JSON.parse(result.stderr).error;
+  assert.match(error.message, /without source URLs/);
+  assert.doesNotMatch(result.stderr, /The complete Gemini answer/);
+});

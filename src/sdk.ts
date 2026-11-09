@@ -1,4 +1,5 @@
 export { createClient, type ClientSearch, type SrchClient } from "./sdk/client.js";
+export { clearSecretCache } from "./lib/core/secrets.js";
 export { doctorWeb, type WebDoctorReport, type WebDoctorOptions } from "./sdk/doctor.js";
 export { SEARCH_PROVIDERS, isSearchProvider, WebOptionsError } from "./lib/search/web-options.js";
 export { loadConfig, findConfigPath, resolveConfig, type CreateClientOptions, type LoadConfigOptions } from "./sdk/config.js";
@@ -73,6 +74,7 @@ export {
 } from "./sdk/sources/exa.js";
 export {
   mapSearchResponseEvidence,
+  WebAnswerWithoutSourcesError,
   type WebEvidenceContent,
   type WebEvidencePayload,
   type WebSourceRequest

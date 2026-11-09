@@ -18,8 +18,20 @@ export type WebEvidencePayload<TNative = unknown> = {
   url: string;
   snippet: string;
   content: WebEvidenceContent;
+  /** Provider-generated answer associated with the returned sources. */
+  answer?: string;
   native: TNative;
 };
+
+/** Generated text without source URLs is not search evidence. */
+export class WebAnswerWithoutSourcesError extends Error {
+  readonly code = "web_answer_uncited";
+
+  constructor(readonly source: string, readonly answer: string) {
+    super(`${source} returned an answer without source URLs; no cited search evidence is available`);
+    this.name = "WebAnswerWithoutSourcesError";
+  }
+}
 
 export function mapSearchResponseEvidence<TNative>(
   source: string,
@@ -28,6 +40,9 @@ export function mapSearchResponseEvidence<TNative>(
   transport: string,
   inlineContent = new Map<string, string>()
 ): Evidence<WebEvidencePayload<TNative>>[] {
+  if (response.answer.trim() && response.results.length === 0) {
+    throw new WebAnswerWithoutSourcesError(source, response.answer);
+  }
   return response.results.map((result) => {
     const content = inlineContent.get(result.url);
 
@@ -48,6 +63,7 @@ export function mapSearchResponseEvidence<TNative>(
         url: result.url,
         snippet: result.snippet,
         content: content ? { kind: "inline", text: content } : { kind: "none" },
+        ...(response.answer.trim() ? { answer: response.answer } : {}),
         native: response.native
       }
     };
