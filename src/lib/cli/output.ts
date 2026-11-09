@@ -5,6 +5,7 @@ export type FailureDetails = {
   code?: string;
   summary?: RunSummary;
   trace?: TraceEvent[];
+  diagnostics?: unknown;
 };
 
 export interface JsonEnvelope<T> {

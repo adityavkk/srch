@@ -1,5 +1,6 @@
 import { isBraveAvailable, searchWithBrave, type BraveSearchResult } from "../../lib/upstream/brave.js";
 import { defineSource } from "../define.js";
+import { assertWebOptions } from "../../lib/search/web-options.js";
 import { mapSearchResponseEvidence, type WebEvidencePayload, type WebSourceRequest } from "./web-shared.js";
 import type { Source } from "../types.js";
 
@@ -12,9 +13,10 @@ export const braveSource: Source<WebSourceRequest, BraveEvidencePayload> = defin
   traits: ["api-key-required"],
   transports: ["brave-search-api"],
   async run(req, ctx) {
+    assertWebOptions("brave-search-api", req);
     ctx.trace.step("source.brave", req.query);
 
-    if (!(await isBraveAvailable(ctx))) {
+    if (!(await isBraveAvailable(ctx, req.signal))) {
       throw new Error("Brave unavailable: missing API key");
     }
 

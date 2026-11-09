@@ -37,5 +37,6 @@ export function emitFailure(command: string[], message: string, options: EmitOpt
     ? ensureTrailingNewline(JSON.stringify(fail(command, message, suggestions, details), null, 2))
     : ensureTrailingNewline([message, ...attempts, ...(suggestions?.length ? ["", ...suggestions.map((item) => `help: ${item}`)] : [])].join("\n"));
   process.stderr.write(payload);
+  if (options.outPath) writeOutputFile(options.outPath, payload);
   process.exit(1);
 }

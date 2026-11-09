@@ -3,12 +3,14 @@ import { isGeminiApiAvailable } from "../../lib/upstream/gemini-api.js";
 import { isPerplexityAvailable } from "../../lib/upstream/perplexity.js";
 import { defineStrategy } from "../define.js";
 import { merge } from "../operators.js";
-import type { AnySource, Evidence, ProviderAttempt, RunResult, RunSummary, SourceRequest, StaticStrategy, StrategyContext, StrategyRequest } from "../types.js";
+import type { Evidence, ProviderAttempt, RunResult, RunSummary, StaticStrategy, StrategyContext, StrategyRequest } from "../types.js";
+import { DEFAULT_WEB_TIMEOUT_MS, unsupportedWebOptions, validateWebOptions, WebOptionsError, type WebTransport } from "../../lib/search/web-options.js";
 import type { WebSourceRequest } from "../sources/web-shared.js";
 
 export type WebStrategyRequest = StrategyRequest & WebSourceRequest & {
   provider?: "auto" | "exa" | "brave" | "gemini" | "perplexity";
   hq?: boolean;
+  timeoutMs?: number;
 };
 
 export type WebStrategyDeps = {
@@ -97,14 +99,15 @@ function noEvidenceResult(req: WebStrategyRequest, attempts: ProviderAttempt[], 
   } : undefined;
 
   if (req.signal?.aborted) {
+    const timedOut = req.signal.reason instanceof Error && req.signal.reason.name === "TimeoutError";
     return {
       kind: "error",
       domain: "web",
       strategy: "web/default",
-      error: { code: "aborted", message: "Web search was cancelled" },
+      error: { code: timedOut ? "timeout" : "aborted", message: timedOut ? "Web search exceeded its time limit" : "Web search was cancelled" },
       summary,
       trace: [],
-      suggestions: ["Retry the search with a new cancellation signal"]
+      suggestions: [timedOut ? "Increase timeoutMs or select a working provider" : "Retry the search with a new cancellation signal"]
     };
   }
 
@@ -132,36 +135,40 @@ function noEvidenceResult(req: WebStrategyRequest, attempts: ProviderAttempt[], 
   };
 }
 
-async function trySource<TRequest extends SourceRequest>(
-  ctx: StrategyContext,
-  attempts: ProviderAttempt[],
-  source: string | AnySource,
-  req: TRequest,
-  meta: { provider: string; transport: string }
-): Promise<Evidence[] | null> {
-  const startedAt = Date.now();
-  try {
-    const evidence = typeof source === "string"
-      ? await ctx.search(source, req)
-      : await ctx.search(source, req);
-    attempts.push({
-      provider: meta.provider,
-      status: "success",
-      transport: meta.transport,
-      durationMs: Date.now() - startedAt,
-      evidenceCount: evidence.length
-    });
-    return evidence.length > 0 ? evidence : null;
-  } catch (error) {
-    attempts.push({
-      provider: meta.provider,
-      status: "failed",
-      transport: meta.transport,
-      error: error instanceof Error ? error.message : String(error),
-      durationMs: Date.now() - startedAt
-    });
-    return null;
-  }
+type Candidate = {
+  provider: "exa" | "brave" | "gemini" | "perplexity";
+  transport: WebTransport;
+  options?: { mode?: "api" | "mcp"; transport?: "api" | "web" };
+  available?: (ctx: StrategyContext, signal?: AbortSignal) => Promise<boolean>;
+};
+
+function candidatesFor(req: WebStrategyRequest, deps: WebStrategyDeps): Candidate[] {
+  const exa: Candidate = { provider: "exa", transport: req.hq ? "exa-api" : "exa-mcp", options: { mode: req.hq ? "api" : "mcp" } };
+  const brave: Candidate = { provider: "brave", transport: "brave-search-api", available: deps.isBraveAvailable };
+  const geminiWeb: Candidate = { provider: "gemini", transport: "gemini-web", options: { transport: "web" } };
+  const geminiApi: Candidate = { provider: "gemini", transport: "gemini-api", options: { transport: "api" }, available: deps.isGeminiApiAvailable };
+  const perplexity: Candidate = { provider: "perplexity", transport: "perplexity-api", available: deps.isPerplexityAvailable };
+  if (req.provider === "exa") return [exa];
+  if (req.provider === "brave") return [{ ...brave, available: undefined }];
+  if (req.provider === "perplexity") return [{ ...perplexity, available: undefined }];
+  if (req.provider === "gemini") return req.hq ? [{ ...geminiApi, available: undefined }] : [geminiWeb, geminiApi];
+  return req.hq ? [exa] : [exa, brave, geminiWeb, geminiApi, perplexity];
+}
+
+// Bound even custom transports or secret resolvers that ignore AbortSignal.
+function withSignal<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    Promise.resolve().then(() => {
+      signal.throwIfAborted();
+      return operation();
+    }).then(
+      (value) => { signal.removeEventListener("abort", abort); resolve(value); },
+      (error: unknown) => { signal.removeEventListener("abort", abort); reject(error); }
+    );
+  });
 }
 
 export function createWebDefaultStrategy(deps: WebStrategyDeps = defaultDeps): StaticStrategy<WebStrategyRequest> {
@@ -169,82 +176,59 @@ export function createWebDefaultStrategy(deps: WebStrategyDeps = defaultDeps): S
     kind: "static",
     name: "web/default",
     domain: "web",
-    async run(req, ctx) {
-      if (!req.query.trim()) {
-        return errorResult(req, "invalid_query", "Query must not be empty");
+    async run(request, ctx) {
+      if (typeof request.query !== "string" || !request.query.trim()) {
+        return errorResult(request, "invalid_query", "Query must be a non-empty string");
+      }
+      try {
+        validateWebOptions(request);
+      } catch (error) {
+        if (error instanceof WebOptionsError) return errorResult(request, error.code, error.message);
+        throw error;
+      }
+      const candidates = candidatesFor(request, deps);
+      const explicit = request.provider !== undefined && request.provider !== "auto" || request.hq;
+      if (explicit) {
+        const reason = unsupportedWebOptions(candidates[0]!.transport, request);
+        if (reason) return errorResult(request, "unsupported_option", reason);
+      }
+      if (candidates.every((candidate) => unsupportedWebOptions(candidate.transport, request))) {
+        return errorResult(request, "unsupported_option", "No selected transport supports this combination of search options. Select Exa with hq for filtered full content.");
       }
 
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(new DOMException("Web search exceeded its time limit", "TimeoutError")), request.timeoutMs ?? DEFAULT_WEB_TIMEOUT_MS);
+      const signal = request.signal ? AbortSignal.any([request.signal, controller.signal]) : controller.signal;
+      const req = { ...request, signal };
       const startedAt = Date.now();
       const attempts: ProviderAttempt[] = [];
-      if (req.signal?.aborted) return noEvidenceResult(req, attempts, startedAt);
-
-      if (req.provider === "exa") {
-        const evidence = await trySource(ctx, attempts, "exa", { ...requestFor(req), mode: req.hq ? "api" : "mcp" }, { provider: "exa", transport: req.hq ? "exa-api" : "exa-mcp" });
-        return evidence ? successResult(req, evidence, attempts, startedAt) : noEvidenceResult(req, attempts, startedAt);
-      }
-      if (req.provider === "brave") {
-        const evidence = await trySource(ctx, attempts, "brave", requestFor(req), { provider: "brave", transport: "brave-search-api" });
-        return evidence ? successResult(req, evidence, attempts, startedAt) : noEvidenceResult(req, attempts, startedAt);
-      }
-      if (req.provider === "gemini") {
-        const webEvidence = await trySource(ctx, attempts, "gemini", { ...requestFor(req), transport: req.hq ? "api" : "web" }, { provider: "gemini", transport: req.hq ? "gemini-api" : "gemini-web" });
-        if (webEvidence) return successResult(req, webEvidence, attempts, startedAt);
-        if (req.signal?.aborted) return noEvidenceResult(req, attempts, startedAt);
-        if (!req.hq && await deps.isGeminiApiAvailable(ctx)) {
-          const apiEvidence = await trySource(ctx, attempts, "gemini", { ...requestFor(req), transport: "api" }, { provider: "gemini", transport: "gemini-api" });
-          if (apiEvidence) return successResult(req, apiEvidence, attempts, startedAt);
+      try {
+        for (const candidate of candidates) {
+          if (signal.aborted) break;
+          const { provider, transport } = candidate;
+          const reason = unsupportedWebOptions(transport, req);
+          if (reason) {
+            attempts.push({ provider, transport, status: "skipped", reason });
+            continue;
+          }
+          const attemptStarted = Date.now();
+          try {
+            if (candidate.available && !await withSignal(() => candidate.available!(ctx, signal), signal)) {
+              attempts.push({ provider, transport, status: "skipped", reason: "missing API key" });
+              continue;
+            }
+            const evidence = await withSignal(() => ctx.search(provider, { ...requestFor(req), ...candidate.options }), signal);
+            if (signal.aborted) break;
+            attempts.push({ provider, transport, status: "success", durationMs: Date.now() - attemptStarted, evidenceCount: evidence.length });
+            if (evidence.length > 0) return successResult(req, explicit ? evidence : merge(evidence), attempts, startedAt);
+          } catch (error) {
+            attempts.push({ provider, transport, status: "failed", error: error instanceof Error ? error.message : String(error), durationMs: Date.now() - attemptStarted });
+          }
         }
         return noEvidenceResult(req, attempts, startedAt);
+      } finally {
+        clearTimeout(timer);
       }
-      if (req.provider === "perplexity") {
-        const evidence = await trySource(ctx, attempts, "perplexity", requestFor(req), { provider: "perplexity", transport: "perplexity-api" });
-        return evidence ? successResult(req, evidence, attempts, startedAt) : noEvidenceResult(req, attempts, startedAt);
-      }
-
-      if (req.hq) {
-        const evidence = await trySource(ctx, attempts, "exa", { ...requestFor(req), mode: "api" }, { provider: "exa", transport: "exa-api" });
-        return evidence ? successResult(req, evidence, attempts, startedAt) : noEvidenceResult(req, attempts, startedAt);
-      }
-
-      const collected: Evidence[][] = [];
-
-      const exa = await trySource(ctx, attempts, "exa", { ...requestFor(req), mode: "mcp" }, { provider: "exa", transport: "exa-mcp" });
-      if (exa) collected.push(exa);
-      if (collected.length > 0) return successResult(req, merge(...collected), attempts, startedAt);
-      if (req.signal?.aborted) return noEvidenceResult(req, attempts, startedAt);
-
-      if (await deps.isBraveAvailable(ctx)) {
-        const brave = await trySource(ctx, attempts, "brave", requestFor(req), { provider: "brave", transport: "brave-search-api" });
-        if (brave) collected.push(brave);
-        if (collected.length > 0) return successResult(req, merge(...collected), attempts, startedAt);
-        if (req.signal?.aborted) return noEvidenceResult(req, attempts, startedAt);
-      } else {
-        attempts.push({ provider: "brave", transport: "brave-search-api", status: "skipped", reason: "missing API key" });
-      }
-
-      const geminiWeb = await trySource(ctx, attempts, "gemini", { ...requestFor(req), transport: "web" }, { provider: "gemini", transport: "gemini-web" });
-      if (geminiWeb) collected.push(geminiWeb);
-      if (collected.length > 0) return successResult(req, merge(...collected), attempts, startedAt);
-      if (req.signal?.aborted) return noEvidenceResult(req, attempts, startedAt);
-
-      if (await deps.isGeminiApiAvailable(ctx)) {
-        const geminiApi = await trySource(ctx, attempts, "gemini", { ...requestFor(req), transport: "api" }, { provider: "gemini", transport: "gemini-api" });
-        if (geminiApi) collected.push(geminiApi);
-        if (collected.length > 0) return successResult(req, merge(...collected), attempts, startedAt);
-        if (req.signal?.aborted) return noEvidenceResult(req, attempts, startedAt);
-      } else {
-        attempts.push({ provider: "gemini", transport: "gemini-api", status: "skipped", reason: "missing API key" });
-      }
-
-      if (await deps.isPerplexityAvailable(ctx)) {
-        const perplexity = await trySource(ctx, attempts, "perplexity", requestFor(req), { provider: "perplexity", transport: "perplexity-api" });
-        if (perplexity) collected.push(perplexity);
-        if (collected.length > 0) return successResult(req, merge(...collected), attempts, startedAt);
-      } else {
-        attempts.push({ provider: "perplexity", transport: "perplexity-api", status: "skipped", reason: "missing API key" });
-      }
-
-      return noEvidenceResult(req, attempts, startedAt);
     }
   });
 }

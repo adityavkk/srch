@@ -34,7 +34,14 @@ export const GLOBAL_FLAGS: FlagSchema = {
 const COMMAND_FLAGS: Record<string, FlagSchema> = {
   web: {
     provider: "string",
-    hq: "boolean"
+    hq: "boolean",
+    limit: "string",
+    recent: "string",
+    domain: "list",
+    "timeout-ms": "string"
+  },
+  doctor: {
+    "timeout-ms": "string"
   },
   code: {
     "max-tokens": "string"

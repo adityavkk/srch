@@ -141,13 +141,13 @@ export function createClient(options: CreateClientOptions = {}): SrchClient {
     search,
     run,
     async status() {
-      const sourceStatus = sources.list().map((source) => ({ name: source.name, status: "healthy" as const }));
+      const sourceStatus = sources.list().map((source) => ({ name: source.name, status: "untested" as const }));
       const domainNames = domains.list().map((domain) => domain.name).sort();
 
       return {
         domains: toNonEmpty(domainNames),
         sources: sourceStatus,
-        summary: { healthy: sourceStatus.length, total: sourceStatus.length },
+        summary: { healthy: 0, untested: sourceStatus.length, total: sourceStatus.length },
         recentRuns: []
       };
     },

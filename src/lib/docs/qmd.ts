@@ -1,11 +1,12 @@
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { createStore, type QMDStore } from "@tobilu/qmd";
+import type { QMDStore } from "@tobilu/qmd";
 
 const DB_PATH = join(homedir(), ".search", "qmd", "index.sqlite");
 
 async function withStore<T>(fn: (store: QMDStore) => Promise<T>): Promise<T> {
+  const { createStore } = await import("@tobilu/qmd");
   mkdirSync(dirname(DB_PATH), { recursive: true });
   const store = await createStore({ dbPath: DB_PATH });
   try {

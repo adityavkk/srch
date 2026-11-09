@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { runCli as runBuiltCli } from "./helpers/cli.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -8,21 +8,11 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..");
-const cliPath = resolve(repoRoot, "src/cli.ts");
 const mockImportPath = resolve(repoRoot, "test/fixtures/mock-seats-aero-fetch.mjs");
 const mockBaseUrl = "https://mock.seats.aero/partnerapi";
 
 function runCli(args: string[], env: NodeJS.ProcessEnv = {}) {
-  return spawnSync(process.execPath, ["--import", "tsx", cliPath, ...args], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      SRCH_SEATS_AERO_BASE_URL: mockBaseUrl,
-      NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${mockImportPath}`].filter(Boolean).join(" "),
-      ...env
-    },
-    encoding: "utf8"
-  });
+  return runBuiltCli(args, { SRCH_SEATS_AERO_BASE_URL: mockBaseUrl, ...env }, [mockImportPath]);
 }
 
 function parseJson(output: string) {
@@ -34,12 +24,12 @@ function parseJson(output: string) {
   };
 }
 
-function withTempHome(fn: (home: string) => void) {
-  const home = mkdtempSync(resolve(tmpdir(), "srch-home-"));
+function withTempState(fn: (stateDir: string) => void) {
+  const stateDir = mkdtempSync(resolve(tmpdir(), "srch-home-"));
   try {
-    fn(home);
+    fn(stateDir);
   } finally {
-    rmSync(home, { recursive: true, force: true });
+    rmSync(stateDir, { recursive: true, force: true });
   }
 }
 
@@ -152,9 +142,9 @@ test("search rewards-flights fails cleanly when API key is missing", () => {
 });
 
 test("search rewards-flights auth status shows setup guidance", () => {
-  withTempHome((home) => {
+  withTempState((stateDir) => {
     const result = runCli(["rewards-flights", "auth", "status", "--json"], {
-      HOME: home,
+      SRCH_STATE_DIR: stateDir,
       SEATS_AERO_API_KEY: ""
     });
     assert.equal(result.status, 0, result.stderr);
@@ -167,9 +157,9 @@ test("search rewards-flights auth status shows setup guidance", () => {
 });
 
 test("search rewards-flights auth set stores the key and clear removes it", () => {
-  withTempHome((home) => {
+  withTempState((stateDir) => {
     const setResult = runCli(["rewards-flights", "auth", "set", "pro_saved_123", "--json"], {
-      HOME: home,
+      SRCH_STATE_DIR: stateDir,
       SEATS_AERO_API_KEY: ""
     });
     assert.equal(setResult.status, 0, setResult.stderr);
@@ -178,7 +168,7 @@ test("search rewards-flights auth set stores the key and clear removes it", () =
     assert.equal(setPayload.data?.config.seatsAeroApiKey, "[set]");
 
     const statusResult = runCli(["rewards-flights", "auth", "status", "--json"], {
-      HOME: home,
+      SRCH_STATE_DIR: stateDir,
       SEATS_AERO_API_KEY: ""
     });
     assert.equal(statusResult.status, 0, statusResult.stderr);
@@ -187,7 +177,7 @@ test("search rewards-flights auth set stores the key and clear removes it", () =
     assert.equal(statusPayload.data?.source, "config");
 
     const clearResult = runCli(["rewards-flights", "auth", "clear", "--json"], {
-      HOME: home,
+      SRCH_STATE_DIR: stateDir,
       SEATS_AERO_API_KEY: ""
     });
     assert.equal(clearResult.status, 0, clearResult.stderr);
@@ -195,7 +185,7 @@ test("search rewards-flights auth set stores the key and clear removes it", () =
     assert.equal(clearPayload.ok, true);
 
     const afterClearResult = runCli(["rewards-flights", "auth", "status", "--json"], {
-      HOME: home,
+      SRCH_STATE_DIR: stateDir,
       SEATS_AERO_API_KEY: ""
     });
     assert.equal(afterClearResult.status, 0, afterClearResult.stderr);

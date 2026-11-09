@@ -3,6 +3,7 @@ import { errorMessage } from "../core/http.js";
 import type { SearchOptions, SearchResponse } from "../core/types.js";
 import { API_BASE, DEFAULT_MODEL, getApiKey } from "./gemini-api.js";
 import { fetchWithContext, type WebSearchContext } from "./context.js";
+import { assertWebOptions, filterWebResults } from "../search/web-options.js";
 
 export interface GeminiSearchResult extends SearchResponse {
   native: {
@@ -26,7 +27,8 @@ interface GeminiSearchResponse {
 }
 
 export async function searchWithGemini(query: string, options: SearchOptions = {}, context?: WebSearchContext): Promise<GeminiSearchResult> {
-  const apiKey = await getApiKey(context);
+  assertWebOptions("gemini-api", { ...options, query });
+  const apiKey = await getApiKey(context, options.signal);
   if (!apiKey) throw new Error("Missing Gemini API key");
 
   const activityId = activityMonitor.logStart({ type: "api", query });
@@ -63,7 +65,7 @@ export async function searchWithGemini(query: string, options: SearchOptions = {
     activityMonitor.logComplete(activityId, response.status);
     return {
       answer,
-      results,
+      results: filterWebResults(results, options),
       native: {
         provider: "gemini-api",
         request,

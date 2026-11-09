@@ -1,5 +1,6 @@
 import { isPerplexityAvailable, searchWithPerplexity, type PerplexitySearchResult } from "../../lib/upstream/perplexity.js";
 import { defineSource } from "../define.js";
+import { assertWebOptions } from "../../lib/search/web-options.js";
 import { mapSearchResponseEvidence, type WebEvidencePayload, type WebSourceRequest } from "./web-shared.js";
 import type { Source } from "../types.js";
 
@@ -12,9 +13,10 @@ export const perplexitySource: Source<WebSourceRequest, PerplexityEvidencePayloa
   traits: ["api-key-required"],
   transports: ["perplexity-api"],
   async run(req, ctx) {
+    assertWebOptions("perplexity-api", req);
     ctx.trace.step("source.perplexity", req.query);
 
-    if (!(await isPerplexityAvailable(ctx))) {
+    if (!(await isPerplexityAvailable(ctx, req.signal))) {
       throw new Error("Perplexity unavailable: missing API key");
     }
 

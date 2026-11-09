@@ -16,6 +16,7 @@ Domains:
   install        install optional domain dependencies
   history        inspect prior runs
   inspect        inspect backends/config
+  doctor         test web connectivity and report configuration
   config         safe config management
   help           show help
 
@@ -28,6 +29,7 @@ Examples:
   search social x "bun runtime"
   search fetch https://clig.dev
   search inspect tools --json
+  search doctor web --json
 
 Output:
   --json          stable structured output
@@ -194,7 +196,15 @@ Usage:
   search web <query...> [--provider auto|exa|brave|perplexity|gemini] [--hq] [--json] [--verbose] [--out <path>]
 
 Flags:
-  --hq    use Exa paid API for higher quality (answer synthesis, highlights)
+  --provider <name>  override the saved provider (auto, exa, brave, perplexity, gemini)
+  --hq              use paid Exa for auto/exa, or Gemini API for gemini
+                    unsupported with a saved or explicit brave/perplexity provider
+  --limit <n>       maximum result count
+  --recent <period> day, week, month, or year
+  --domain <host>   restrict domains; repeat as needed, use --domain=-host to exclude
+  --timeout-ms <n>  total search deadline in milliseconds (default 30000)
+
+Unsupported filters fail explicitly. Automatic search skips incompatible providers.
 
 Examples:
   search web bun sqlite wasm

@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-import { getConfigSafe, setProvider, setSecret, setSecretRef, unsetField } from "./lib/config/commands.js";
+import { getConfigSafe, getSearchProvider, setProvider, setSecret, setSecretRef, unsetField } from "./lib/config/commands.js";
 import { getConfigPath, loadConfig } from "./lib/core/config.js";
 import { inspectTools } from "./lib/cli/tools.js";
 import { CONFIG_HELP } from "./lib/cli/config-help.js";
 import { CODE_HELP, DOCS_HELP, FETCH_HELP, FLIGHTS_HELP, HISTORY_HELP, INSPECT_HELP, INSTALL_HELP, REWARDS_FLIGHTS_HELP, ROOT_HELP, WEB_HELP } from "./lib/cli/help.js";
 import { TWITTER_HELP } from "./lib/cli/twitter-help.js";
 import { emitFailure, emitSuccess } from "./lib/cli/emit.js";
-import type { SearchProvider } from "./lib/core/types.js";
+import type { SearchOptions } from "./lib/core/types.js";
+import { doctorWeb } from "./sdk/doctor.js";
 import { docsAddCollection, docsEmbed, docsListCollections, docsStatus, docsUpdate } from "./lib/docs/qmd.js";
 import { formatFlightLocationsText, formatFlightSearchText, resolveFlightLocation, searchFlights } from "./lib/flights/fli.js";
 import { parseFlightSearchOptions } from "./lib/cli/flight-options.js";
@@ -450,10 +451,19 @@ async function main(): Promise<void> {
     if (command === "web") {
       if (flags.has("help")) return void console.log(WEB_HELP);
       const query = requireQuery(rest, WEB_HELP, ["web"], asJson);
-      const provider = (flags.get("provider") as SearchProvider | undefined) ?? "auto";
+      const provider = getSearchProvider(getStringFlag(flags, "provider"));
       const hq = flags.has("hq");
+      const limit = getStringFlag(flags, "limit");
+      const timeout = getStringFlag(flags, "timeout-ms");
+      const options = {
+        provider, hq, trace: flags.has("verbose"),
+        numResults: limit === undefined ? undefined : Number(limit),
+        recencyFilter: getStringFlag(flags, "recent") as SearchOptions["recencyFilter"],
+        domainFilter: getStringFlags(flags, "domain"),
+        timeoutMs: timeout === undefined ? undefined : Number(timeout)
+      };
       trace.step("web", "dispatch", { provider, hq, queryChars: query.length });
-      const rendered = await trace.span("web.search", hq ? "exa-paid" : provider, async () => runWebCommand(query, { provider, hq, trace: flags.has("verbose") }));
+      const rendered = await trace.span("web.search", hq ? "exa-paid" : provider, async () => runWebCommand(query, options));
       if (rendered.kind === "error") emitFailure(["web"], rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions, {
         code: rendered.error.error.code,
         summary: rendered.error.summary,
@@ -470,6 +480,25 @@ async function main(): Promise<void> {
         data: { ...rendered.data, trace: trace.snapshot() },
         text: rendered.text
       }, { asJson, outPath });
+    }
+
+    if (command === "doctor") {
+      if (flags.has("help")) return void console.log("Usage: search doctor web [--timeout-ms 5000] [--json] [--out <path>]\nChecks runtime, configuration, and a free Exa request. Credentials are never printed.");
+      if (rest.length !== 1 || rest[0] !== "web") throw new Error("Usage: search doctor web [--timeout-ms 5000] [--json]");
+      const timeout = getStringFlag(flags, "timeout-ms");
+      const report = await doctorWeb({ timeoutMs: timeout === undefined ? undefined : Number(timeout) });
+      const lines = [
+        `Runtime: ${report.runtime.name} ${report.runtime.version}`,
+        `SDK: ${report.package.sdkEntry}`,
+        `Proxy variables: ${report.proxy.variables.join(", ") || "none"}`,
+        ...Object.entries(report.credentials).map(([name, value]) => `${name}: ${value.status}`),
+        `Exa MCP: ${report.probe.status} (${report.probe.stage}, ${report.probe.durationMs} ms)`,
+        report.probe.message
+      ];
+      if (!report.ok) emitFailure(["doctor", "web"], asJson ? report.probe.message : lines.join("\n"), { asJson, outPath }, undefined, {
+        code: "web_unavailable", diagnostics: report
+      });
+      return emitSuccess({ command: ["doctor", "web"], kind: "doctor", data: report, text: lines.join("\n") }, { asJson, outPath });
     }
 
     if (command === "code") {

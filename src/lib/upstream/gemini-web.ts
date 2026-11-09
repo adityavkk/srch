@@ -3,6 +3,7 @@ import type { SearchOptions, SearchResponse } from "../core/types.js";
 import { getGeminiCookies } from "../fetch/chrome-cookies.js";
 import { errorMessage } from "../core/http.js";
 import { fetchWithContext, type WebSearchContext } from "./context.js";
+import { assertWebOptions, filterWebResults } from "../search/web-options.js";
 
 const GEMINI_WEB_URL = "https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate";
 
@@ -19,7 +20,8 @@ export interface GeminiWebSearchResult extends SearchResponse {
 }
 
 export async function searchWithGeminiWeb(query: string, options: SearchOptions = {}, context?: GeminiWebContext): Promise<GeminiWebSearchResult | null> {
-  const cookies = await (context?.getCookies ?? getGeminiCookies)();
+  assertWebOptions("gemini-web", { ...options, query });
+  const cookies = await (context?.getCookies ?? getGeminiCookies)(options.signal);
   if (!cookies) return null;
   const activityId = activityMonitor.logStart({ type: "api", query });
   const prompt = `Search the web and answer the following question. Include source URLs as markdown links. Question: ${query}`;
@@ -47,7 +49,7 @@ export async function searchWithGeminiWeb(query: string, options: SearchOptions 
     }
     return {
       answer: text,
-      results,
+      results: filterWebResults(results, options),
       native: { provider: "gemini-web", request, response: { raw: text.slice(0, 8000) } }
     };
   } catch (error) {

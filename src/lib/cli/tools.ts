@@ -3,9 +3,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { getConfigPath, loadConfig } from "../core/config.js";
 import { inspectSecretSources } from "../core/secrets.js";
-import { isGeminiApiAvailable } from "../upstream/gemini-api.js";
-import { isExaAvailable } from "../upstream/exa.js";
-import { isPerplexityAvailable } from "../upstream/perplexity.js";
 import { getDocsDbPath } from "../docs/qmd.js";
 import { inspectGeminiCookieProfiles } from "../fetch/chrome-cookies-inspect.js";
 import { checkGhAvailable } from "../fetch/github-api.js";
@@ -18,16 +15,18 @@ export async function inspectTools() {
   const config = (() => {
     try { return loadConfig(); } catch { return null; }
   })();
+  const secretResolution = config ? await inspectSecretSources(config) : null;
 
   return {
     configPath: getConfigPath(),
     searchConfigPresent: existsSync(getConfigPath()),
     configuredProvider: config?.provider ?? null,
-    secretResolution: config ? await inspectSecretSources(config) : null,
+    secretResolution,
     providers: {
-      exa: isExaAvailable(),
-      perplexity: await isPerplexityAvailable(),
-      geminiApi: await isGeminiApiAvailable()
+      exa: { status: "untested", requiresApiKey: false },
+      brave: { status: "untested", apiKeyConfigured: secretResolution?.braveApiKey.configured ?? null },
+      perplexity: { status: "untested", apiKeyConfigured: secretResolution?.perplexityApiKey.configured ?? null },
+      geminiApi: { status: "untested", apiKeyConfigured: secretResolution?.geminiApiKey.configured ?? null }
     },
     geminiWeb: inspectGeminiCookieProfiles(),
     github: {

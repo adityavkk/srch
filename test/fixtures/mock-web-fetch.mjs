@@ -38,10 +38,19 @@ globalThis.fetch = async (input, init) => {
   }
 
   if (url === "https://mcp.exa.ai/mcp") {
+    if (JSON.parse(init.body).params.arguments.query === "mock hanging provider") return new Promise(() => {});
     return jsonResponse({
       jsonrpc: "2.0", id: 1,
       result: { content: [{ type: "text", text: "Title: Mock Source\nURL: https://example.com/mock-source\nText: A useful excerpt from the search result." }] }
     });
+  }
+
+  if (url.startsWith("https://api.search.brave.com/")) {
+    const params = new URL(url).searchParams;
+    return jsonResponse({ web: { results: [{
+      title: "Brave fixture", url: "https://example.com/brave",
+      description: `count=${params.get("count")};freshness=${params.get("freshness")};q=${params.get("q")}`
+    }] } });
   }
 
   if (url === "https://mock.local/article") {

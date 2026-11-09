@@ -64,8 +64,9 @@ test("createClient status() reports registered sources and domains", async () =>
   const status = await client.status();
 
   assert.deepEqual(status.domains, ["web"]);
-  assert.equal(status.summary.healthy, 1);
+  assert.equal(status.summary.healthy, 0);
+  assert.equal(status.summary.untested, 1);
   assert.equal(status.summary.total, 1);
-  assert.deepEqual(status.sources, [{ name: "exa", status: "healthy" }]);
+  assert.deepEqual(status.sources, [{ name: "exa", status: "untested" }]);
   assert.deepEqual(status.recentRuns, []);
 });

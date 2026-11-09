@@ -1,5 +1,6 @@
 import { loadConfig, saveConfig, type SearchConfig, type SecretField } from "../core/config.js";
 import type { SearchProvider } from "../core/types.js";
+import { isSearchProvider, SEARCH_PROVIDERS } from "../search/web-options.js";
 
 const SECRET_FIELDS = new Set(["exaApiKey", "perplexityApiKey", "geminiApiKey", "braveApiKey", "seatsAeroApiKey"] as const);
 const PUBLIC_FIELDS = new Set(["provider"] as const);
@@ -19,13 +20,19 @@ export function getConfigSafe() {
 }
 
 export function setProvider(provider: string): SearchConfig {
-  if (!["auto", "exa", "perplexity", "gemini"].includes(provider)) {
-    throw new Error("Invalid provider. Use auto|exa|perplexity|gemini");
+  if (!isSearchProvider(provider)) {
+    throw new Error(`Invalid provider. Use ${SEARCH_PROVIDERS.join("|")}`);
   }
   const config = loadConfig();
-  config.provider = provider as SearchProvider;
+  config.provider = provider;
   saveConfig(config);
   return redactConfig(config);
+}
+
+export function getSearchProvider(explicit?: string): SearchProvider {
+  const provider = explicit ?? loadConfig().provider ?? "auto";
+  if (!isSearchProvider(provider)) throw new Error(`Invalid provider. Use ${SEARCH_PROVIDERS.join("|")}`);
+  return provider;
 }
 
 export function setSecretRef(field: string, source: string, key: string): SearchConfig {

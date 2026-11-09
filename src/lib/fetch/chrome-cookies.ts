@@ -22,9 +22,11 @@ const MACOS_BROWSER_CONFIGS: BrowserConfig[] = [
   { name: "Brave", baseDir: "Library/Application Support/BraveSoftware/Brave-Browser", keychainService: "Brave Safe Storage", keychainAccount: "Brave" }
 ];
 
-function readKeychainPassword(account: string, service: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    execFile("security", ["find-generic-password", "-w", "-a", account, "-s", service], { timeout: 5000 }, (err, stdout) => {
+function readKeychainPassword(account: string, service: string, signal?: AbortSignal): Promise<string | null> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    execFile("security", ["find-generic-password", "-w", "-a", account, "-s", service], { timeout: 5000, signal }, (err, stdout) => {
+      if (signal?.aborted) return reject(signal.reason);
       if (err) return resolve(null);
       resolve(stdout.trim() || null);
     });
@@ -79,16 +81,20 @@ function profileCandidates(baseDir: string): string[] {
   return prefs;
 }
 
-export async function getGeminiCookies(): Promise<CookieMap | null> {
+export async function getGeminiCookies(signal?: AbortSignal): Promise<CookieMap | null> {
+  signal?.throwIfAborted();
   if (platform() !== "darwin") return null;
   const hosts = GOOGLE_ORIGINS.map((origin) => new URL(origin).hostname);
   for (const config of MACOS_BROWSER_CONFIGS) {
+    signal?.throwIfAborted();
     const browserDir = join(homedir(), config.baseDir);
     if (!existsSync(browserDir)) continue;
-    const password = await readKeychainPassword(config.keychainAccount!, config.keychainService!);
+    const password = await readKeychainPassword(config.keychainAccount!, config.keychainService!, signal);
+    signal?.throwIfAborted();
     if (!password) continue;
     const key = pbkdf2Sync(password, "saltysalt", 1003, 16, "sha1");
     for (const profile of profileCandidates(browserDir)) {
+      signal?.throwIfAborted();
       const cookiesPath = join(browserDir, profile, "Cookies");
       if (!existsSync(cookiesPath)) continue;
       const tempDir = mkdtempSync(join(tmpdir(), "search-gemini-cookies-"));
@@ -96,6 +102,7 @@ export async function getGeminiCookies(): Promise<CookieMap | null> {
         const tempDb = join(tempDir, "Cookies");
         copyFileSync(cookiesPath, tempDb);
         const rows = await queryCookieRows(tempDb, hosts);
+        signal?.throwIfAborted();
         if (!rows) continue;
         const cookies: CookieMap = {};
         for (const row of rows) {

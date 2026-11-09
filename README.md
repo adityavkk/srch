@@ -137,7 +137,102 @@ Compare the runtimes and proxy settings when only one entry point works. A CLI
 wrapper may select Node and enable `NODE_USE_ENV_PROXY`, while a direct Bun or
 Node SDK call does not execute that wrapper. Use the configured proxy for your
 environment; changing search terms or enabling `--hq` does not repair a failed
-connection. `--hq` selects the paid Exa API and needs an Exa API key.
+connection. With `auto` or `exa` selected, `--hq` selects the paid Exa API and
+needs an Exa API key. With `gemini`, it selects the Gemini API. It is unsupported
+with Brave or Perplexity, including when either is the saved default.
+
+#### Search options and provider selection
+
+The CLI uses the saved provider when `--provider` is omitted. An explicit flag
+overrides that setting. Invalid provider names fail before a request is sent.
+The SDK validates the same provider names and request options.
+
+```bash
+search config set provider brave
+search web "TypeScript narrowing" --limit 5 --recent week --domain typescriptlang.org
+search web "TypeScript narrowing" --provider exa --hq --recent week --timeout-ms 10000
+```
+
+The SDK equivalents are `numResults`, `recencyFilter`, `domainFilter`, and
+`timeoutMs`. Domains must be hostnames, such as `example.com`. A leading `-`
+excludes a domain. Matching includes subdomains but never unrelated hosts such
+as `example.com.attacker.test`. The CLI accepts repeated `--domain` flags; use
+`--domain=-example.com` for an exclusion.
+
+| Transport | Domain and date filters | Full content |
+| --- | --- | --- |
+| Exa MCP | Unsupported | Supported |
+| Exa paid API | Supported | Supported |
+| Brave | Supported | Unsupported |
+| Gemini browser/API | Unsupported | Unsupported |
+| Perplexity | Supported; included and excluded domains cannot be mixed | Unsupported |
+
+An explicit unsupported option returns `unsupported_option`. Automatic search
+skips incompatible transports and records why. A filter never silently
+disappears during fallback. Automatic search does not switch to paid Exa to
+satisfy a filter; select `--provider exa --hq` explicitly for that transport.
+The existing automatic fallback order can use other configured API providers.
+
+Web searches have a 30-second total deadline. `timeoutMs` or `--timeout-ms`
+sets a limit from 1 to 300000 milliseconds. Caller cancellation and deadlines
+also stop credential and browser keychain commands. The SDK returns `timeout`
+or `aborted`, and the CLI exits with status 1. Direct `client.search()` calls
+accept a caller `signal`; the total deadline belongs to `client.run()`.
+
+#### Connection diagnostics
+
+```bash
+search doctor web --timeout-ms 5000 --json
+```
+
+This runs one free Exa MCP search and reports the SDK path, runtime, proxy
+variable presence, and connection stage. It distinguishes DNS, connection,
+permission, TLS, HTTP, response, and timeout failures without printing keys or
+raw upstream errors. It does not test paid providers or browser authentication.
+
+Credential statuses describe evidence. `configured` means a value is present
+in the environment or local configuration. `reference` means a saved secret
+reference exists but was not opened. `unchecked` means external secret stores
+were not consulted. These statuses do not prove that a key works.
+
+Normal SDK status lists registered sources as `untested`; it does not make
+network requests or claim they are healthy. `doctorWeb()` exposes the same
+diagnostic report to SDK callers. A failed CLI probe exits with status 1 and
+places its report in `error.diagnostics`. `--out` saves either outcome.
+
+#### Evaluation and tests
+
+```bash
+npm test
+npm run eval:web -- --out /tmp/web-eval.json
+```
+
+`npm test` builds once before running tests. CLI integration tests use the built
+executable, temporary state, blocked network access, and subprocess deadlines.
+They do not inherit API keys or consult the user's secret stores. Document and
+social dependencies load only when used.
+
+The evaluation command defaults to deterministic synthetic responses. It
+checks scoring behavior and does not measure live provider quality or speed.
+To collect live results, opt in explicitly:
+
+```bash
+npm run eval:web -- --live --provider exa --timeout-ms 10000 --out /tmp/web-live.json
+```
+
+The report includes matching expected sources among the first five results,
+excerpt coverage, domain compliance, failed and empty queries, fallback rate,
+and p50/p95 elapsed time. Matching expected sources is a measurable proxy for
+relevance, not a human judgment. Every query retains its returned URLs for
+review. A provider that cannot support a case's filter records an error.
+
+Costs are unknown unless supplied with `--costs <json-path>`, using a JSON
+object of case IDs to total request costs in USD. Failed requests count toward
+cost, and incomplete cost data never becomes a zero-cost claim. Live runs with
+`--hq` or other API providers may consume credits.
+
+Set `SRCH_STATE_DIR` to relocate CLI configuration and history. It defaults to
+`~/.search` and does not change the user's home directory.
 
 #### Fetch extraction
 

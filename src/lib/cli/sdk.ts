@@ -1,6 +1,7 @@
 import { createClient, loadConfig, type BirdEvidencePayload, type DocsEvidencePayload, type FetchEvidencePayload, type RunError, type RunResult } from "../../sdk.js";
 import type { WebEvidencePayload } from "../../sdk/sources/web-shared.js";
 import type { CodeTextEvidencePayload } from "../../sdk.js";
+import type { WebStrategyRequest } from "../../sdk/strategies/web-default.js";
 
 export type RenderedCommand =
   | { kind: "ok"; data: Record<string, unknown>; text: string }
@@ -32,7 +33,7 @@ export async function createSdkClient(trace = false) {
 export async function renderHome(trace = false): Promise<string> {
   const client = await createSdkClient(trace);
   const status = await client.status();
-  const domainLine = `srch: ${status.domains.length} domains, ${status.summary.total} sources (${status.summary.healthy}/${status.summary.total} healthy)`;
+  const domainLine = `srch: ${status.domains.length} domains, ${status.summary.total} sources (${status.summary.healthy} healthy, ${status.summary.untested} untested)`;
   const domains = `domains: ${status.domains.join(", ")}`;
   const recent = status.recentRuns.length > 0
     ? `recent: ${status.recentRuns.map((item) => `${item.domain} \"${item.query}\" (${item.ago})`).join(", ")}`
@@ -40,9 +41,9 @@ export async function renderHome(trace = false): Promise<string> {
   return [domainLine, domains, recent, "help: search <domain> <query> | search --help for full reference"].filter(Boolean).join("\n");
 }
 
-export async function runWebCommand(query: string, options: { provider?: "auto" | "exa" | "brave" | "gemini" | "perplexity"; hq?: boolean; trace?: boolean }): Promise<RenderedCommand> {
+export async function runWebCommand(query: string, options: Omit<WebStrategyRequest, "query"> & { trace?: boolean }): Promise<RenderedCommand> {
   const client = await createSdkClient(options.trace);
-  const result = await client.run({ domain: "web", query, provider: options.provider, hq: options.hq });
+  const result = await client.run({ ...options, domain: "web", query });
   if (result.kind === "error") return { kind: "error", error: result };
 
   const answer = deriveWebAnswer(result);

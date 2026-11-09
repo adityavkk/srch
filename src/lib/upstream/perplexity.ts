@@ -3,6 +3,7 @@ import { errorMessage } from "../core/http.js";
 import { resolveSecret } from "../core/secrets.js";
 import type { SearchOptions, SearchResponse } from "../core/types.js";
 import { fetchWithContext, type WebSearchContext } from "./context.js";
+import { assertWebOptions, filterWebResults } from "../search/web-options.js";
 
 const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions";
 const RATE_LIMIT = { maxRequests: 10, windowMs: 60_000 };
@@ -16,8 +17,8 @@ export interface PerplexitySearchResult extends SearchResponse {
   };
 }
 
-async function getApiKey(context?: WebSearchContext): Promise<string> {
-  const key = await (context ? context.secrets.resolve("perplexityApiKey") : resolveSecret("perplexityApiKey"));
+async function getApiKey(context?: WebSearchContext, signal?: AbortSignal): Promise<string> {
+  const key = await (context ? context.secrets.resolve("perplexityApiKey", signal) : resolveSecret("perplexityApiKey", signal));
   if (!key) throw new Error("Missing Perplexity API key");
   return key;
 }
@@ -34,11 +35,12 @@ function checkRateLimit(): void {
   requestTimestamps.push(now);
 }
 
-export async function isPerplexityAvailable(context?: WebSearchContext): Promise<boolean> {
-  return !!(await (context ? context.secrets.resolve("perplexityApiKey") : resolveSecret("perplexityApiKey")));
+export async function isPerplexityAvailable(context?: WebSearchContext, signal?: AbortSignal): Promise<boolean> {
+  return !!(await (context ? context.secrets.resolve("perplexityApiKey", signal) : resolveSecret("perplexityApiKey", signal)));
 }
 
 export async function searchWithPerplexity(query: string, options: SearchOptions = {}, context?: WebSearchContext): Promise<PerplexitySearchResult> {
+  assertWebOptions("perplexity-api", { ...options, query });
   checkRateLimit();
   const activityId = activityMonitor.logStart({ type: "api", query });
 
@@ -55,7 +57,7 @@ export async function searchWithPerplexity(query: string, options: SearchOptions
     const response = await fetchWithContext(PERPLEXITY_API_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${await getApiKey(context)}`,
+        Authorization: `Bearer ${await getApiKey(context, options.signal)}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify(request),
@@ -72,11 +74,11 @@ export async function searchWithPerplexity(query: string, options: SearchOptions
       citations?: Array<string | { url?: string; title?: string }>;
     };
 
-    const results = (data.citations ?? []).slice(0, options.numResults ?? 5).flatMap((citation, index) => {
+    const results = filterWebResults((data.citations ?? []).flatMap((citation, index) => {
       if (typeof citation === "string") return [{ title: `Source ${index + 1}`, url: citation, snippet: "" }];
       if (citation?.url) return [{ title: citation.title || `Source ${index + 1}`, url: citation.url, snippet: "" }];
       return [];
-    });
+    }), options);
 
     activityMonitor.logComplete(activityId, response.status);
     return {

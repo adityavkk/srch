@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "description": "Small documentation retrieval set. Expected primary pages were checked on 2026-11-09. Replay responses and timings are synthetic, not captured provider results.",
+  "cases": [
+    { "id": "typescript-narrowing", "query": "TypeScript handbook narrowing type guards", "expectedUrls": ["https://www.typescriptlang.org/docs/handbook/2/narrowing.html"] },
+    { "id": "node-test", "query": "Node.js built in test runner documentation", "expectedUrls": ["https://nodejs.org/api/test.html"] },
+    { "id": "python-tasks", "query": "Python asyncio task cancellation documentation", "expectedUrls": ["https://docs.python.org/3/library/asyncio-task.html"] },
+    { "id": "git-worktree", "query": "git worktree add documentation", "expectedUrls": ["https://git-scm.com/docs/git-worktree"] },
+    { "id": "sqlite-query-plan", "query": "SQLite EXPLAIN QUERY PLAN index scan documentation", "expectedUrls": ["https://www.sqlite.org/eqp.html", "https://sqlite.org/eqp.html"] },
+    { "id": "postgres-explain", "query": "PostgreSQL EXPLAIN ANALYZE official documentation", "expectedDomains": ["postgresql.org"], "domainFilter": ["postgresql.org"] }
+  ],
+  "replay": [
+    {
+      "caseId": "typescript-narrowing", "status": "success", "durationMs": 120,
+      "results": [{ "url": "https://www.typescriptlang.org/docs/handbook/2/narrowing.html", "snippet": "Synthetic excerpt for the official TypeScript documentation about narrowing and type guards." }],
+      "attempts": [{ "provider": "exa", "transport": "exa-mcp", "status": "success" }]
+    },
+    {
+      "caseId": "node-test", "status": "success", "durationMs": 180,
+      "results": [{ "url": "https://nodejs.org/api/test.html", "snippet": "Synthetic excerpt for the built in Node.js test runner and its command line options." }, { "url": "https://nodejs.org/api/test.html#test-runner", "snippet": "Synthetic duplicate that must not improve source matching or excerpt coverage scores." }],
+      "attempts": [{ "provider": "exa", "transport": "exa-mcp", "status": "success" }]
+    },
+    {
+      "caseId": "python-tasks", "status": "empty", "durationMs": 100,
+      "results": [], "attempts": [{ "provider": "exa", "transport": "exa-mcp", "status": "success" }]
+    },
+    {
+      "caseId": "git-worktree", "status": "error", "durationMs": 500,
+      "results": [], "errorCode": "web_unavailable", "attempts": [{ "provider": "exa", "transport": "exa-mcp", "status": "failed" }]
+    },
+    {
+      "caseId": "sqlite-query-plan", "status": "success", "durationMs": 300,
+      "results": [{ "url": "https://sqlite.org/eqp.html", "snippet": "Synthetic excerpt describing how SQLite reports a full scan or an index search in a query plan." }],
+      "attempts": [{ "provider": "exa", "transport": "exa-mcp", "status": "failed" }, { "provider": "brave", "transport": "brave-search-api", "status": "success" }]
+    },
+    {
+      "caseId": "postgres-explain", "status": "success", "durationMs": 200,
+      "results": [{ "url": "https://postgresql.org.example.com/docs/current/using-explain.html", "snippet": "Synthetic wrong-domain result that must fail the requested domain filter and source match." }, { "url": "https://www.postgresql.org/docs/current/using-explain.html", "snippet": "Synthetic excerpt for the PostgreSQL documentation about reading query plans and execution statistics." }],
+      "attempts": [{ "provider": "exa", "transport": "exa-mcp", "status": "success" }]
+    }
+  ]
+}

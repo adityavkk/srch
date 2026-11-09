@@ -20,27 +20,34 @@ export interface SecretResolution {
   configured: boolean;
 }
 
-async function readFnox(key: string): Promise<string | null> {
+async function readFnox(key: string, signal?: AbortSignal): Promise<string | null> {
+  signal?.throwIfAborted();
   try {
-    const { stdout } = await execFileAsync("fnox", ["get", key], { timeout: 15_000, maxBuffer: 1024 * 64 });
+    const { stdout } = await execFileAsync("fnox", ["get", key], { timeout: 15_000, maxBuffer: 1024 * 64, signal });
+    signal?.throwIfAborted();
     const value = stdout.trim();
     return value || null;
   } catch {
+    signal?.throwIfAborted();
     return null;
   }
 }
 
-async function readOp(path: string): Promise<string | null> {
+async function readOp(path: string, signal?: AbortSignal): Promise<string | null> {
+  signal?.throwIfAborted();
   try {
-    const { stdout } = await execFileAsync("op", ["read", path], { timeout: 15_000, maxBuffer: 1024 * 64 });
+    const { stdout } = await execFileAsync("op", ["read", path], { timeout: 15_000, maxBuffer: 1024 * 64, signal });
+    signal?.throwIfAborted();
     const value = stdout.trim();
     return value || null;
   } catch {
+    signal?.throwIfAborted();
     return null;
   }
 }
 
-export async function resolveSecret(field: SecretField): Promise<string | null> {
+export async function resolveSecret(field: SecretField, signal?: AbortSignal): Promise<string | null> {
+  signal?.throwIfAborted();
   if (cache.has(field)) return cache.get(field) ?? null;
   const config = loadConfig();
   const envKey = FALLBACK_ENV_KEYS[field];
@@ -59,17 +66,20 @@ export async function resolveSecret(field: SecretField): Promise<string | null> 
 
   const ref = config.secrets?.[field];
   if (ref?.source === "fnox" && ref.key) {
-    const value = await readFnox(ref.key);
+    const value = await readFnox(ref.key, signal);
+    signal?.throwIfAborted();
     cache.set(field, value);
     return value;
   }
   if (ref?.source === "op" && ref.key) {
-    const value = await readOp(ref.key);
+    const value = await readOp(ref.key, signal);
+    signal?.throwIfAborted();
     cache.set(field, value);
     return value;
   }
 
-  const fallbackValue = await readFnox(envKey);
+  const fallbackValue = await readFnox(envKey, signal);
+  signal?.throwIfAborted();
   cache.set(field, fallbackValue);
   return fallbackValue;
 }

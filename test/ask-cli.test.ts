@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { runCli } from "./helpers/cli.js";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { ROOT_HELP } from "../src/lib/cli/help.js";
 
@@ -10,18 +8,6 @@ import { ROOT_HELP } from "../src/lib/cli/help.js";
 // `ask` domain ships, it must not appear in the advertised help surface, and
 // invoking it must return a friendly "planned" envelope rather than the
 // generic `Unknown command`.
-
-const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(here, "..");
-const cliPath = resolve(repoRoot, "src/cli.ts");
-
-function runCli(args: string[]) {
-  return spawnSync(process.execPath, ["--import", "tsx", cliPath, ...args], {
-    cwd: repoRoot,
-    env: { ...process.env },
-    encoding: "utf8"
-  });
-}
 
 function parseJson(output: string) {
   return JSON.parse(output) as {

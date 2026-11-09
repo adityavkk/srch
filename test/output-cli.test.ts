@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { runCli as runBuiltCli } from "./helpers/cli.js";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -8,19 +8,10 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..");
-const cliPath = resolve(repoRoot, "src/cli.ts");
 const mockImportPath = resolve(repoRoot, "test/fixtures/mock-web-fetch.mjs");
 
 function runCli(args: string[], env: NodeJS.ProcessEnv = {}) {
-  return spawnSync(process.execPath, ["--import", "tsx", cliPath, ...args], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${mockImportPath}`].filter(Boolean).join(" "),
-      ...env
-    },
-    encoding: "utf8"
-  });
+  return runBuiltCli(args, env, [mockImportPath]);
 }
 
 function parseJson(output: string) {
@@ -32,12 +23,12 @@ function parseJson(output: string) {
   };
 }
 
-function withTempHome(fn: (home: string) => void) {
-  const home = mkdtempSync(join(tmpdir(), "srch-home-"));
+function withTempState(fn: (stateDir: string) => void) {
+  const stateDir = mkdtempSync(join(tmpdir(), "srch-home-"));
   try {
-    fn(home);
+    fn(stateDir);
   } finally {
-    rmSync(home, { recursive: true, force: true });
+    rmSync(stateDir, { recursive: true, force: true });
   }
 }
 
@@ -135,14 +126,14 @@ test("search fetch can persist text output with --out", () => {
 });
 
 test("search history can persist json output with --out", () => {
-  withTempHome((home) => {
-    const seed = runCli(["config", "set", "provider", "exa"], { HOME: home });
+  withTempState((stateDir) => {
+    const seed = runCli(["config", "set", "provider", "exa"], { SRCH_STATE_DIR: stateDir });
     assert.equal(seed.status, 0, seed.stderr);
 
     const dir = mkdtempSync(join(tmpdir(), "srch-history-out-"));
     try {
       const outPath = join(dir, "history.json");
-      const result = runCli(["history", "--json", "--out", outPath], { HOME: home });
+      const result = runCli(["history", "--json", "--out", outPath], { SRCH_STATE_DIR: stateDir });
       assert.equal(result.status, 0, result.stderr);
       const saved = readFileSync(outPath, "utf8");
       const payload = parseJson(saved);
@@ -156,11 +147,11 @@ test("search history can persist json output with --out", () => {
 });
 
 test("search config can persist text output with --out", () => {
-  withTempHome((home) => {
+  withTempState((stateDir) => {
     const dir = mkdtempSync(join(tmpdir(), "srch-config-out-"));
     try {
       const outPath = join(dir, "config.txt");
-      const result = runCli(["config", "set", "provider", "exa", "--out", outPath], { HOME: home });
+      const result = runCli(["config", "set", "provider", "exa", "--out", outPath], { SRCH_STATE_DIR: stateDir });
       assert.equal(result.status, 0, result.stderr);
       const saved = readFileSync(outPath, "utf8");
       assert.equal(saved, result.stdout);

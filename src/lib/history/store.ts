@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getStateDir } from "../core/state.js";
 
 export interface HistoryEntry {
   id: string;
@@ -10,21 +10,20 @@ export interface HistoryEntry {
   output: unknown;
 }
 
-const HISTORY_DIR = join(homedir(), ".search");
-const HISTORY_PATH = join(HISTORY_DIR, "history.json");
-
 function readAll(): HistoryEntry[] {
-  if (!existsSync(HISTORY_PATH)) return [];
+  const historyPath = join(getStateDir(), "history.json");
+  if (!existsSync(historyPath)) return [];
   try {
-    return JSON.parse(readFileSync(HISTORY_PATH, "utf8")) as HistoryEntry[];
+    return JSON.parse(readFileSync(historyPath, "utf8")) as HistoryEntry[];
   } catch {
     return [];
   }
 }
 
 function writeAll(entries: HistoryEntry[]): void {
-  mkdirSync(HISTORY_DIR, { recursive: true });
-  writeFileSync(HISTORY_PATH, JSON.stringify(entries, null, 2) + "\n");
+  const stateDir = getStateDir();
+  mkdirSync(stateDir, { recursive: true });
+  writeFileSync(join(stateDir, "history.json"), JSON.stringify(entries, null, 2) + "\n");
 }
 
 export function addHistory(entry: Omit<HistoryEntry, "id" | "createdAt">): HistoryEntry {

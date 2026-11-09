@@ -1,4 +1,6 @@
 export { createClient, type ClientSearch, type SrchClient } from "./sdk/client.js";
+export { doctorWeb, type WebDoctorReport, type WebDoctorOptions } from "./sdk/doctor.js";
+export { SEARCH_PROVIDERS, isSearchProvider, WebOptionsError } from "./lib/search/web-options.js";
 export { loadConfig, findConfigPath, resolveConfig, type CreateClientOptions, type LoadConfigOptions } from "./sdk/config.js";
 export {
   defineAgenticStrategy,

@@ -1,6 +1,7 @@
 import type { ExtractedContent, SearchOptions } from "../../lib/core/types.js";
 import { searchWithExa, searchWithExaPaid, type ExaSearchResult } from "../../lib/upstream/exa.js";
 import { defineSource } from "../define.js";
+import { assertWebOptions, WebOptionsError } from "../../lib/search/web-options.js";
 import type { Source } from "../types.js";
 import { mapSearchResponseEvidence, type WebEvidencePayload, type WebSourceRequest } from "./web-shared.js";
 
@@ -44,6 +45,10 @@ export function createExaSource(deps: ExaSourceDeps = defaultDeps): Source<ExaSo
     traits: ["fallback-friendly", "content-capable"],
     transports: ["exa-mcp", "exa-api"],
     async run(req, ctx) {
+      if (req.mode !== undefined && req.mode !== "mcp" && req.mode !== "api") {
+        throw new WebOptionsError("invalid_request", "Exa mode must be mcp or api");
+      }
+      assertWebOptions(req.mode === "api" ? "exa-api" : "exa-mcp", req);
       ctx.trace.step("source.exa", req.query, { mode: req.mode ?? "mcp" });
 
       const options: SearchOptions = {

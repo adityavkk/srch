@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { runCli as runBuiltCli } from "./helpers/cli.js";
 import test from "node:test";
 import { dirname, resolve, join } from "node:path";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -9,19 +10,10 @@ import { FLI_MANAGED_PYTHON, FLI_REQUIREMENT, FLI_RUNTIME_DIR } from "../src/lib
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..");
-const cliPath = resolve(repoRoot, "src/cli.ts");
 const fliFixturePath = resolve(repoRoot, "test/fixtures/fli-mock.py");
 
-function runCli(args: string[], env: NodeJS.ProcessEnv = {}, entryPoint = cliPath) {
-  return spawnSync(process.execPath, ["--import", "tsx", entryPoint, ...args], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      SRCH_FLI_FIXTURE: fliFixturePath,
-      ...env
-    },
-    encoding: "utf8"
-  });
+function runCli(args: string[], env: NodeJS.ProcessEnv = {}) {
+  return runBuiltCli(args, { SRCH_FLI_FIXTURE: fliFixturePath, ...env });
 }
 
 function parseJson(output: string) {
@@ -183,19 +175,17 @@ test("flight install honors an explicit Python override without replacing it", (
 
 test("flight response validation distinguishes upstream failure from empty inventory", () => {
   const result = spawnSync(process.env.SRCH_FLI_PYTHON?.trim() || "python3", [resolve(here, "flights-bridge.test.py")], {
-    encoding: "utf8"
+    encoding: "utf8", timeout: 15_000
   });
   assert.equal(result.status, 0, result.stderr);
 });
 
 test("built CLI includes and executes the Python bridge", () => {
-  const build = spawnSync("npm", ["run", "build"], { cwd: repoRoot, encoding: "utf8" });
-  assert.equal(build.status, 0, build.stdout + build.stderr);
   assert.equal(
     readFileSync(resolve(repoRoot, "dist/lib/flights/fli-bridge.py"), "utf8"),
     readFileSync(resolve(repoRoot, "src/lib/flights/fli-bridge.py"), "utf8")
   );
-  const result = runCli(["flights", "JFK", "CUN", "2026-11-25", "--json"], {}, resolve(repoRoot, "dist/cli.js"));
+  const result = runCli(["flights", "JFK", "CUN", "2026-11-25", "--json"]);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(parseJson(result.stdout).data?.bestOffer.id, "fli_best");
 });

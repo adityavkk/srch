@@ -33,7 +33,9 @@
     "prepare": "npm run build",
     "dev": "tsx src/cli.ts",
     "check": "tsc --noEmit -p tsconfig.json",
-    "test": "node --import tsx --test test/*.test.ts test/sdk/*.test.ts",
+    "pretest": "npm run build",
+    "test": "node --import ./test/fixtures/offline.mjs --import tsx --test test/*.test.ts test/sdk/*.test.ts",
+    "eval:web": "node scripts/eval-web.mjs",
     "install:optional": "tsx src/cli.ts install",
     "install:all": "tsx src/cli.ts install all"
   },

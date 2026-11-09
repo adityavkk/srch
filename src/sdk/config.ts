@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { tsImport } from "tsx/esm/api";
 import { resolveSecret } from "../lib/core/secrets.js";
 import type { SecretField } from "../lib/core/config.js";
 import { createTraceSink } from "../lib/trace.js";
@@ -45,9 +44,10 @@ function isSecretField(name: string): name is SecretField {
 }
 
 const defaultSecrets: SecretResolver = {
-  resolve(name) {
+  async resolve(name, signal) {
+    signal?.throwIfAborted();
     if (!isSecretField(name)) return Promise.resolve(null);
-    return resolveSecret(name);
+    return resolveSecret(name, signal);
   }
 };
 
@@ -157,6 +157,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<SrchC
   const filePath = options.path ?? findConfigPath(options.cwd);
   if (!filePath) return null;
 
+  const { tsImport } = await import("tsx/esm/api");
   const imported = await tsImport(pathToFileURL(filePath).href, import.meta.url);
   return normalizeImportedConfig(imported, filePath);
 }

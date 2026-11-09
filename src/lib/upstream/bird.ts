@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { TwitterClient, resolveCredentials } from "@steipete/bird";
+import type { TwitterClient } from "@steipete/bird";
 import { activityMonitor } from "../core/activity.js";
 import { errorMessage } from "../core/http.js";
 
@@ -57,6 +57,7 @@ function chromeProfileCandidates(): string[] {
 
 async function getClient(): Promise<TwitterClient> {
   if (cachedClient) return cachedClient;
+  const { TwitterClient, resolveCredentials } = await import("@steipete/bird");
   for (const profile of chromeProfileCandidates()) {
     const creds = await resolveCredentials({ chromeProfile: profile });
     if (creds.cookies.authToken && creds.cookies.ct0) {

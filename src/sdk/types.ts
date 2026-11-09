@@ -78,7 +78,7 @@ export type SourceRequest = {
 };
 
 export interface SecretResolver {
-  resolve(name: string): Promise<string | null>;
+  resolve(name: string, signal?: AbortSignal): Promise<string | null>;
 }
 
 export interface HttpClient {
@@ -191,6 +191,7 @@ export type SrchConfig = {
 };
 
 export type SourceHealth =
+  | { name: string; status: "untested" }
   | { name: string; status: "healthy" }
   | { name: string; status: "unavailable"; reason: string };
 
@@ -203,6 +204,6 @@ export type RecentRun = {
 export type SrchStatus = {
   domains: NonEmptyArray<string>;
   sources: SourceHealth[];
-  summary: { healthy: number; total: number };
+  summary: { healthy: number; untested: number; total: number };
   recentRuns: RecentRun[];
 };

@@ -2,6 +2,7 @@ import { isGeminiApiAvailable } from "../../lib/upstream/gemini-api.js";
 import { searchWithGemini, type GeminiSearchResult } from "../../lib/upstream/gemini.js";
 import { searchWithGeminiWeb, type GeminiWebSearchResult } from "../../lib/upstream/gemini-web.js";
 import { defineSource } from "../define.js";
+import { assertWebOptions, WebOptionsError } from "../../lib/search/web-options.js";
 import { mapSearchResponseEvidence, type WebEvidencePayload, type WebSourceRequest } from "./web-shared.js";
 import type { Source, SourceContext } from "../types.js";
 
@@ -45,13 +46,17 @@ export const geminiSource: Source<GeminiSourceRequest, GeminiEvidencePayload> = 
   transports: ["gemini-web", "gemini-api"],
   async run(req, ctx) {
     const transport = req.transport ?? "auto";
+    if (transport !== "auto" && transport !== "web" && transport !== "api") {
+      throw new WebOptionsError("invalid_request", "Gemini transport must be auto, web, or api");
+    }
+    assertWebOptions(transport === "web" ? "gemini-web" : "gemini-api", req);
     ctx.trace.step("source.gemini", req.query, { transport });
 
     const response = transport === "web"
       ? await runWeb(req.query, req, ctx)
       : transport === "api"
         ? await runApi(req.query, req, ctx)
-        : await isGeminiApiAvailable(ctx)
+        : await isGeminiApiAvailable(ctx, req.signal)
           ? await runApi(req.query, req, ctx)
           : await runWeb(req.query, req, ctx);
 
