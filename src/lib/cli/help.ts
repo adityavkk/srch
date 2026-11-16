@@ -216,6 +216,7 @@ Research flags:
   --thinking        larger reasoning budget
   --transport <t>   auto (Antigravity account, then Gemini API key), antigravity, or gemini-api
   --no-fallback     fail instead of returning retrieval-only results
+  --providers <l>   fallback retrieval order, exa and/or brave (no generated answers)
   Without grounding, research falls back to fetching --url pages and plain web search,
   labeled retrieval-only with the reason and recovery step. No answer is generated then.
 

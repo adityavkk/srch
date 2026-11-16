@@ -61,7 +61,7 @@ flowchart TD
   GA -- cited answer --> R
   GA -- failure --> F
   R --> OK[success, research.kind = grounded]
-  F -- retrieval --> D[fetch requested URLs + web search without Google]
+  F -- retrieval --> D[fetch requested URLs + Exa/Brave search]
   F -- none --> E2[error with the grounding code]
   D --> RO[success, research.kind = retrieval-only, reason + recovery]
 ```
@@ -92,10 +92,15 @@ Local auth is on for the default runtime and off when a caller injects `http` or
 | Answer without source URLs | Never success. Counted as `uncited_answer`, next transport |
 | Grounding stalls | Grounding gets the deadline minus 20 seconds, so retrieval can still answer |
 | Caller cancels | Stop, no fallback |
-| All grounding fails | Retrieval-only result, or an error with `--no-fallback` |
+| Answer text missing | Never success. Counted as `invalid_response`, next transport |
+| All grounding fails | Retrieval-only result from fetched URLs and Exa/Brave only, or an error with `--no-fallback`. Gemini and Perplexity are excluded because they generate answers |
 | Retrieval also fails | Error `research_unavailable` that names both failures |
 
 The reported reason is the failure of a transport that was actually tried. A later skip for missing credentials does not hide it.
+
+Quota cooldowns are scoped to the quota identity: the Antigravity project ID, or a truncated hash of the Gemini API key. One account's 429 never blocks another account.
+
+`web/research` rejects `domainFilter`, `recencyFilter`, `includeContent`, `provider`, and `hq` with `unsupported_option` before any credential lookup or request.
 
 ## Provider order for plain web search
 
@@ -114,6 +119,7 @@ Each provider had one transient failure, and both succeeded on retry. Google use
 
 - Antigravity does not return URL-context metadata, so requested URLs report `unknown` unless the Gemini API transport is used. srch does not guess.
 - The answer is generated. Claims without verified offsets keep their text but get no citation marker. Check important facts against the cited pages or with `fetch`.
+- `answer.citations` is `claim-level` when at least one claim maps to sources, or `sources-only` when Google returned sources but no claim mapping. Treat `sources-only` answers as unverified.
 - Grounding cannot enforce domain or recency filters. `web/research` rejects them, and plain search skips Google when they are set.
 - The Antigravity wire is an internal Google API that pi-antigravity tracks. srch follows the installed package for endpoints and fingerprint, but a wire change can still break the transport until pi-antigravity updates. Plain search keeps working through the other providers.
 

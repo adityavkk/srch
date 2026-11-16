@@ -16,6 +16,18 @@ export const DEFAULT_RESEARCH_TIMEOUT_MS = 60_000;
 /** Time kept back from grounding so retrieval can still answer when grounding stalls. */
 export const DEFAULT_FALLBACK_RESERVE_MS = 20_000;
 const MAX_FETCHED_URLS = 5;
+/**
+ * Providers whose results are retrieved pages, not generated text. Gemini and Perplexity
+ * synthesize answers, so they would break the retrieval-only promise of the fallback.
+ */
+export const RESEARCH_FALLBACK_PROVIDERS = ["exa", "brave"] as const satisfies readonly WebProvider[];
+type FallbackProvider = (typeof RESEARCH_FALLBACK_PROVIDERS)[number];
+/** Options plain web search accepts that grounded research cannot honor. */
+const UNSUPPORTED_OPTIONS = ["domainFilter", "recencyFilter", "includeContent", "provider", "hq"] as const;
+
+export function isFallbackProvider(provider: WebProvider): provider is FallbackProvider {
+  return RESEARCH_FALLBACK_PROVIDERS.some((item) => item === provider);
+}
 
 export type WebResearchRequest = StrategyRequest & {
   instruction?: string;
@@ -24,8 +36,8 @@ export type WebResearchRequest = StrategyRequest & {
   transport?: GroundingTransportSelection;
   /** `retrieval` (default) degrades to web search and URL fetch; `none` reports the grounding failure. */
   fallback?: "retrieval" | "none";
-  /** Retrieval order for the fallback. Google is always removed from it. */
-  providers?: WebProvider[];
+  /** Retrieval order for the fallback: `exa` and/or `brave`. Defaults to the configured order. */
+  providers?: FallbackProvider[];
   numResults?: number;
   timeoutMs?: number;
 };
@@ -109,7 +121,7 @@ async function fetchRequestedUrls(urls: string[], ctx: StrategyContext, signal: 
 async function searchWithoutGoogle(req: WebResearchRequest, ctx: StrategyContext, signal: AbortSignal) {
   const strategy = ctx.strategies.get("web/default");
   if (strategy.kind !== "static") throw new Error("web/default must be a static strategy");
-  const providers = (req.providers ?? configuredWebProviders()).filter((provider) => provider !== "google");
+  const providers = (req.providers ?? configuredWebProviders()).filter(isFallbackProvider);
   const request: WebStrategyRequest = { query: req.query, signal, numResults: req.numResults, providers: providers.length > 0 ? providers : ["exa"] };
   return strategy.run(request, ctx);
 }
@@ -151,10 +163,18 @@ export function createWebResearchStrategy(options: WebResearchOptions = {}): Sta
     name: STRATEGY,
     domain: "web",
     async run(req, ctx) {
+      const options: Record<string, unknown> = req;
+      const unsupported = UNSUPPORTED_OPTIONS.find((option) => options[option] !== undefined);
+      if (unsupported) {
+        return invalid("unsupported_option", `web/research does not support ${unsupported}; use web/default for filtered or provider-specific search`);
+      }
       try {
         validateGroundingRequest(req);
         validateWebOptions({ numResults: req.numResults, timeoutMs: req.timeoutMs });
         validateProviderOrder({ providers: req.providers });
+        if (req.providers && !req.providers.every(isFallbackProvider)) {
+          throw new WebOptionsError("invalid_request", `Research fallback providers must be retrieval providers: ${RESEARCH_FALLBACK_PROVIDERS.join("|")}`);
+        }
         if (req.fallback !== undefined && req.fallback !== "retrieval" && req.fallback !== "none") {
           throw new WebOptionsError("invalid_request", "fallback must be retrieval or none");
         }

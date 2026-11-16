@@ -160,9 +160,10 @@ Result shape to show:
 
 - Check `result.research.kind`. `grounded` has `answer.text`, `answer.supports` (claims with source IDs), `answer.sources`, `answer.queries`, and `answer.urlRetrievals`.
 - `retrieval-only` means no answer was generated. Read `result.evidence` (fetched requested pages first, then web results) and report `research.reason.code` and `research.reason.recovery` to the user. Never present retrieval-only output as a grounded answer.
-- The answer is generated. Cite claims through `supports`; verify decisive facts with `fetch` on the cited URL.
+- The answer is generated. Cite claims through `supports`; verify decisive facts with `fetch` on the cited URL. `answer.citations === "sources-only"` means no claim is verified; treat the answer as unverified.
+- The retrieval-only fallback uses only fetched pages plus Exa/Brave (`providers` accepts `exa`, `brave`), so it never contains a generated answer.
 - `urlRetrievals` status `unknown` means srch could not confirm the page was read. Antigravity never reports it, so fetch the page when the exact text matters.
-- Grounding cannot enforce domain or recency filters. Use `web` with `domainFilter`/`recencyFilter` and a capable provider for those.
+- Grounding cannot enforce domain or recency filters; `web/research` rejects them with `unsupported_option`. Use `web` with `domainFilter`/`recencyFilter` and a capable provider for those.
 - Auth problems: `search inspect tools --json` shows `providers.google.antigravity` (signed in, fresh, refresh available). Fix with `/login antigravity` in Pi. Never read or print Pi's auth file.
 
 ## Diagnostic discipline

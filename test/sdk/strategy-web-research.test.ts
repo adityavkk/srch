@@ -83,7 +83,7 @@ test("a quota failure keeps grounding attempts and still delivers retrieval resu
     secrets: secrets({ antigravityCredentials: CREDENTIALS }),
     http: http((url) => (url.includes("cloudcode") ? new Response("{}", { status: 429 }) : url === "https://mcp.exa.ai/mcp" ? exaMcp() : undefined), hosts)
   });
-  const result = await client.run({ domain: "web", strategy: "web/research", query: "q", providers: ["google", "exa"] });
+  const result = await client.run({ domain: "web", strategy: "web/research", query: "q", providers: ["exa"] });
   assert.equal(result.kind, "success");
   if (result.kind !== "success" || result.research.kind !== "retrieval-only") return assert.fail("expected retrieval-only");
   assert.equal(result.research.reason.code, "quota_exhausted");
@@ -157,5 +157,39 @@ test("invalid research input fails before credentials or network", async () => {
     const result = await client.run({ domain: "web", strategy: "web/research", query: "q", ...request });
     assert.equal(result.kind === "error" && result.error.code, "invalid_request");
   }
+  assert.equal(touched, false);
+});
+
+test("the retrieval-only fallback never calls generative providers even when they are configured", async () => {
+  const hosts: string[] = [];
+  const client = createClient({
+    secrets: secrets({ antigravityCredentials: CREDENTIALS, geminiApiKey: "g-key", perplexityApiKey: "p-key" }),
+    http: http((url) => {
+      if (url.includes("cloudcode")) return new Response("{}", { status: 503 });
+      if (url.includes("generativelanguage")) return new Response("{}", { status: 503 });
+      if (url === "https://mcp.exa.ai/mcp") return new Response("down", { status: 503 });
+      if (url.includes("perplexity")) return Response.json({ choices: [{ message: { content: "generated" } }], citations: ["https://p.example"] });
+      return undefined;
+    }, hosts)
+  });
+  const result = await client.run({ domain: "web", strategy: "web/research", query: "q" });
+  assert.equal(result.kind, "error");
+  assert.equal(result.kind === "error" && result.error.code, "research_unavailable");
+  assert.equal(hosts.filter((host) => host.includes("generativelanguage")).length, 1, "only the grounding attempt uses the Gemini API");
+  assert.ok(!hosts.some((host) => host.includes("perplexity")), "Perplexity generates answers and is not a retrieval fallback");
+});
+
+test("research rejects options it cannot honor before credentials or network", async () => {
+  let touched = false;
+  const client = createClient({
+    secrets: { resolve: async () => { touched = true; return null; } },
+    http: { fetch: (async () => { touched = true; throw new Error("x"); }) as typeof fetch }
+  });
+  for (const option of [{ domainFilter: ["a.example"] }, { recencyFilter: "week" }, { includeContent: true }, { provider: "exa" }, { hq: true }]) {
+    const result = await client.run({ domain: "web", strategy: "web/research", query: "q", ...option } as Parameters<typeof client.run>[0]);
+    assert.equal(result.kind === "error" && result.error.code, "unsupported_option", JSON.stringify(option));
+  }
+  const generative = await client.run({ domain: "web", strategy: "web/research", query: "q", providers: ["perplexity" as "exa"] });
+  assert.equal(generative.kind === "error" && generative.error.code, "invalid_request");
   assert.equal(touched, false);
 });

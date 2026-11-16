@@ -1,5 +1,5 @@
 import { renderGroundedAnswer } from "../grounding/render.js";
-import type { WebResearchPayload, WebResearchRequest } from "../../sdk/strategies/web-research.js";
+import { isFallbackProvider, RESEARCH_FALLBACK_PROVIDERS, type WebResearchPayload, type WebResearchRequest } from "../../sdk/strategies/web-research.js";
 import type { Evidence } from "../../sdk/types.js";
 import { parseWebProviders } from "../config/commands.js";
 import { getStringFlag, getStringFlags, type FlagValue } from "./flags.js";
@@ -21,14 +21,18 @@ export function researchOptionsFromFlags(flags: Map<string, FlagValue>): Omit<We
   if (conflict) throw new Error(`--${conflict} cannot be combined with --research`);
   const transport = getStringFlag(flags, "transport") ?? "auto";
   if (!TRANSPORTS.some((item) => item === transport)) throw new Error(`--transport must be ${TRANSPORTS.join("|")}`);
-  const providers = getStringFlag(flags, "providers");
+  const providersFlag = getStringFlag(flags, "providers");
+  const providers = providersFlag === undefined ? undefined : parseWebProviders(providersFlag);
+  if (providers && !providers.every(isFallbackProvider)) {
+    throw new Error(`With --research, --providers sets the fallback order and accepts only ${RESEARCH_FALLBACK_PROVIDERS.join(",")}`);
+  }
   return {
     instruction: getStringFlag(flags, "instruction"),
     urls: getStringFlags(flags, "url"),
     thinking: flags.has("thinking") || undefined,
     transport: transport as (typeof TRANSPORTS)[number],
     fallback: flags.has("no-fallback") ? "none" : "retrieval",
-    providers: providers === undefined ? undefined : parseWebProviders(providers),
+    providers: providers?.filter(isFallbackProvider),
     numResults: numberFlag(flags, "limit"),
     timeoutMs: numberFlag(flags, "timeout-ms"),
     trace: flags.has("verbose")
