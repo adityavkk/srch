@@ -35,6 +35,15 @@ export async function callExaMcp(toolName: string, args: Record<string, unknown>
   return exaMcpText(response);
 }
 
+// Exa MCP has emitted page text after `Text:` and, more recently, excerpts after `Highlights:`.
+const MCP_CONTENT_MARKER = /^(?:Text|Highlights):[ \t]*/m;
+
+function parseMcpContent(block: string): string {
+  const marker = MCP_CONTENT_MARKER.exec(block);
+  if (!marker) return "";
+  return block.slice(marker.index + marker[0].length).trim().replace(/\n---\s*$/, "").trim();
+}
+
 function parseMcpResults(text: string): Array<{ title: string; url: string; content: string }> {
   return text
     .split(/(?=^Title: )/m)
@@ -42,10 +51,7 @@ function parseMcpResults(text: string): Array<{ title: string; url: string; cont
     .map((block) => {
       const title = block.match(/^Title: (.+)/m)?.[1]?.trim() ?? "";
       const url = block.match(/^URL: (.+)/m)?.[1]?.trim() ?? "";
-      const content = block.includes("\nText: ")
-        ? block.slice(block.indexOf("\nText: ") + 7).trim().replace(/\n---\s*$/, "")
-        : "";
-      return { title, url, content };
+      return { title, url, content: parseMcpContent(block) };
     })
     .filter((item) => item.url.length > 0);
 }

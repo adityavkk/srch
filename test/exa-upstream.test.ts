@@ -131,6 +131,30 @@ test("Exa MCP keeps result text as snippets and optional full content", async ()
   }
 });
 
+test("Exa MCP keeps highlight excerpts as snippets", async () => {
+  const text = [
+    "Title: URL context",
+    "URL: https://ai.google.dev/gemini-api/docs/url-context",
+    "Published: N/A",
+    "Author: N/A",
+    "Highlights:",
+    "The tool can process up to 20 URLs per request.",
+    "",
+    "...",
+    "",
+    "URL content size is limited to 34MB.",
+    "---",
+    "Title: No excerpt",
+    "URL: https://example.com/empty"
+  ].join("\n");
+  const ctx = context(async () => Response.json({ result: { content: [{ type: "text", text }] } }));
+  const response = await searchWithExa("url context limits", {}, ctx);
+  assert.deepEqual(response.results.map((item) => item.snippet), [
+    "The tool can process up to 20 URLs per request.\n\n...\n\nURL content size is limited to 34MB.",
+    ""
+  ]);
+});
+
 test("Exa paid search keeps highlights or text as snippets and uses supplied secrets", async () => {
   const text = "Detailed documentation. ".repeat(80);
   let secretName = "";
