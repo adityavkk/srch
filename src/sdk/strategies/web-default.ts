@@ -1,29 +1,21 @@
-import { isBraveAvailable } from "../../lib/upstream/brave.js";
-import { isGeminiApiAvailable } from "../../lib/upstream/gemini-api.js";
-import { isPerplexityAvailable } from "../../lib/upstream/perplexity.js";
+import type { WebProvider } from "../../lib/core/types.js";
 import { defineStrategy } from "../define.js";
 import { merge } from "../operators.js";
-import type { Evidence, ProviderAttempt, RunResult, RunSummary, StaticStrategy, StrategyContext, StrategyRequest } from "../types.js";
-import { DEFAULT_WEB_TIMEOUT_MS, unsupportedWebOptions, validateWebOptions, WebOptionsError, type WebTransport } from "../../lib/search/web-options.js";
+import type { Evidence, ProviderAttempt, RunResult, RunSummary, StaticStrategy, StrategyRequest } from "../types.js";
+import { DEFAULT_WEB_TIMEOUT_MS, unsupportedWebOptions, validateWebOptions, WebOptionsError } from "../../lib/search/web-options.js";
 import type { WebSourceRequest } from "../sources/web-shared.js";
+import { defaultWebProviderDeps, planWebCandidates, validateProviderOrder, type WebProviderDeps } from "./web-providers.js";
 
 export type WebStrategyRequest = StrategyRequest & WebSourceRequest & {
-  provider?: "auto" | "exa" | "brave" | "gemini" | "perplexity";
+  provider?: "auto" | WebProvider;
+  /** Automatic provider order for this request; overrides config and the built-in default. */
+  providers?: WebProvider[];
   hq?: boolean;
   timeoutMs?: number;
 };
 
-export type WebStrategyDeps = {
-  isBraveAvailable: typeof isBraveAvailable;
-  isGeminiApiAvailable: typeof isGeminiApiAvailable;
-  isPerplexityAvailable: typeof isPerplexityAvailable;
-};
-
-const defaultDeps: WebStrategyDeps = {
-  isBraveAvailable,
-  isGeminiApiAvailable,
-  isPerplexityAvailable
-};
+/** Injectable availability checks and default order. Omitted entries use the runtime defaults. */
+export type WebStrategyDeps = Partial<WebProviderDeps>;
 
 function requestFor(req: WebStrategyRequest): WebSourceRequest {
   return {
@@ -135,26 +127,6 @@ function noEvidenceResult(req: WebStrategyRequest, attempts: ProviderAttempt[], 
   };
 }
 
-type Candidate = {
-  provider: "exa" | "brave" | "gemini" | "perplexity";
-  transport: WebTransport;
-  options?: { mode?: "api" | "mcp"; transport?: "api" | "web" };
-  available?: (ctx: StrategyContext, signal?: AbortSignal) => Promise<boolean>;
-};
-
-function candidatesFor(req: WebStrategyRequest, deps: WebStrategyDeps): Candidate[] {
-  const exa: Candidate = { provider: "exa", transport: req.hq ? "exa-api" : "exa-mcp", options: { mode: req.hq ? "api" : "mcp" } };
-  const brave: Candidate = { provider: "brave", transport: "brave-search-api", available: deps.isBraveAvailable };
-  const geminiWeb: Candidate = { provider: "gemini", transport: "gemini-web", options: { transport: "web" } };
-  const geminiApi: Candidate = { provider: "gemini", transport: "gemini-api", options: { transport: "api" }, available: deps.isGeminiApiAvailable };
-  const perplexity: Candidate = { provider: "perplexity", transport: "perplexity-api", available: deps.isPerplexityAvailable };
-  if (req.provider === "exa") return [exa];
-  if (req.provider === "brave") return [{ ...brave, available: undefined }];
-  if (req.provider === "perplexity") return [{ ...perplexity, available: undefined }];
-  if (req.provider === "gemini") return req.hq ? [{ ...geminiApi, available: undefined }] : [geminiWeb, geminiApi];
-  return req.hq ? [exa] : [exa, brave, geminiWeb, geminiApi, perplexity];
-}
-
 // Bound even custom transports or secret resolvers that ignore AbortSignal.
 function withSignal<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted();
@@ -171,7 +143,8 @@ function withSignal<T>(operation: () => Promise<T>, signal: AbortSignal): Promis
   });
 }
 
-export function createWebDefaultStrategy(deps: WebStrategyDeps = defaultDeps): StaticStrategy<WebStrategyRequest> {
+export function createWebDefaultStrategy(overrides: WebStrategyDeps = {}): StaticStrategy<WebStrategyRequest> {
+  const deps: WebProviderDeps = { ...defaultWebProviderDeps, ...overrides };
   return defineStrategy({
     kind: "static",
     name: "web/default",
@@ -182,11 +155,13 @@ export function createWebDefaultStrategy(deps: WebStrategyDeps = defaultDeps): S
       }
       try {
         validateWebOptions(request);
+        validateProviderOrder(request);
       } catch (error) {
         if (error instanceof WebOptionsError) return errorResult(request, error.code, error.message);
         throw error;
       }
-      const candidates = candidatesFor(request, deps);
+      const candidates = planWebCandidates(request, deps, ctx);
+      if (candidates.length === 0) return errorResult(request, "web_unavailable", "No registered web provider matches the requested order");
       const explicit = request.provider !== undefined && request.provider !== "auto" || request.hq;
       if (explicit) {
         const reason = unsupportedWebOptions(candidates[0]!.transport, request);
@@ -214,7 +189,7 @@ export function createWebDefaultStrategy(deps: WebStrategyDeps = defaultDeps): S
           const attemptStarted = Date.now();
           try {
             if (candidate.available && !await withSignal(() => candidate.available!(ctx, signal), signal)) {
-              attempts.push({ provider, transport, status: "skipped", reason: "missing API key" });
+              attempts.push({ provider, transport, status: "skipped", reason: transport === "antigravity" ? "no signed-in Antigravity account" : "missing API key" });
               continue;
             }
             const evidence = await withSignal(() => ctx.search(provider, { ...requestFor(req), ...candidate.options }), signal);

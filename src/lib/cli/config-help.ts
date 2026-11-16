@@ -2,7 +2,8 @@ export const CONFIG_HELP = `search config — safe config management
 
 Usage:
   search config [--json]
-  search config set provider <auto|exa|brave|perplexity|gemini> [--json]
+  search config set provider <auto|google|exa|brave|perplexity|gemini> [--json]
+  search config set web-providers <comma-separated order, e.g. google,exa,brave> [--json]
   search config set-secret <exaApiKey|perplexityApiKey|geminiApiKey|braveApiKey|seatsAeroApiKey> <value> [--json]
   search config set-secret-ref <exaApiKey|perplexityApiKey|geminiApiKey|braveApiKey|seatsAeroApiKey> <fnox|op> <KEY_NAME> [--json]
   search config unset <field> [--json]

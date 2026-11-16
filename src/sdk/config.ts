@@ -17,6 +17,11 @@ export type CreateClientOptions = {
   domains?: Domain[];
   config?: SrchConfig;
   agentAdapters?: AgentAdapter[];
+  /**
+   * Read signed-in accounts from local agent auth stores (Pi's Antigravity login).
+   * Defaults to on for the default runtime and off when HTTP or secrets are injected.
+   */
+  localAuth?: boolean;
 };
 
 export type LoadConfigOptions = {
@@ -60,7 +65,8 @@ export function createSourceContext(options: CreateClientOptions = {}): SourceCo
     secrets: options.secrets ?? defaultSecrets,
     trace: createTraceSink(options.trace ?? false),
     http: options.http ?? defaultHttp,
-    allowLocalGitHub: options.http === undefined && options.secrets === undefined
+    allowLocalGitHub: options.http === undefined && options.secrets === undefined,
+    allowLocalAuth: options.localAuth ?? (options.http === undefined && options.secrets === undefined)
   };
 }
 

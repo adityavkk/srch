@@ -3,10 +3,10 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 const help = `Usage: node scripts/eval-web.mjs [--cases path] [--out path] [--costs path]
-       node scripts/eval-web.mjs --live [--provider exa|brave|gemini|perplexity|auto] [--hq] [--timeout-ms 10000] [--out path]
+       node scripts/eval-web.mjs --live [--provider exa|google|brave|gemini|perplexity|auto] [--hq] [--timeout-ms 10000] [--out path]
 
 Default: deterministic synthetic replay, without network or credentials.
---live queries providers. Default Exa MCP uses no API key; --hq and other providers may consume credits.
+--live queries providers. Default Exa MCP uses no API key; google uses Antigravity quota; --hq and other providers may consume credits.
 --costs accepts a JSON object of case IDs to total request costs in USD. Unknown costs remain null.
 Run npm run build before using this script. Source matching is a proxy, not a human relevance judgment.`;
 
@@ -27,7 +27,7 @@ async function main() {
     throw new Error("Provider and timeout options require --live");
   }
   const provider = options["--provider"] ?? "exa";
-  if (!["auto", "exa", "brave", "gemini", "perplexity"].includes(provider)) throw new Error("Invalid provider");
+  if (!["auto", "exa", "google", "brave", "gemini", "perplexity"].includes(provider)) throw new Error("Invalid provider");
   const timeoutMs = Number(options["--timeout-ms"] ?? 10000);
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) throw new Error("timeout-ms must be an integer from 1 to 60000");
   const { scoreWebEvaluation } = await import("../dist/lib/eval/web.js").catch(() => {

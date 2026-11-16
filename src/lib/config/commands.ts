@@ -1,11 +1,11 @@
 import { loadConfig, saveConfig, type SearchConfig, type SecretField } from "../core/config.js";
-import type { SearchProvider } from "../core/types.js";
-import { isSearchProvider, SEARCH_PROVIDERS } from "../search/web-options.js";
+import type { SearchProvider, WebProvider } from "../core/types.js";
+import { isSearchProvider, isWebProvider, SEARCH_PROVIDERS, WEB_PROVIDERS } from "../search/web-options.js";
 
 const SECRET_FIELDS = new Set(["exaApiKey", "perplexityApiKey", "geminiApiKey", "braveApiKey", "seatsAeroApiKey"] as const);
-const PUBLIC_FIELDS = new Set(["provider"] as const);
+const PUBLIC_FIELDS = new Set(["provider", "webProviders"] as const);
 
-type PublicField = "provider";
+type PublicField = "provider" | "webProviders";
 
 export function redactConfig(config: SearchConfig): SearchConfig {
   const copy: SearchConfig = { ...config };
@@ -25,6 +25,22 @@ export function setProvider(provider: string): SearchConfig {
   }
   const config = loadConfig();
   config.provider = provider;
+  saveConfig(config);
+  return redactConfig(config);
+}
+
+/** Parse a comma-separated provider order, e.g. `google,exa,brave`. */
+export function parseWebProviders(value: string): WebProvider[] {
+  const providers = value.split(",").map((item) => item.trim()).filter(Boolean);
+  if (providers.length === 0 || !providers.every(isWebProvider) || new Set(providers).size !== providers.length) {
+    throw new Error(`Invalid provider order. Use distinct names from ${WEB_PROVIDERS.join("|")}, separated by commas`);
+  }
+  return providers;
+}
+
+export function setWebProviders(value: string): SearchConfig {
+  const config = loadConfig();
+  config.webProviders = parseWebProviders(value);
   saveConfig(config);
   return redactConfig(config);
 }

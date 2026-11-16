@@ -3,6 +3,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { getConfigPath, loadConfig } from "../core/config.js";
 import { inspectSecretSources } from "../core/secrets.js";
+import { inspectAntigravityAuth } from "../grounding/antigravity-auth.js";
+import { configuredWebProviders } from "../../sdk/strategies/web-providers.js";
 import { getDocsDbPath } from "../docs/qmd.js";
 import { inspectGeminiCookieProfiles } from "../fetch/chrome-cookies-inspect.js";
 import { checkGhAvailable } from "../fetch/github-api.js";
@@ -22,7 +24,14 @@ export async function inspectTools() {
     searchConfigPresent: existsSync(getConfigPath()),
     configuredProvider: config?.provider ?? null,
     secretResolution,
+    webProviderOrder: configuredWebProviders(),
     providers: {
+      google: {
+        status: "untested",
+        transports: ["antigravity", "gemini-api"],
+        antigravity: await inspectAntigravityAuth(),
+        geminiApiKeyConfigured: secretResolution?.geminiApiKey.configured ?? null
+      },
       exa: { status: "untested", requiresApiKey: false },
       brave: { status: "untested", apiKeyConfigured: secretResolution?.braveApiKey.configured ?? null },
       perplexity: { status: "untested", apiKeyConfigured: secretResolution?.perplexityApiKey.configured ?? null },

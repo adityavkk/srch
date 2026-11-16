@@ -13,16 +13,18 @@ import { exaCodeSource } from "../sources/exa-code.js";
 import { exaSource } from "../sources/exa.js";
 import { fetchContentSource } from "../sources/fetch-content.js";
 import { geminiSource } from "../sources/gemini.js";
+import { googleSource } from "../sources/google.js";
 import { perplexitySource } from "../sources/perplexity.js";
 import { codeDefaultStrategy } from "../strategies/code-default.js";
 import { docsDefaultStrategy } from "../strategies/docs-default.js";
 import { fetchDefaultStrategy } from "../strategies/fetch-default.js";
 import { socialDefaultStrategy } from "../strategies/social-default.js";
 import { webDefaultStrategy } from "../strategies/web-default.js";
+import { webResearchStrategy } from "../strategies/web-research.js";
 
 export const coreModule = defineModule({
   name: "core",
-  sources: [exaSource, braveSource, geminiSource, perplexitySource, exaCodeSource, context7Source, deepwikiSource, docsQmdSource, fetchContentSource, birdSource],
-  strategies: [webDefaultStrategy, codeDefaultStrategy, docsDefaultStrategy, fetchDefaultStrategy, socialDefaultStrategy],
+  sources: [googleSource, exaSource, braveSource, geminiSource, perplexitySource, exaCodeSource, context7Source, deepwikiSource, docsQmdSource, fetchContentSource, birdSource],
+  strategies: [webDefaultStrategy, webResearchStrategy, codeDefaultStrategy, docsDefaultStrategy, fetchDefaultStrategy, socialDefaultStrategy],
   domains: [webDomain, codeDomain, docsDomain, fetchDomain, socialDomain]
 });

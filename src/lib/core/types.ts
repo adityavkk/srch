@@ -26,7 +26,8 @@ export interface SearchResponse {
   inlineContent?: ExtractedContent[];
 }
 
-export type SearchProvider = "auto" | "exa" | "brave" | "perplexity" | "gemini";
+export type SearchProvider = "auto" | "google" | "exa" | "brave" | "perplexity" | "gemini";
+export type WebProvider = Exclude<SearchProvider, "auto">;
 
 export interface SearchOptions {
   numResults?: number;

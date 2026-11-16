@@ -132,7 +132,7 @@ test("automatic fallback preserves constraints and skips incompatible providers"
       return Response.json({ citations: ["https://evil.org/", "https://example.com/result"] });
     } }
   });
-  const result = await client.run({ domain: "web", query: "test", domainFilter: ["example.com"], recencyFilter: "week" });
+  const result = await client.run({ domain: "web", query: "test", domainFilter: ["example.com"], recencyFilter: "week", providers: ["exa", "brave", "gemini", "perplexity"] });
   assert.equal(result.kind, "success");
   if (result.kind !== "success") return;
   assert.deepEqual(hosts, ["api.search.brave.com", "api.perplexity.ai"]);

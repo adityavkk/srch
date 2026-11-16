@@ -23,6 +23,7 @@ import type { FlightsStrategyRequest } from "./strategies/flights-default.js";
 import type { RewardsStrategyRequest } from "./strategies/rewards-default.js";
 import type { SocialStrategyRequest } from "./strategies/social-default.js";
 import type { WebStrategyRequest } from "./strategies/web-default.js";
+import type { WebResearchRequest, WebResearchResult } from "./strategies/web-research.js";
 import type { WebEvidencePayload } from "./sources/web-shared.js";
 import type { CodeTextEvidencePayload } from "./sources/exa-code.js";
 import type { DocsEvidencePayload } from "./sources/docs-qmd.js";
@@ -37,6 +38,7 @@ type BuiltinDomain = "web" | "code" | "docs" | "fetch" | "social" | "flights" | 
 type DomainRunRequest<TDomain extends string> = { domain: TDomain; strategy?: string };
 
 export type ClientRun = {
+  (req: { domain: "web"; strategy: "web/research" } & WebResearchRequest): Promise<WebResearchResult>;
   (req: DomainRunRequest<"web"> & WebStrategyRequest): Promise<RunResult<WebEvidencePayload>>;
   (req: DomainRunRequest<"code"> & CodeStrategyRequest): Promise<RunResult<CodeTextEvidencePayload>>;
   (req: DomainRunRequest<"docs"> & DocsStrategyRequest): Promise<RunResult<DocsEvidencePayload>>;

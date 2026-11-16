@@ -34,6 +34,13 @@ export const GLOBAL_FLAGS: FlagSchema = {
 const COMMAND_FLAGS: Record<string, FlagSchema> = {
   web: {
     provider: "string",
+    providers: "string",
+    research: "boolean",
+    url: "list",
+    instruction: "string",
+    thinking: "boolean",
+    transport: "string",
+    "no-fallback": "boolean",
     hq: "boolean",
     limit: "string",
     recent: "string",

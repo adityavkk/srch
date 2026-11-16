@@ -184,25 +184,40 @@ export const WEB_HELP = `search web — web research
 
 What it does:
   searches web backends, returns answer + sources
+  --research returns a Google-grounded answer with claim citations
 
-Fallbacks (auto, free-first):
-  1. Exa free MCP (no key needed)
-  2. Brave (free tier credits)
-  3. Gemini browser cookies (free)
-  4. Gemini API (uses key credits)
-  5. Perplexity (uses key credits)
+Automatic order (change with --providers or \`search config set web-providers\`):
+  exa     Exa free MCP (no key needed; fastest link retrieval)
+  google  Google Search grounding: signed-in Pi Antigravity account, then Gemini API key
+  brave   Brave (free tier credits)
+  gemini  Gemini browser cookies, then Gemini API
+  perplexity (uses key credits)
+  Providers without credentials are skipped; each later provider is a fallback.
 
 Usage:
-  search web <query...> [--provider auto|exa|brave|perplexity|gemini] [--hq] [--json] [--verbose] [--out <path>]
+  search web <query...> [--provider <name> | --providers a,b,c] [--hq] [--json] [--verbose] [--out <path>]
+  search web <question...> --research [--url <url>]... [--instruction <text>] [--thinking]
+             [--transport auto|antigravity|gemini-api] [--no-fallback] [--json]
 
 Flags:
-  --provider <name>  override the saved provider (auto, exa, brave, perplexity, gemini)
+  --provider <name>  override the saved provider (auto, google, exa, brave, perplexity, gemini)
+  --providers <list> automatic order for this search, e.g. exa,brave
   --hq              use paid Exa for auto/exa, or Gemini API for gemini
                     unsupported with a saved or explicit brave/perplexity provider
   --limit <n>       maximum result count
   --recent <period> day, week, month, or year
   --domain <host>   restrict domains; repeat as needed, use --domain=-host to exclude
-  --timeout-ms <n>  total search deadline in milliseconds (default 30000)
+  --timeout-ms <n>  total search deadline in milliseconds (default 30000; research 60000)
+
+Research flags:
+  --research        grounded answer with citations, sources, executed queries, and URL status
+  --url <url>       read this page with URL context; repeat as needed (max 20)
+  --instruction <s> directive for query planning and synthesis (not an enforced filter)
+  --thinking        larger reasoning budget
+  --transport <t>   auto (Antigravity account, then Gemini API key), antigravity, or gemini-api
+  --no-fallback     fail instead of returning retrieval-only results
+  Without grounding, research falls back to fetching --url pages and plain web search,
+  labeled retrieval-only with the reason and recovery step. No answer is generated then.
 
 Unsupported filters fail explicitly. Automatic search skips incompatible providers.
 
@@ -211,6 +226,8 @@ Examples:
   search web ai evals --provider brave
   search web react compiler --hq --json
   search web sqlite wasm --provider gemini --json
+  search web "what changed in node 24 test runner" --research --json
+  search web "limits on this page" --research --url https://ai.google.dev/gemini-api/docs/url-context
   search web --json "react compiler"   # flags may precede the query
 
 JSON:

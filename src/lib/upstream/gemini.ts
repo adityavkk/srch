@@ -1,77 +1,47 @@
 import { activityMonitor } from "../core/activity.js";
 import { errorMessage } from "../core/http.js";
+import { resolveSecret } from "../core/secrets.js";
 import type { SearchOptions, SearchResponse } from "../core/types.js";
-import { API_BASE, DEFAULT_MODEL, getApiKey } from "./gemini-api.js";
-import { fetchWithContext, type WebSearchContext } from "./context.js";
+import { createGeminiApiTransport } from "../grounding/gemini-api-transport.js";
+import { runGrounding } from "../grounding/run.js";
+import type { GroundingContext } from "../grounding/transport.js";
+import type { GroundedAnswer } from "../grounding/types.js";
 import { assertWebOptions, filterWebResults } from "../search/web-options.js";
+import type { WebSearchContext } from "./context.js";
 
 export interface GeminiSearchResult extends SearchResponse {
   native: {
     provider: "gemini-api";
-    request: Record<string, unknown>;
-    response: unknown;
+    grounding: GroundedAnswer;
   };
 }
 
-interface GroundingChunk {
-  web?: { uri?: string; title?: string };
+const transport = createGeminiApiTransport();
+
+function groundingContext(context?: WebSearchContext): GroundingContext {
+  return context ?? {
+    http: { fetch: (input, init) => fetch(input, init) },
+    secrets: { resolve: (name, signal) => name === "geminiApiKey" ? resolveSecret("geminiApiKey", signal) : Promise.resolve(null) }
+  };
 }
 
-interface GeminiSearchResponse {
-  candidates?: Array<{
-    content?: { parts?: Array<{ text?: string }> };
-    groundingMetadata?: {
-      groundingChunks?: GroundingChunk[];
-    };
-  }>;
-}
-
+/** Google Search Grounding through the Gemini API key, using the shared grounding engine. */
 export async function searchWithGemini(query: string, options: SearchOptions = {}, context?: WebSearchContext): Promise<GeminiSearchResult> {
   assertWebOptions("gemini-api", { ...options, query });
-  const apiKey = await getApiKey(context, options.signal);
-  if (!apiKey) throw new Error("Missing Gemini API key");
-
   const activityId = activityMonitor.logStart({ type: "api", query });
-
   try {
-    const request = {
-      contents: [{ parts: [{ text: query }] }],
-      tools: [{ google_search: {} }]
-    };
-
-    const response = await fetchWithContext(`${API_BASE}/models/${DEFAULT_MODEL}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify(request),
-      signal: AbortSignal.any([
-        AbortSignal.timeout(60_000),
-        ...(options.signal ? [options.signal] : [])
-      ])
-    }, context);
-
-    if (!response.ok) {
-      activityMonitor.logComplete(activityId, response.status);
-      throw new Error(`Gemini API error ${response.status}: ${(await response.text()).slice(0, 300)}`);
-    }
-
-    const data = await response.json() as GeminiSearchResponse;
-    const answer = data.candidates?.[0]?.content?.parts?.map((part) => part.text).filter(Boolean).join("\n") ?? "";
-    const results = (data.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []).flatMap((chunk, index) => {
-      const url = chunk.web?.uri;
-      if (!url) return [];
-      return [{ title: chunk.web?.title || `Source ${index + 1}`, url, snippet: "" }];
-    });
-
-    activityMonitor.logComplete(activityId, response.status);
-    return {
-      answer,
-      results: filterWebResults(results, options),
-      native: {
-        provider: "gemini-api",
-        request,
-        response: data
-      }
-    };
+    const grounding = await runGrounding(
+      { query, signal: options.signal },
+      groundingContext(context),
+      { transports: [transport], transport: "gemini-api" }
+    );
+    activityMonitor.logComplete(activityId, 200);
+    const results = grounding.sources.map((source) => ({
+      title: source.title,
+      url: source.url,
+      snippet: grounding.supports.filter((support) => support.sourceIds.includes(source.id)).map((support) => support.text).join(" ").slice(0, 500)
+    }));
+    return { answer: grounding.text, results: filterWebResults(results, options), native: { provider: "gemini-api", grounding } };
   } catch (error) {
     activityMonitor.logError(activityId, errorMessage(error));
     throw error;

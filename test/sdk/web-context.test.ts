@@ -79,7 +79,7 @@ test("default web fallback uses a client-supplied key and HTTP transport", async
       }
     }
   });
-  const result = await client.run({ domain: "web", query: "test" });
+  const result = await client.run({ domain: "web", query: "test", providers: ["exa", "brave"] });
   assert.equal(result.kind, "success");
   if (result.kind !== "success") return;
   assert.equal(result.evidence[0].source, "brave");

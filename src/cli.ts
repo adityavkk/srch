@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { getConfigSafe, getSearchProvider, setProvider, setSecret, setSecretRef, unsetField } from "./lib/config/commands.js";
+import { getConfigSafe, getSearchProvider, parseWebProviders, setProvider, setSecret, setSecretRef, setWebProviders, unsetField } from "./lib/config/commands.js";
 import { getConfigPath, loadConfig } from "./lib/core/config.js";
 import { inspectTools } from "./lib/cli/tools.js";
 import { CONFIG_HELP } from "./lib/cli/config-help.js";
@@ -16,6 +16,7 @@ import { buildInstallPlan, executeInstallPlan, isOptionalInstallTarget, renderIn
 import { formatRewardsFlightSearchText, formatRewardsRoutesText, formatRewardsTripsText, getRewardFlightRoutes, getRewardFlightTrips, searchRewardFlights, type RewardsCabin, type RewardsFlightSearchOptions } from "./lib/rewards-flights/seats-aero.js";
 import { repoSearch } from "./lib/search/repo.js";
 import { twitterRead, twitterThread } from "./lib/upstream/bird.js";
+import { RESEARCH_ONLY_FLAGS, researchOptionsFromFlags, runResearchCommand } from "./lib/cli/research.js";
 import { renderHome, runCodeCommand, runDocsCommand, runFetchCommand, runSocialCommand, runWebCommand } from "./lib/cli/sdk.js";
 import { createTraceSink } from "./lib/trace.js";
 import { inspectSecretSources } from "./lib/core/secrets.js";
@@ -168,6 +169,15 @@ async function main(): Promise<void> {
           kind: "config",
           data: { path: getConfigPath(), config, trace: trace.snapshot() },
           text: `provider=${config.provider ?? "auto"}`
+        }, { asJson, outPath });
+      }
+      if (sub === "set" && rest[1] === "web-providers" && rest[2]) {
+        const config = await trace.span("config.set", "set web providers", async () => setWebProviders(rest[2]!));
+        return emitSuccess({
+          command: ["config", "set", "web-providers"],
+          kind: "config",
+          data: { path: getConfigPath(), config, trace: trace.snapshot() },
+          text: `webProviders=${(config.webProviders ?? []).join(",")}`
         }, { asJson, outPath });
       }
       if (sub === "set-secret" && rest[1] && rest[2]) {
@@ -451,12 +461,33 @@ async function main(): Promise<void> {
     if (command === "web") {
       if (flags.has("help")) return void console.log(WEB_HELP);
       const query = requireQuery(rest, WEB_HELP, ["web"], asJson);
-      const provider = getSearchProvider(getStringFlag(flags, "provider"));
+      if (flags.has("research")) {
+        const options = researchOptionsFromFlags(flags);
+        trace.step("web", "dispatch", { strategy: "web/research", transport: options.transport, urls: options.urls?.length ?? 0, queryChars: query.length });
+        const rendered = await trace.span("web.research", options.transport ?? "auto", async () => runResearchCommand(query, options));
+        if (rendered.kind === "error") emitFailure(["web"], rendered.error.error.message, { asJson, outPath }, rendered.error.suggestions, {
+          code: rendered.error.error.code,
+          summary: rendered.error.summary,
+          trace: rendered.error.trace
+        });
+        try {
+          addHistory({ kind: "web", input: { query, strategy: "web/research" }, output: rendered.data });
+        } catch (error) {
+          console.error(`Warning: Could not save search history: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        return emitSuccess({ command: ["web"], kind: "web", data: { ...rendered.data, trace: trace.snapshot() }, text: rendered.text }, { asJson, outPath });
+      }
+      const conflict = RESEARCH_ONLY_FLAGS.find((flag) => flags.has(flag));
+      if (conflict) throw new Error(`--${conflict} requires --research`);
+      const providersFlag = getStringFlag(flags, "providers");
+      if (providersFlag !== undefined && flags.has("provider")) throw new Error("Use --provider for one provider or --providers for an order, not both");
+      const providers = providersFlag === undefined ? undefined : parseWebProviders(providersFlag);
+      const provider = providers ? "auto" : getSearchProvider(getStringFlag(flags, "provider"));
       const hq = flags.has("hq");
       const limit = getStringFlag(flags, "limit");
       const timeout = getStringFlag(flags, "timeout-ms");
       const options = {
-        provider, hq, trace: flags.has("verbose"),
+        provider, providers, hq, trace: flags.has("verbose"),
         numResults: limit === undefined ? undefined : Number(limit),
         recencyFilter: getStringFlag(flags, "recent") as SearchOptions["recencyFilter"],
         domainFilter: getStringFlags(flags, "domain"),

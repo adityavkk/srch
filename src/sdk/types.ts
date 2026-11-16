@@ -8,6 +8,7 @@ import type { ExaEvidencePayload, ExaSourceRequest } from "./sources/exa.js";
 import type { FetchEvidencePayload } from "./sources/fetch-content.js";
 import type { FliEvidencePayload, FliSourceRequest } from "./sources/fli.js";
 import type { GeminiEvidencePayload, GeminiSourceRequest } from "./sources/gemini.js";
+import type { GoogleEvidencePayload, GoogleSourceRequest } from "./sources/google.js";
 import type { PerplexityEvidencePayload } from "./sources/perplexity.js";
 import type { SeatsAeroEvidencePayload, SeatsAeroSourceRequest } from "./sources/seats-aero.js";
 import type { AgenticStrategy } from "./agent.js";
@@ -90,6 +91,8 @@ export type SourceContext = {
   trace: TraceSink;
   http: HttpClient;
   allowLocalGitHub?: boolean;
+  /** Read signed-in accounts from local agent auth stores, e.g. Pi's Antigravity login. */
+  allowLocalAuth?: boolean;
 };
 
 export type Source<
@@ -132,6 +135,7 @@ export type SearchFn = {
   (sourceName: "fetch-content", req: SourceRequest): Promise<Evidence<FetchEvidencePayload>[]>;
   (sourceName: "fli", req: FliSourceRequest): Promise<Evidence<FliEvidencePayload>[]>;
   (sourceName: "gemini", req: GeminiSourceRequest): Promise<Evidence<GeminiEvidencePayload>[]>;
+  (sourceName: "google", req: GoogleSourceRequest): Promise<Evidence<GoogleEvidencePayload>[]>;
   (sourceName: "perplexity", req: import("./sources/web-shared.js").WebSourceRequest): Promise<Evidence<PerplexityEvidencePayload>[]>;
   (sourceName: "seats-aero", req: SeatsAeroSourceRequest): Promise<Evidence<SeatsAeroEvidencePayload>[]>;
   (sourceName: string, req: SourceRequest): Promise<Evidence[]>;

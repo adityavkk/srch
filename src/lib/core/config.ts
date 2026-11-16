@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getStateDir } from "./state.js";
-import type { SearchProvider } from "./types.js";
+import type { SearchProvider, WebProvider } from "./types.js";
 
 export type SecretField = "exaApiKey" | "perplexityApiKey" | "geminiApiKey" | "braveApiKey" | "seatsAeroApiKey";
 export type SecretSource = "fnox" | "op";
@@ -13,6 +13,8 @@ export interface SecretRef {
 
 export interface SearchConfig {
   provider?: SearchProvider;
+  /** Automatic web provider order. Omitted means the built-in default. */
+  webProviders?: WebProvider[];
   exaApiKey?: string;
   perplexityApiKey?: string;
   geminiApiKey?: string;

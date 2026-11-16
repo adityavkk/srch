@@ -93,8 +93,14 @@ test("web/default returns definitive empty state when all providers yield no evi
 
 test("web/default reports an outage when providers fail and the remaining providers are unavailable", async () => {
   const fail = async () => { throw new Error("transport offline"); };
+  const unreachable = async () => { throw new Error("unavailable providers must not be called"); };
   const client = createClient({
-    sources: [createSource("exa", "exa-mcp", fail), createSource("gemini", "gemini-web", fail)],
+    sources: [
+      createSource("exa", "exa-mcp", fail),
+      createSource("brave", "brave-search-api", unreachable),
+      createSource("gemini", "gemini-web", fail),
+      createSource("perplexity", "perplexity-api", unreachable)
+    ],
     strategies: [createWebDefaultStrategy({
       isBraveAvailable: async () => false,
       isGeminiApiAvailable: async () => false,

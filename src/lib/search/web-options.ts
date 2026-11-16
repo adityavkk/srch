@@ -1,16 +1,22 @@
-import type { SearchOptions, SearchProvider, SearchResult } from "../core/types.js";
+import type { SearchOptions, SearchProvider, SearchResult, WebProvider } from "../core/types.js";
 
-export const SEARCH_PROVIDERS = ["auto", "exa", "brave", "gemini", "perplexity"] as const satisfies readonly SearchProvider[];
+export const SEARCH_PROVIDERS = ["auto", "google", "exa", "brave", "gemini", "perplexity"] as const satisfies readonly SearchProvider[];
 export const DEFAULT_WEB_TIMEOUT_MS = 30_000;
 const RECENCY_DAYS = { day: 1, week: 7, month: 31, year: 365 } as const;
 export const BRAVE_FRESHNESS = { day: "pd", week: "pw", month: "pm", year: "py" } as const;
-export type WebTransport = "exa-mcp" | "exa-api" | "brave-search-api" | "gemini-web" | "gemini-api" | "perplexity-api";
+export type WebTransport = "exa-mcp" | "exa-api" | "brave-search-api" | "antigravity" | "gemini-web" | "gemini-api" | "perplexity-api";
 
 export class WebOptionsError extends Error {
   constructor(readonly code: "invalid_request" | "unsupported_option", message: string) {
     super(message);
     this.name = "WebOptionsError";
   }
+}
+
+export const WEB_PROVIDERS = SEARCH_PROVIDERS.filter((provider): provider is WebProvider => provider !== "auto");
+
+export function isWebProvider(value: unknown): value is WebProvider {
+  return typeof value === "string" && WEB_PROVIDERS.some((provider) => provider === value);
 }
 
 export function isSearchProvider(value: unknown): value is SearchProvider {
@@ -56,7 +62,7 @@ export function validateWebOptions(options: SearchOptions & { query?: unknown; p
 }
 
 export function unsupportedWebOptions(transport: WebTransport, options: SearchOptions): string | null {
-  if ((transport === "exa-mcp" || transport.startsWith("gemini-")) && (options.domainFilter?.length || options.recencyFilter)) {
+  if ((transport === "exa-mcp" || transport === "antigravity" || transport.startsWith("gemini-")) && (options.domainFilter?.length || options.recencyFilter)) {
     return `${transport} does not support domainFilter or recencyFilter`;
   }
   if (options.includeContent && transport !== "exa-mcp" && transport !== "exa-api") {

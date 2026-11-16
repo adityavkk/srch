@@ -2,7 +2,7 @@ export { createClient, type ClientSearch, type SrchClient } from "./sdk/client.j
 export { clearSecretCache } from "./lib/core/secrets.js";
 export type { DocumentExtraction } from "./lib/core/types.js";
 export { doctorWeb, type WebDoctorReport, type WebDoctorOptions } from "./sdk/doctor.js";
-export { SEARCH_PROVIDERS, isSearchProvider, WebOptionsError } from "./lib/search/web-options.js";
+export { SEARCH_PROVIDERS, WEB_PROVIDERS, isSearchProvider, isWebProvider, WebOptionsError } from "./lib/search/web-options.js";
 export { loadConfig, findConfigPath, resolveConfig, type CreateClientOptions, type LoadConfigOptions } from "./sdk/config.js";
 export {
   defineAgenticStrategy,
@@ -60,6 +60,13 @@ export {
   fetchContentSource,
   type FetchEvidencePayload
 } from "./sdk/sources/fetch-content.js";
+export {
+  googleSource,
+  createGoogleSource,
+  type GoogleEvidencePayload,
+  type GoogleNative,
+  type GoogleSourceRequest
+} from "./sdk/sources/google.js";
 export { documentText } from "./sdk/helpers.js";
 export {
   seatsAeroSource,
@@ -125,6 +132,35 @@ export {
   type WebStrategyDeps,
   type WebStrategyRequest
 } from "./sdk/strategies/web-default.js";
+export { DEFAULT_WEB_PROVIDERS } from "./sdk/strategies/web-providers.js";
+export {
+  webResearchStrategy,
+  createWebResearchStrategy,
+  DEFAULT_RESEARCH_TIMEOUT_MS,
+  DEFAULT_FALLBACK_RESERVE_MS,
+  type WebResearchOptions,
+  type ResearchFailure,
+  type ResearchOutcome,
+  type WebResearchPayload,
+  type WebResearchRequest,
+  type WebResearchResult
+} from "./sdk/strategies/web-research.js";
+export { GroundingError } from "./lib/grounding/errors.js";
+export { citeGroundedAnswer, renderGroundedAnswer } from "./lib/grounding/render.js";
+export { ANTIGRAVITY_CREDENTIALS_SECRET, inspectAntigravityAuth, type AntigravityAuthStatus } from "./lib/grounding/antigravity-auth.js";
+export { createAntigravityTransport, ANTIGRAVITY_MODELS } from "./lib/grounding/antigravity-transport.js";
+export { createGeminiApiTransport } from "./lib/grounding/gemini-api-transport.js";
+export type { GroundingContext, GroundingTransport } from "./lib/grounding/transport.js";
+export type {
+  GroundedAnswer,
+  GroundingErrorCode,
+  GroundingSource,
+  GroundingSupport,
+  GroundingTransportName,
+  TransportAttempt,
+  UrlRetrieval,
+  UrlRetrievalStatus
+} from "./lib/grounding/types.js";
 export type {
   AnySource,
   AnyStrategy,
