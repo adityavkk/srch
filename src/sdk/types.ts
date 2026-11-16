@@ -5,7 +5,7 @@ import type { DeepWikiEvidencePayload } from "./sources/deepwiki.js";
 import type { DocsEvidencePayload, DocsSourceRequest } from "./sources/docs-qmd.js";
 import type { ExaCodeEvidencePayload, ExaCodeSourceRequest } from "./sources/exa-code.js";
 import type { ExaEvidencePayload, ExaSourceRequest } from "./sources/exa.js";
-import type { FetchEvidencePayload } from "./sources/fetch-content.js";
+import type { FetchContentRequest, FetchEvidencePayload } from "./sources/fetch-content.js";
 import type { FliEvidencePayload, FliSourceRequest } from "./sources/fli.js";
 import type { GeminiEvidencePayload, GeminiSourceRequest } from "./sources/gemini.js";
 import type { GoogleEvidencePayload, GoogleSourceRequest } from "./sources/google.js";
@@ -132,7 +132,7 @@ export type SearchFn = {
   (sourceName: "docs-qmd", req: DocsSourceRequest): Promise<Evidence<DocsEvidencePayload>[]>;
   (sourceName: "exa", req: ExaSourceRequest): Promise<Evidence<ExaEvidencePayload>[]>;
   (sourceName: "exa-code", req: ExaCodeSourceRequest): Promise<Evidence<ExaCodeEvidencePayload>[]>;
-  (sourceName: "fetch-content", req: SourceRequest): Promise<Evidence<FetchEvidencePayload>[]>;
+  (sourceName: "fetch-content", req: FetchContentRequest): Promise<Evidence<FetchEvidencePayload>[]>;
   (sourceName: "fli", req: FliSourceRequest): Promise<Evidence<FliEvidencePayload>[]>;
   (sourceName: "gemini", req: GeminiSourceRequest): Promise<Evidence<GeminiEvidencePayload>[]>;
   (sourceName: "google", req: GoogleSourceRequest): Promise<Evidence<GoogleEvidencePayload>[]>;

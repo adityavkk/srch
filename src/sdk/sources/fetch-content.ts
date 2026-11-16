@@ -11,7 +11,12 @@ export type FetchEvidencePayload = {
   extraction: DocumentExtraction;
 };
 
-export const fetchContentSource: Source<SourceRequest, FetchEvidencePayload> = defineSource({
+export type FetchContentRequest = SourceRequest & {
+  /** Allow generated extraction (Gemini URL context) as a last resort. Default true. */
+  allowGenerated?: boolean;
+};
+
+export const fetchContentSource: Source<FetchContentRequest, FetchEvidencePayload> = defineSource({
   name: "fetch-content",
   domain: "fetch",
   capabilities: ["fetch", "extract"],
@@ -19,7 +24,7 @@ export const fetchContentSource: Source<SourceRequest, FetchEvidencePayload> = d
   transports: ["http", "jina", "gemini", "github-api", "github-clone"],
   async run(req, ctx) {
     ctx.trace.step("source.fetch-content", req.query);
-    const result = await fetchContent(req.query, req.signal, ctx);
+    const result = await fetchContent(req.query, req.signal, ctx, { allowGenerated: req.allowGenerated });
     req.signal?.throwIfAborted();
     if (result.error && !result.content.trim()) {
       throw new Error(result.error);

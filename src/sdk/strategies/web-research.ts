@@ -96,7 +96,9 @@ type FetchedUrl = { url: string; evidence: Evidence<FetchEvidencePayload>[]; att
 async function fetchOne(url: string, ctx: StrategyContext, signal: AbortSignal): Promise<FetchedUrl> {
   const startedAt = Date.now();
   try {
-    const evidence = await ctx.search("fetch-content", { query: url, signal });
+    // Retrieval-only means read pages: never fall through to generated URL-context extraction.
+    const evidence = (await ctx.search("fetch-content", { query: url, signal, allowGenerated: false }))
+      .filter((item) => !item.payload.extraction.generated);
     const provenance = evidence[0]?.provenance;
     const transport = provenance?.kind === "web" ? provenance.transport : "http";
     return { url, evidence, attempt: { provider: "fetch-content", status: "success", transport, durationMs: Date.now() - startedAt, evidenceCount: evidence.length } };

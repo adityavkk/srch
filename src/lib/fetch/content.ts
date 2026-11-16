@@ -123,7 +123,17 @@ async function extractViaHttp(url: string, signal?: AbortSignal, context?: WebSe
   }
 }
 
-export async function fetchContent(url: string, signal?: AbortSignal, context?: WebSearchContext): Promise<ExtractedContent> {
+export type FetchContentOptions = {
+  /** Allow Gemini URL-context extraction, which generates text instead of reading the page. Default true. */
+  allowGenerated?: boolean;
+};
+
+export async function fetchContent(
+  url: string,
+  signal?: AbortSignal,
+  context?: WebSearchContext,
+  options: FetchContentOptions = {}
+): Promise<ExtractedContent> {
   signal?.throwIfAborted();
   const githubResult = await extractGitHub(url, signal, context);
   signal?.throwIfAborted();
@@ -137,6 +147,7 @@ export async function fetchContent(url: string, signal?: AbortSignal, context?: 
   const jinaResult = await extractWithJinaReader(url, signal, context);
   signal?.throwIfAborted();
   if (jinaResult) return jinaResult;
+  if (options.allowGenerated === false) return httpResult;
 
   const geminiResult = await extractWithUrlContext(url, signal, context);
   signal?.throwIfAborted();

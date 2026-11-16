@@ -193,3 +193,24 @@ test("research rejects options it cannot honor before credentials or network", a
   assert.equal(generative.kind === "error" && generative.error.code, "invalid_request");
   assert.equal(touched, false);
 });
+
+test("retrieval-only URL fetching never falls through to generated Gemini URL-context extraction", async () => {
+  const hosts: string[] = [];
+  const client = createClient({
+    secrets: secrets({ geminiApiKey: "g-key" }),
+    http: http((url) => {
+      if (url.includes("generativelanguage")) {
+        return Response.json({ candidates: [{ content: { parts: [{ text: "Generated page summary that is long enough to be used as content." }] } }] });
+      }
+      if (url === "https://mcp.exa.ai/mcp") return exaMcp();
+      return new Response("down", { status: 500 });
+    }, hosts)
+  });
+  const result = await client.run({ domain: "web", strategy: "web/research", query: "q", urls: ["https://docs.example/page"] });
+  assert.equal(result.kind, "success");
+  if (result.kind !== "success") return;
+  assert.equal(result.research.kind, "retrieval-only");
+  assert.ok(result.evidence.every((item) => item.source !== "fetch-content"), "no generated document evidence");
+  if (result.research.kind === "retrieval-only") assert.deepEqual(result.research.urlRetrievals, [{ url: "https://docs.example/page", status: "failed" }]);
+  assert.equal(hosts.filter((host) => host.includes("generativelanguage")).length, 1, "only the grounding attempt calls Gemini");
+});

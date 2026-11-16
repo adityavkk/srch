@@ -58,6 +58,7 @@ export {
 } from "./sdk/sources/exa-code.js";
 export {
   fetchContentSource,
+  type FetchContentRequest,
   type FetchEvidencePayload
 } from "./sdk/sources/fetch-content.js";
 export {
