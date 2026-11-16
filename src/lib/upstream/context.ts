@@ -4,6 +4,8 @@ export type WebSearchContext = {
   secrets: { resolve(name: string, signal?: AbortSignal): Promise<string | null> };
   /** Default CLI runtime may use gh/git; injected runtimes use HTTP only. */
   allowLocalGitHub?: boolean;
+  /** Read signed-in accounts from local agent auth stores. */
+  allowLocalAuth?: boolean;
 };
 
 export function fetchWithContext(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1], context?: WebSearchContext): ReturnType<typeof fetch> {

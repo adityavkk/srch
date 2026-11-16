@@ -27,7 +27,14 @@ export function runCli(args: string[], overrides: NodeJS.ProcessEnv = {}, import
       cliPath, ...args
     ], {
       cwd: repoRoot,
-      env: { ...env, ...overrides, PATH: `${binDir}${delimiter}${env.PATH ?? ""}`, SRCH_STATE_DIR: overrides.SRCH_STATE_DIR ?? join(testDir, ".search") },
+      env: {
+        ...env, ...overrides,
+        PATH: `${binDir}${delimiter}${env.PATH ?? ""}`,
+        SRCH_STATE_DIR: overrides.SRCH_STATE_DIR ?? join(testDir, ".search"),
+        // Never read the developer's Pi login or installed pi-antigravity.
+        PI_CODING_AGENT_DIR: overrides.PI_CODING_AGENT_DIR ?? join(testDir, "pi-agent"),
+        SRCH_PI_ANTIGRAVITY_DIR: overrides.SRCH_PI_ANTIGRAVITY_DIR ?? join(testDir, "missing-pi-antigravity")
+      },
       encoding: "utf8",
       timeout: 15_000,
       killSignal: "SIGKILL",
