@@ -68,3 +68,11 @@ test("google failures surface as typed RunErrors through the strategy", async ()
   assert.equal(result.kind === "error" && result.error.code, "web_unavailable");
   assert.match(result.kind === "error" ? result.error.message : "", /google \(antigravity\)/);
 });
+
+test("plain retrieval accepts sources without answer text; research requires an answer", async () => {
+  const sourcesOnly = () => Response.json(groundingResponse({ wrap: true, parts: [], chunks: [{ uri: "https://bun.sh/docs", title: "bun.sh" }] }));
+  const ctx = { ...makeSourceContext({ secrets: { antigravityCredentials: CREDENTIALS } }), http: { fetch: antigravityOnly(sourcesOnly) } };
+  const links = await googleSource.run({ query: "q", transport: "antigravity", requireAnswer: false }, ctx);
+  assert.deepEqual(links.map((item) => item.payload.url), ["https://bun.sh/docs"]);
+  await assert.rejects(googleSource.run({ query: "q", transport: "antigravity" }, ctx), /without answer text/);
+});

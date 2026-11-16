@@ -3,7 +3,7 @@ import { errorMessage } from "../core/http.js";
 import { resolveSecret } from "../core/secrets.js";
 import type { SearchOptions, SearchResponse } from "../core/types.js";
 import { createGeminiApiTransport } from "../grounding/gemini-api-transport.js";
-import { runGrounding } from "../grounding/run.js";
+import { runGrounding, type GroundingExchange } from "../grounding/run.js";
 import type { GroundingContext } from "../grounding/transport.js";
 import type { GroundedAnswer } from "../grounding/types.js";
 import { assertWebOptions, filterWebResults } from "../search/web-options.js";
@@ -12,6 +12,9 @@ import type { WebSearchContext } from "./context.js";
 export interface GeminiSearchResult extends SearchResponse {
   native: {
     provider: "gemini-api";
+    /** Credential-free `generateContent` body. */
+    request: Record<string, unknown>;
+    response: unknown;
     grounding: GroundedAnswer;
   };
 }
@@ -30,10 +33,11 @@ export async function searchWithGemini(query: string, options: SearchOptions = {
   assertWebOptions("gemini-api", { ...options, query });
   const activityId = activityMonitor.logStart({ type: "api", query });
   try {
+    let exchange: GroundingExchange | undefined;
     const grounding = await runGrounding(
       { query, signal: options.signal },
       groundingContext(context),
-      { transports: [transport], transport: "gemini-api" }
+      { transports: [transport], transport: "gemini-api", requireAnswer: false, onExchange: (value) => { exchange = value; } }
     );
     activityMonitor.logComplete(activityId, 200);
     const results = grounding.sources.map((source) => ({
@@ -41,7 +45,11 @@ export async function searchWithGemini(query: string, options: SearchOptions = {
       url: source.url,
       snippet: grounding.supports.filter((support) => support.sourceIds.includes(source.id)).map((support) => support.text).join(" ").slice(0, 500)
     }));
-    return { answer: grounding.text, results: filterWebResults(results, options), native: { provider: "gemini-api", grounding } };
+    return {
+      answer: grounding.text,
+      results: filterWebResults(results, options),
+      native: { provider: "gemini-api", request: exchange?.request ?? {}, response: exchange?.response, grounding }
+    };
   } catch (error) {
     activityMonitor.logError(activityId, errorMessage(error));
     throw error;

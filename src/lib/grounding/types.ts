@@ -59,11 +59,18 @@ export type TransportAttempt =
       durationMs: number;
     };
 
+/**
+ * `claim-level`: at least one claim maps to its sources through `supports`.
+ * `sources-only`: Google returned sources but no claim mapping, so no claim is verified.
+ */
+export type CitationLevel = "claim-level" | "sources-only";
+
 export type GroundedAnswer = {
   /** Generated text. Treat as a model synthesis, verified only where supports cite sources. */
   text: string;
   sources: GroundingSource[];
   supports: GroundingSupport[];
+  citations: CitationLevel;
   queries: string[];
   urlRetrievals: UrlRetrieval[];
   /** Google search suggestion markup that applications may need to display with grounded answers. */

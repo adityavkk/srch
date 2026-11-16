@@ -205,3 +205,15 @@ test("a failure from an attempted transport is reported over a later credential 
     return true;
   });
 });
+
+test("blank answer text is an invalid response and the chain continues; missing supports are marked sources-only", async () => {
+  signIn();
+  const fetcher = (async (input) => requestUrl(input).includes("cloudcode")
+    ? Response.json(groundingResponse({ wrap: true, parts: ["   "] }))
+    : Response.json(groundingResponse({ supports: [] }))) as typeof fetch;
+  const transports = [createAntigravityTransport({ models: ["m"], auth: auth() }), createGeminiApiTransport({ models: ["g"] })];
+  const answer = await runGrounding({ query: "q" }, context(fetcher, { geminiApiKey: "k" }), { transports });
+  assert.equal(answer.transport, "gemini-api");
+  assert.ok(answer.attempts.some((attempt) => attempt.status === "failed" && attempt.code === "invalid_response"));
+  assert.equal(answer.citations, "sources-only");
+});

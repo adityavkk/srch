@@ -31,6 +31,9 @@ export function citeGroundedAnswer(answer: GroundedAnswer): string {
 /** Markdown brief: cited answer, numbered sources, requested-URL status, and executed queries. */
 export function renderGroundedAnswer(answer: GroundedAnswer): string {
   const sections = [citeGroundedAnswer(answer).trim()];
+  if (answer.citations === "sources-only") {
+    sections.push("Note: Google returned no claim-level citations. The sources below were searched, but no claim is verified against them.");
+  }
   sections.push(["Sources:", ...answer.sources.map((source, index) => `${index + 1}. [${escapeLabel(source.title)}](${source.url})${source.resolved ? "" : " (unresolved redirect)"}`)].join("\n"));
   if (answer.urlRetrievals.length > 0) {
     sections.push(["Requested URLs:", ...answer.urlRetrievals.map((item) => `- ${item.url}: ${item.status}`)].join("\n"));

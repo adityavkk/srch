@@ -73,8 +73,8 @@ function transportsFor(provider: WebProvider, hq: boolean, deps: WebProviderDeps
       return [{ provider, transport: "brave-search-api", available: deps.isBraveAvailable }];
     case "google":
       return [
-        { provider, transport: "antigravity", options: { transport: "antigravity" }, available: deps.isAntigravityAvailable },
-        { provider, transport: "gemini-api", options: { transport: "gemini-api" }, available: deps.isGeminiApiAvailable }
+        { provider, transport: "antigravity", options: { transport: "antigravity", requireAnswer: false }, available: deps.isAntigravityAvailable },
+        { provider, transport: "gemini-api", options: { transport: "gemini-api", requireAnswer: false }, available: deps.isGeminiApiAvailable }
       ];
     case "gemini":
       return hq

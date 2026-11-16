@@ -14,6 +14,8 @@ export type GoogleSourceRequest = WebSourceRequest & {
   instruction?: string;
   urls?: string[];
   thinking?: boolean;
+  /** Require answer text (default). Plain link retrieval turns this off to accept sources alone. */
+  requireAnswer?: boolean;
 };
 
 export type GoogleNative = {
@@ -64,7 +66,7 @@ export function createGoogleSource(transports: readonly GroundingTransport[] = d
       const answer = await runGrounding(
         { query: req.query, instruction: req.instruction, urls: req.urls, thinking: req.thinking, signal: req.signal },
         ctx,
-        { transports, transport: req.transport }
+        { transports, transport: req.transport, requireAnswer: req.requireAnswer ?? true }
       );
       return groundingEvidence(req.query, answer, req.numResults);
     }

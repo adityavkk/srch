@@ -3,11 +3,19 @@ import { GroundingError, isGroundingError } from "./errors.js";
 import { createGeminiApiTransport } from "./gemini-api-transport.js";
 import { mergeRequestedUrls, parseGroundingResponse } from "./parse.js";
 import { resolveGroundingSources } from "./redirects.js";
-import { validateGroundingRequest } from "./request.js";
+import { buildGenerateContentBody, validateGroundingRequest, type GenerateContentBody } from "./request.js";
 import type { GroundingContext, GroundingTransport } from "./transport.js";
 import type { GroundedAnswer, GroundingRequest, GroundingTransportName, TransportAttempt } from "./types.js";
 
 export type GroundingTransportSelection = "auto" | GroundingTransportName;
+
+/** The successful credential-free request body and raw response, for callers that keep native payloads. */
+export type GroundingExchange = {
+  transport: GroundingTransportName;
+  model: string;
+  request: GenerateContentBody;
+  response: unknown;
+};
 
 /** Signed-in account first; the API key transport covers hosts without Pi. */
 export const defaultGroundingTransports: readonly GroundingTransport[] = [createAntigravityTransport(), createGeminiApiTransport()];
@@ -26,7 +34,13 @@ export function selectTransports(transports: readonly GroundingTransport[], sele
 export async function runGrounding(
   request: GroundingRequest,
   ctx: GroundingContext,
-  options: { transports?: readonly GroundingTransport[]; transport?: GroundingTransportSelection } = {}
+  options: {
+    transports?: readonly GroundingTransport[];
+    transport?: GroundingTransportSelection;
+    onExchange?: (exchange: GroundingExchange) => void;
+    /** Treat sources without answer text as a failed attempt. Off for plain link retrieval. */
+    requireAnswer?: boolean;
+  } = {}
 ): Promise<GroundedAnswer> {
   validateGroundingRequest(request);
   const candidates = selectTransports(options.transports ?? defaultGroundingTransports, options.transport);
@@ -49,13 +63,18 @@ export async function runGrounding(
       const response = await transport.generate(request, ctx);
       attempts.push(...response.attempts);
       const parsed = parseGroundingResponse(response.data);
+      if ((options.requireAnswer ?? true) && !parsed.text.trim()) {
+        throw new GroundingError("invalid_response", `${transport.name} returned grounding sources without answer text`);
+      }
       if (parsed.sources.length === 0) {
         throw new GroundingError("uncited_answer", `${transport.name} returned ${parsed.text ? "an answer" : "a response"} without source URLs`);
       }
       const sources = await resolveGroundingSources(parsed.sources, ctx.http.fetch, request.signal);
+      options.onExchange?.({ transport: transport.name, model: response.model, request: buildGenerateContentBody(request), response: response.data });
       return {
         ...parsed,
         sources,
+        citations: parsed.supports.length > 0 ? "claim-level" : "sources-only",
         urlRetrievals: mergeRequestedUrls(request.urls ?? [], parsed.urlRetrievals),
         transport: transport.name,
         model: response.model,

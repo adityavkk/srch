@@ -152,6 +152,7 @@ export { createAntigravityTransport, ANTIGRAVITY_MODELS } from "./lib/grounding/
 export { createGeminiApiTransport } from "./lib/grounding/gemini-api-transport.js";
 export type { GroundingContext, GroundingTransport } from "./lib/grounding/transport.js";
 export type {
+  CitationLevel,
   GroundedAnswer,
   GroundingErrorCode,
   GroundingSource,

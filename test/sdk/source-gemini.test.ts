@@ -108,3 +108,18 @@ test("gemini maps grounded API results into contract-conforming evidence", async
   assert.equal(first.payload.content.kind, "none");
   assert.equal(first.payload.native.provider, "gemini-api");
 });
+
+test("gemini API evidence keeps the exported request and response fields alongside grounding", async () => {
+  globalThis.fetch = (async () => geminiApiResponse()) as typeof fetch;
+  const evidence = await geminiSource.run(
+    { query: "bun sqlite", transport: "api" },
+    makeSourceContext({ secrets: { geminiApiKey: "dummy-gemini-key" } })
+  );
+  const native = evidence[0]!.payload.native;
+  assert.equal(native.provider, "gemini-api");
+  if (native.provider !== "gemini-api") return;
+  assert.ok(Array.isArray((native.request as { contents?: unknown[] }).contents));
+  assert.ok(Array.isArray((native.response as { candidates?: unknown[] }).candidates));
+  assert.equal(native.grounding.sources.length, 2);
+  assert.doesNotMatch(JSON.stringify(native.request), /dummy-gemini-key/);
+});
