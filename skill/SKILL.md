@@ -9,7 +9,7 @@ Use `srch` as a TypeScript SDK first. Treat the CLI as a fallback.
 
 ## Decision rule
 
-- A question that needs a cited answer (current facts, version details, "what does this page say"): **`web/research`**. It replaces the separate `google_search` tool: Google grounding through the signed-in Pi Antigravity account, with claim citations and fallback.
+- A question that needs a cited answer (current facts, version details, "what does this page say"): **SDK `c.run({ domain: "web", strategy: "web/research", ... })`**. It always uses Google Search grounding (signed-in Pi Antigravity account, then Gemini API key); no `provider` is needed. It replaces the separate `google_search` tool and adds claim citations, structured results, and fallback. Use the CLI `--research` flag only for one-off human checks.
 - Links or excerpts to read, rank, or join: **`web`** (default strategy). Exa is first because it is about 9x faster for retrieval and costs no quota.
 - Multi-step research, ranking, branching, joins, retries, or reusable output: **SDK**.
 - One-off human check, diagnostics, shell-only consumer, or explicit user request for the CLI: **CLI**.
@@ -45,6 +45,31 @@ const r = await c.run({ domain: "web", query: "bun sqlite wasm", numResults: 5 }
 console.log(JSON.stringify(r.kind === "success" ? r.evidence.map(e => e.payload.url) : r, null, 2));
 TS
 ```
+
+Cited answer (grounded research):
+
+```bash
+bun - <<'TS'
+const { createClient, renderGroundedAnswer } = await import(`${process.env.HOME}/dev/search-tool/dist/sdk.js`);
+const c = createClient();
+const r = await c.run({
+  domain: "web",
+  strategy: "web/research",                // Google grounding; no provider needed
+  query: "What are the URL context limits?",
+  urls: ["https://ai.google.dev/gemini-api/docs/url-context"], // optional pages to read
+  instruction: "Prefer official documentation"                 // optional; not an enforced filter
+});
+if (r.kind === "success" && r.research.kind === "grounded") {
+  console.log(renderGroundedAnswer(r.research.answer));         // cited brief; or use answer.supports/sources
+} else if (r.kind === "success") {
+  console.log(JSON.stringify({ degraded: r.research.reason, sources: r.evidence.map(e => e.payload.url) }, null, 2));
+} else {
+  console.log(JSON.stringify(r.error));
+}
+TS
+```
+
+`provider: "google"` is different: it forces plain web retrieval (links and excerpts) through Google, with no research outcome.
 
 Longer flow: `.tmp/search.ts` then `bun .tmp/search.ts`.
 
