@@ -9,6 +9,7 @@ import { GroundingError } from "../src/lib/grounding/errors.js";
 import { createGeminiApiTransport } from "../src/lib/grounding/gemini-api-transport.js";
 import type { RuntimeLoad } from "../src/lib/grounding/pi-runtime.js";
 import { clearRedirectCache, resolveGroundingSources } from "../src/lib/grounding/redirects.js";
+import { renderGroundedAnswer } from "../src/lib/grounding/render.js";
 import { runGrounding } from "../src/lib/grounding/run.js";
 import { clearCooldowns, type GroundingContext } from "../src/lib/grounding/transport.js";
 import { groundingResponse, requestUrl } from "./helpers/grounding.js";
@@ -229,4 +230,18 @@ test("supports that cannot be located in the answer do not count as claim-level 
   }] } })) as typeof fetch;
   const answer = await runGrounding({ query: "q" }, context(fetcher), { transports: [createAntigravityTransport({ models: ["m"], auth: auth() })] });
   assert.equal(answer.citations, "sources-only");
+});
+
+test("a verified support citing a source after a skipped chunk is claim-level", async () => {
+  signIn();
+  const fetcher = (async () => Response.json({ response: { candidates: [{
+    content: { parts: [{ text: "Actual answer." }] },
+    groundingMetadata: {
+      groundingChunks: [null, { web: { uri: "https://docs.example/a", title: "docs.example" } }],
+      groundingSupports: [{ segment: { text: "Actual answer.", startIndex: 0, endIndex: 14 }, groundingChunkIndices: [1] }]
+    }
+  }] } })) as typeof fetch;
+  const answer = await runGrounding({ query: "q" }, context(fetcher), { transports: [createAntigravityTransport({ models: ["m"], auth: auth() })] });
+  assert.equal(answer.citations, "claim-level");
+  assert.match(renderGroundedAnswer(answer), /Actual answer\.\[1\]/);
 });

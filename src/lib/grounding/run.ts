@@ -5,7 +5,7 @@ import { mergeRequestedUrls, parseGroundingResponse } from "./parse.js";
 import { resolveGroundingSources } from "./redirects.js";
 import { buildGenerateContentBody, validateGroundingRequest, type GenerateContentBody } from "./request.js";
 import type { GroundingContext, GroundingTransport } from "./transport.js";
-import type { GroundedAnswer, GroundingRequest, GroundingSupport, GroundingTransportName, TransportAttempt } from "./types.js";
+import type { GroundedAnswer, GroundingRequest, GroundingSource, GroundingSupport, GroundingTransportName, TransportAttempt } from "./types.js";
 
 export type GroundingTransportSelection = "auto" | GroundingTransportName;
 
@@ -74,7 +74,7 @@ export async function runGrounding(
       return {
         ...parsed,
         sources,
-        citations: hasVerifiedSupport(parsed.supports, sources.length) ? "claim-level" : "sources-only",
+        citations: hasVerifiedSupport(parsed.supports, sources) ? "claim-level" : "sources-only",
         urlRetrievals: mergeRequestedUrls(request.urls ?? [], parsed.urlRetrievals),
         transport: transport.name,
         model: response.model,
@@ -93,7 +93,9 @@ export async function runGrounding(
 }
 
 /** Claim-level needs a support with offsets verified against the answer and a source that exists. */
-function hasVerifiedSupport(supports: readonly GroundingSupport[], sourceCount: number): boolean {
+function hasVerifiedSupport(supports: readonly GroundingSupport[], sources: readonly GroundingSource[]): boolean {
+  // Source IDs keep the response's chunk indexes, which can have gaps, so match by ID.
+  const ids = new Set(sources.map((source) => source.id));
   return supports.some((support) => support.start !== undefined && support.end !== undefined
-    && support.sourceIds.some((id) => id >= 0 && id < sourceCount));
+    && support.sourceIds.some((id) => ids.has(id)));
 }
