@@ -20,7 +20,7 @@ function scripted(steps: Step[]) {
 
 const ok = () => Response.json(groundingResponse());
 const status = (code: number, body = "{}", headers: Record<string, string> = {}) => new Response(body, { status: code, headers });
-const base = { transport: "antigravity" as const, models: ["m1", "m2"], endpoints: ["https://e1.example", "https://e2.example"] };
+const base = { transport: "antigravity" as const, quotaKey: "project-1", models: ["m1", "m2"], endpoints: ["https://e1.example", "https://e2.example"] };
 
 beforeEach(() => clearCooldowns());
 
@@ -119,4 +119,16 @@ test("upstream error bodies are shortened to one line and Retry-After accepts se
   assert.equal(parseRetryAfter("2.5"), 2500);
   assert.equal(parseRetryAfter(new Date(10_000).toUTCString(), 4_000), 6_000);
   assert.equal(parseRetryAfter("soon"), undefined);
+});
+
+test("quota cooldowns are scoped to the quota identity", async () => {
+  const first = scripted([status(429), ok()]);
+  await sendWithFallbacks({ ...base, quotaKey: "account-a", send: first.send });
+  const other = scripted([ok()]);
+  const otherResult = await sendWithFallbacks({ ...base, quotaKey: "account-b", send: other.send });
+  assert.deepEqual(other.calls.map((call) => call.model), ["m1"], "another account is not blocked");
+  assert.equal(otherResult.model, "m1");
+  const same = scripted([ok()]);
+  await sendWithFallbacks({ ...base, quotaKey: "account-a", send: same.send });
+  assert.deepEqual(same.calls.map((call) => call.model), ["m2"], "the same account still skips its cooled-down model");
 });

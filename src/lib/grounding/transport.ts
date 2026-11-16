@@ -27,7 +27,7 @@ export interface GroundingTransport {
   generate(request: GroundingRequest, ctx: GroundingContext): Promise<TransportResponse>;
 }
 
-/** Models that returned 429, per transport, so later calls skip them until the window passes. */
+/** Models that returned 429, per quota identity, so later calls skip them until the window passes. */
 const cooldowns = new Map<string, number>();
 
 export function clearCooldowns(): void {
@@ -53,6 +53,11 @@ function retiredModelText(data: unknown): string | undefined {
 
 export type ChainOptions = {
   transport: GroundingTransportName;
+  /**
+   * Non-secret identity of the quota a request draws on (e.g. a project ID or a key hash).
+   * Cooldowns apply only within it, so one account's 429 never blocks another account.
+   */
+  quotaKey: string;
   models: readonly string[];
   endpoints: readonly string[];
   signal?: AbortSignal;
@@ -79,7 +84,7 @@ export async function sendWithFallbacks(options: ChainOptions): Promise<Transpor
   };
 
   models: for (const model of options.models) {
-    const key = `${options.transport}:${model}`;
+    const key = `${options.transport}:${options.quotaKey}:${model}`;
     const until = cooldowns.get(key);
     if (until !== undefined && until > now()) {
       fail(new GroundingError("quota_exhausted", `${model} is cooling down after a quota error`, { retryAfterMs: until - now() }), model, undefined, now());

@@ -58,6 +58,7 @@ export function createAntigravityTransport(options: AntigravityTransportOptions 
 
   const send = (request: GroundingRequest, credential: AntigravityCredential, target: Wire, fetcher: typeof fetch) => sendWithFallbacks({
     transport: "antigravity",
+    quotaKey: credential.projectId,
     models,
     endpoints: target.endpoints,
     signal: request.signal,

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { API_BASE, DEFAULT_MODEL } from "../upstream/gemini-api.js";
 import { GroundingError } from "./errors.js";
 import { buildGenerateContentBody } from "./request.js";
@@ -25,6 +26,8 @@ export function createGeminiApiTransport(options: GeminiApiTransportOptions = {}
       const body = JSON.stringify(buildGenerateContentBody(request));
       return sendWithFallbacks({
         transport: "gemini-api",
+        // A truncated hash identifies the key's quota without exposing the key.
+        quotaKey: createHash("sha256").update(apiKey).digest("hex").slice(0, 16),
         models,
         endpoints: [baseUrl],
         signal: request.signal,
