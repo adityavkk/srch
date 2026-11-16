@@ -217,3 +217,16 @@ test("blank answer text is an invalid response and the chain continues; missing 
   assert.ok(answer.attempts.some((attempt) => attempt.status === "failed" && attempt.code === "invalid_response"));
   assert.equal(answer.citations, "sources-only");
 });
+
+test("supports that cannot be located in the answer do not count as claim-level citations", async () => {
+  signIn();
+  const fetcher = (async () => Response.json({ response: { candidates: [{
+    content: { parts: [{ text: "Actual answer." }] },
+    groundingMetadata: {
+      groundingChunks: [{ web: { uri: "https://docs.example/a", title: "docs.example" } }],
+      groundingSupports: [{ segment: { text: "A different claim.", startIndex: 0, endIndex: 18 }, groundingChunkIndices: [0] }]
+    }
+  }] } })) as typeof fetch;
+  const answer = await runGrounding({ query: "q" }, context(fetcher), { transports: [createAntigravityTransport({ models: ["m"], auth: auth() })] });
+  assert.equal(answer.citations, "sources-only");
+});
