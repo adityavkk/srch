@@ -255,6 +255,7 @@ Examples:
 - brave
 - gemini-web
 - gemini-api
+- google (Google Search grounding over antigravity or gemini-api; see grounded-research.md)
 - perplexity
 - context7
 - deepwiki

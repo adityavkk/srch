@@ -9,6 +9,8 @@ Use `srch` as a TypeScript SDK first. Treat the CLI as a fallback.
 
 ## Decision rule
 
+- A question that needs a cited answer (current facts, version details, "what does this page say"): **`web/research`**. It replaces the separate `google_search` tool: Google grounding through the signed-in Pi Antigravity account, with claim citations and fallback.
+- Links or excerpts to read, rank, or join: **`web`** (default strategy). Exa is first because it is about 9x faster for retrieval and costs no quota.
 - Multi-step research, ranking, branching, joins, retries, or reusable output: **SDK**.
 - One-off human check, diagnostics, shell-only consumer, or explicit user request for the CLI: **CLI**.
 - Flights: start with this tool, not browser automation. Read [flight workflow and limitations](../docs/travel.md) before pricing; use browser/airline handoff when the exact party cannot be priced.
@@ -119,6 +121,8 @@ Result shape to show:
 |---|---|---|
 | Web | `c.run({ domain: "web", query })` | `search web "q" --json` |
 | HQ web | `c.run({ domain: "web", query, hq: true })` | `search web "q" --hq --json` |
+| Cited answer | `c.run({ domain: "web", strategy: "web/research", query, urls?, instruction? })` | `search web "q" --research [--url u] --json` |
+| Web provider order | `c.run({ domain: "web", query, providers: ["google", "exa"] })` | `search web "q" --providers google,exa` |
 | Code/API/repo | `c.run({ domain: "code", query })` | `search code "q" --json` |
 | Local docs | `c.run({ domain: "docs", query })` | `search docs "q" --json` |
 | Fetch URL | `c.run({ domain: "fetch", query: url })` | `search fetch <url> --json` |
@@ -126,6 +130,15 @@ Result shape to show:
 | Social/X | `c.run({ domain: "social", query })` | `search twitter "q" --json` |
 | Provider exactness | `c.search("exa", { query })` | `search web "q" --provider exa --json` |
 | Diagnostics | CLI | `search inspect tools --json` |
+
+## Grounded research rules
+
+- Check `result.research.kind`. `grounded` has `answer.text`, `answer.supports` (claims with source IDs), `answer.sources`, `answer.queries`, and `answer.urlRetrievals`.
+- `retrieval-only` means no answer was generated. Read `result.evidence` (fetched requested pages first, then web results) and report `research.reason.code` and `research.reason.recovery` to the user. Never present retrieval-only output as a grounded answer.
+- The answer is generated. Cite claims through `supports`; verify decisive facts with `fetch` on the cited URL.
+- `urlRetrievals` status `unknown` means srch could not confirm the page was read. Antigravity never reports it, so fetch the page when the exact text matters.
+- Grounding cannot enforce domain or recency filters. Use `web` with `domainFilter`/`recencyFilter` and a capable provider for those.
+- Auth problems: `search inspect tools --json` shows `providers.google.antigravity` (signed in, fresh, refresh available). Fix with `/login antigravity` in Pi. Never read or print Pi's auth file.
 
 ## Diagnostic discipline
 

@@ -550,7 +550,7 @@ Retrieval is organized into **domains**: stable, typed retrieval spaces. Each do
 
 ### Web
 
-Automatic fallback chain, free-first.
+Automatic fallback chain: Exa, then Google Search grounding with your signed-in Pi Antigravity account, then Brave, Gemini, and Perplexity. Providers without credentials are skipped.
 
 ```ts
 // result: RunResult<WebEvidencePayload>
@@ -570,14 +570,35 @@ if (result.kind === "success") {
   }
 }
 
-// pin a provider
+// pin a provider, or set the automatic order for one request
 await client.run({ domain: "web", query: "bun sqlite", provider: "brave" });
+await client.run({ domain: "web", query: "bun sqlite", providers: ["google", "exa"] });
 ```
 
 ```bash
 search web "bun sqlite wasm"
 search web "react compiler" --provider brave --json
+search config set web-providers google,exa   # persistent automatic order
 ```
+
+#### Grounded research
+
+Ask a question and get a Google-grounded brief with claim-level citations, resolved sources, executed queries, and the status of requested URLs. It uses the Antigravity account signed in to Pi. Without it, the result is labeled `retrieval-only` with the reason and recovery step, and contains fetched pages and plain web results instead of a generated answer.
+
+```ts
+const result = await client.run({ domain: "web", strategy: "web/research", query: "What are the URL context limits?", urls: ["https://ai.google.dev/gemini-api/docs/url-context"] });
+if (result.kind === "success" && result.research.kind === "grounded") {
+  result.research.answer.text;      // Findings, Gaps, Next checks
+  result.research.answer.supports;  // claims with verified offsets and source IDs
+}
+```
+
+```bash
+search web "what changed in the node test runner" --research
+search web "limits on this page" --research --url https://ai.google.dev/gemini-api/docs/url-context --json
+```
+
+See [docs/grounded-research.md](docs/grounded-research.md) for credentials, failure handling, and the provider-order evaluation.
 
 ### Code
 
@@ -905,7 +926,8 @@ With no arguments, `search` shows a compact status dashboard.
 
 | Capability | Providers |
 |-----------|-----------|
-| Web search | Exa (free MCP + paid API), Brave (free tier), Gemini (API + cookie fallback), Perplexity |
+| Web search | Exa (free MCP + paid API), Google Search grounding (Pi Antigravity account or Gemini API key), Brave (free tier), Gemini (API + cookie fallback), Perplexity |
+| Grounded research | Google Search grounding with URL context and claim citations; retrieval-only fallback |
 | Code search | Exa Context API, Context7 (free), DeepWiki (free) |
 | Local docs | QMD SDK (BM25 + vector + reranking) |
 | Page extraction | Readability, Jina Reader, Gemini URL Context |
@@ -945,7 +967,7 @@ Codeact-style agents write and execute code. TypeScript gives them type safety, 
 
 ### Do I need API keys?
 
-Not to start. The default web strategy uses free providers first (Exa MCP, Brave free tier, Gemini cookie fallback). Add keys for higher quality or rate limits.
+Not to start. The default web strategy uses free providers first (Exa MCP, Brave free tier, Gemini cookie fallback). If you are signed in to Antigravity in Pi, Google Search grounding and `--research` work without a key. Add keys for higher quality or rate limits.
 
 ### Can I add my own retrieval sources?
 
