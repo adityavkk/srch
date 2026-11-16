@@ -116,7 +116,9 @@ function parseUrlRetrievals(candidate: JsonRecord): UrlRetrieval[] {
 export function parseGroundingResponse(data: unknown): ParsedGrounding {
   const root = isRecord(data) && isRecord(data.response) ? data.response : data;
   if (!isRecord(root)) throw new GroundingError("invalid_response", "Grounding response is not a JSON object");
-  const candidate = records(root.candidates)[0];
+  // Use the first candidate as returned; skipping a malformed one would misattribute the answer.
+  const first: unknown = Array.isArray(root.candidates) ? root.candidates[0] : undefined;
+  const candidate = isRecord(first) ? first : undefined;
   if (!candidate) {
     const error = isRecord(root.error) ? str(root.error.message) : undefined;
     const blocked = str(field(recordField(root, "promptFeedback"), "blockReason"));
@@ -126,8 +128,9 @@ export function parseGroundingResponse(data: unknown): ParsedGrounding {
   const content = isRecord(candidate.content) ? candidate.content : undefined;
   const parts: Part[] = [];
   let offset = 0;
-  for (const [index, part] of records(content?.parts).entries()) {
-    if (part.thought === true || typeof part.text !== "string" || !part.text) continue;
+  // Keep original indexes: supports address parts by their position in the response.
+  for (const [index, part] of arrayField(content, "parts").entries()) {
+    if (!isRecord(part) || part.thought === true || typeof part.text !== "string" || !part.text) continue;
     if (parts.length > 0) offset += PART_SEPARATOR.length;
     parts.push({ index, text: part.text, offset, bytes: encoder.encode(part.text), byteMap: byteToCharIndex(part.text) });
     offset += part.text.length;
@@ -135,8 +138,9 @@ export function parseGroundingResponse(data: unknown): ParsedGrounding {
   const text = parts.map((part) => part.text).join(PART_SEPARATOR);
 
   const grounding = recordField(candidate, "groundingMetadata");
-  const sources = records(field(grounding, "groundingChunks")).flatMap((chunk, id): GroundingSource[] => {
-    const web = isRecord(chunk.web) ? chunk.web : undefined;
+  // Keep original indexes: supports cite chunks by their position in the response.
+  const sources = arrayField(grounding, "groundingChunks").flatMap((chunk, id): GroundingSource[] => {
+    const web = isRecord(chunk) && isRecord(chunk.web) ? chunk.web : undefined;
     const uri = str(web?.uri);
     if (!uri) return [];
     return [{ id, title: str(web?.title) ?? uri, url: uri, groundingUrl: uri, resolved: false, ...(str(web?.domain) ? { domain: str(web?.domain) } : {}) }];

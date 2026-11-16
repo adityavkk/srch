@@ -138,6 +138,7 @@ test("rendering numbers verified claims by source position and lists requested U
   const answer: GroundedAnswer = {
     ...parsed,
     sources: parsed.sources.map((source) => ({ ...source, resolved: true })),
+    citations: "claim-level",
     urlRetrievals: [{ url: "https://two.example", status: "paywall" }],
     transport: "antigravity", model: "m", attempts: []
   };
@@ -146,4 +147,22 @@ test("rendering numbers verified claims by source position and lists requested U
   assert.match(rendered, /2\. \[Two \\\[beta\\\]\]\(https:\/\/two\.example\)/);
   assert.match(rendered, /https:\/\/two\.example: paywall/);
   assert.match(rendered, /via antigravity \(m\)/);
+  assert.doesNotMatch(rendered, /no claim-level citations/);
+  assert.match(renderGroundedAnswer({ ...answer, supports: [], citations: "sources-only" }), /no claim-level citations/);
+});
+
+test("malformed chunk and part entries keep original indexes for attribution", () => {
+  const parsed = parseGroundingResponse({
+    candidates: [{
+      content: { parts: [null, { text: "Claim on part one." }] },
+      groundingMetadata: {
+        groundingChunks: [null, { web: { uri: "https://a.example" } }, { web: { uri: "https://b.example" } }],
+        groundingSupports: [{ segment: { partIndex: 1, text: "Claim on part one." }, groundingChunkIndices: [1] }]
+      }
+    }]
+  });
+  assert.deepEqual(parsed.sources.map((source) => [source.id, source.url]), [[1, "https://a.example"], [2, "https://b.example"]]);
+  assert.deepEqual(parsed.supports[0]!.sourceIds, [1], "index 1 is A, not B");
+  assert.equal(parsed.text.slice(parsed.supports[0]!.start, parsed.supports[0]!.end), "Claim on part one.");
+  assert.throws(() => parseGroundingResponse({ candidates: [null, { content: { parts: [{ text: "x" }] } }] }), GroundingError);
 });
