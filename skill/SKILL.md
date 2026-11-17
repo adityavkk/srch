@@ -1,6 +1,6 @@
 ---
 name: search
-description: "Researches web, code, documents and flight prices through srch. Use for source retrieval, travel fare comparisons, and search-backend diagnostics. Prefers the typed TypeScript SDK for workflows; CLI for one-off checks or explicit CLI requests."
+description: "Researches web, code, documents and flight prices through srch. Use for web searches, current facts, cited answers via Google Search grounding (replaces the retired google_search tool), source retrieval, travel fare comparisons, and search-backend diagnostics. Prefers the typed TypeScript SDK for workflows; CLI for one-off checks or explicit CLI requests."
 ---
 
 # search
@@ -9,7 +9,7 @@ Use `srch` as a TypeScript SDK first. Treat the CLI as a fallback.
 
 ## Decision rule
 
-- A question that needs a cited answer (current facts, version details, "what does this page say"): **SDK `c.run({ domain: "web", strategy: "web/research", ... })`**. It always uses Google Search grounding (signed-in Pi Antigravity account, then Gemini API key); no `provider` is needed. It replaces the separate `google_search` tool and adds claim citations, structured results, and fallback. Use the CLI `--research` flag only for one-off human checks.
+- A question that needs a cited answer (current facts, version details, "what does this page say"): **SDK `c.run({ domain: "web", strategy: "web/research", ... })`**. It always uses Google Search grounding (signed-in Pi Antigravity account, then Gemini API key); no `provider` is needed. It replaces pi-antigravity's `google_search` tool, which is retired (`ANTIGRAVITY_NO_SEARCH_TOOL=1`), and adds claim citations, structured results, and fallback. Use the CLI `--research` flag only for one-off human checks or when no TypeScript runtime is available.
 - Links or excerpts to read, rank, or join: **`web`** (default strategy). Exa is first because it is about 9x faster for retrieval and costs no quota.
 - Multi-step research, ranking, branching, joins, retries, or reusable output: **SDK**.
 - One-off human check, diagnostics, shell-only consumer, or explicit user request for the CLI: **CLI**.
@@ -61,6 +61,7 @@ const r = await c.run({
 });
 if (r.kind === "success" && r.research.kind === "grounded") {
   console.log(renderGroundedAnswer(r.research.answer));         // cited brief; or use answer.supports/sources
+  if (r.research.answer.citations === "sources-only") console.log("UNVERIFIED: no claim-level citations");
 } else if (r.kind === "success") {
   console.log(JSON.stringify({ degraded: r.research.reason, sources: r.evidence.map(e => e.payload.url) }, null, 2));
 } else {
